@@ -12,12 +12,10 @@ function kmoney(n) {
 }
 function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 
-// Gasto variable "sano" como % de la venta (referencia: $45k sobre $170k = 26%).
-const RATIO_SANO = 0.26;
-
 export function render(el) {
   let off = 0;
-  let ventaEsperEd = null;   // override editable de venta esperada (no persistido)
+  let ventaEsperEd = null;   // override editable de la venta proyectada
+  let pctSel = 0.26;         // meta de gasto elegida (máx 26%)
   const unsub = store.subscribe(pintar);
   pintar();
 
@@ -59,9 +57,8 @@ export function render(el) {
 
     const gf = (store.state.gastosFijos || []).slice().sort((a, b) => num(b.monto_mensual) - num(a.monto_mensual));
 
-    // Presupuesto de compras: 26% sano × venta esperada de la semana actual.
-    const prom = promSemReciente();
-    const ventaEsper = ventaEsperEd != null ? ventaEsperEd : Math.round(prom.venta);
+    // Presupuesto de compras: % elegido × venta proyectada (semana pasada +5%).
+    const proj = ventaEsperEd != null ? ventaEsperEd : Math.round(ventaSemanaAnterior() * 1.05);
 
     el.innerHTML = `
       <div class="card" style="padding:12px">
@@ -108,7 +105,7 @@ export function render(el) {
 
       <div class="card">
         <h2>Presupuesto de compras sugerido</h2>
-        ${presuCuerpo(ventaEsper, prom.gasto)}
+        ${presuCuerpo(proj, pctSel)}
       </div>
 
       <div class="card">
@@ -126,11 +123,13 @@ export function render(el) {
     el.querySelector("#ant").addEventListener("click", () => { off++; pintar(); });
     el.querySelector("#sig").addEventListener("click", () => { off = Math.max(0, off - 1); pintar(); });
 
+    const pctSelEl = el.querySelector("#pctSel");
+    if (pctSelEl) pctSelEl.addEventListener("change", () => { pctSel = num(pctSelEl.value) / 100; pintar(); });
     const inpVE = el.querySelector("#veEsper");
     if (inpVE) inpVE.addEventListener("change", () => { ventaEsperEd = num(inpVE.value); pintar(); });
     const usar = el.querySelector("#usarPresu");
     if (usar) usar.addEventListener("click", async () => {
-      const sug = Math.round(RATIO_SANO * ventaEsper);
+      const sug = Math.round(pctSel * proj);
       if (sug <= 0) return;
       usar.disabled = true; usar.textContent = "Guardando…";
       try {
@@ -179,50 +178,35 @@ function margenContrib() {
   return 1 - gTot / vTot;
 }
 
-// Promedio semanal reciente (venta y gasto variable). Usa semanas COMPLETAS
-// (salta la semana en curso, que va a medias) y con ventas.
-function promSemReciente() {
-  const todas = store.ventasSemanas(9) || [];
-  let sems = todas.slice(1).filter((s) => s.venta > 0);          // completas recientes
-  if (!sems.length) sems = todas.filter((s) => s.venta > 0);      // respaldo: cualquiera
-  sems = sems.slice(0, 6);
-  if (!sems.length) return { venta: 0, gasto: 0, n: 0 };
-  const venta = sems.reduce((a, s) => a + s.venta, 0) / sems.length;
-  const gasto = sems.reduce((a, s) => a + s.gasto, 0) / sems.length;
-  return { venta, gasto, n: sems.length };
+// Venta de la semana anterior (la última semana COMPLETA con ventas).
+function ventaSemanaAnterior() {
+  const sems = store.ventasSemanas(8) || [];
+  for (let i = 1; i < sems.length; i++) if (sems[i].venta > 0) return sems[i].venta;
+  return sems[0] && sems[0].venta > 0 ? sems[0].venta : 0;  // respaldo: semana en curso
 }
 
-// Presupuesto = 26% sano × venta esperada de la semana actual.
-function presuCuerpo(ventaEsper, gastoRealSem) {
-  const pctRef = Math.round(RATIO_SANO * 100);
-  const sugerido = Math.round(RATIO_SANO * ventaEsper);
+// Presupuesto = % elegido (máx 26%) × venta proyectada (semana pasada +5%).
+function presuCuerpo(proj, pct) {
+  const opciones = [26, 24, 22, 20, 18, 15];
+  const pctInt = Math.round(pct * 100);
+  const sugerido = Math.round(pct * proj);
+  const selHtml = `<select id="pctSel">${opciones.map((p) =>
+    `<option value="${p}"${p === pctInt ? " selected" : ""}>${p}%${p === 26 ? " (tu ritmo sano)" : ""}</option>`).join("")}</select>`;
 
   const cabeza = `
-    <p class="sub" style="margin-top:-4px">Al ${pctRef}% sano de la venta (tu proporción de la buena época). Si vendes menos, compra menos.</p>
-    <label class="campo"><span>Venta semanal esperada (MXN)</span><input id="veEsper" type="number" inputmode="decimal" value="${Math.round(ventaEsper)}" /></label>`;
+    <p class="sub" style="margin-top:-4px">Cuánto gastar en insumos esta semana, según tu venta proyectada.</p>
+    <label class="campo"><span>Meta de gasto (% de la venta)</span>${selHtml}</label>
+    <label class="campo"><span>Venta proyectada (semana pasada +5%)</span><input id="veEsper" type="number" inputmode="decimal" value="${Math.round(proj)}" /></label>`;
 
-  if (ventaEsper <= 0)
-    return cabeza + `<div class="sub" style="margin-top:8px">Escribe tu venta esperada (o carga cortes) para ver el presupuesto.</div>`;
-
-  let compara = "";
-  if (gastoRealSem > 0) {
-    const diff = gastoRealSem - sugerido;
-    const pctReal = Math.round(gastoRealSem / ventaEsper * 100);
-    if (diff > sugerido * 0.03)
-      compara = `<div class="aviso-box" style="margin-top:10px">⚠️ Hoy gastas ~${money(gastoRealSem)}/sem (${pctReal}% de la venta). Te estás pasando <b>~${money(diff)}/semana</b> (${money(diff / 7)}/día). Baja las compras hacia ${money(sugerido)}.</div>`;
-    else if (diff < -sugerido * 0.03)
-      compara = `<div class="ok-box" style="margin-top:10px">✅ Hoy gastas ~${money(gastoRealSem)}/sem, por debajo del presupuesto. Bien.</div>`;
-    else
-      compara = `<div class="ok-box" style="margin-top:10px">✅ Hoy gastas ~${money(gastoRealSem)}/sem, justo en el presupuesto.</div>`;
-  }
+  if (proj <= 0)
+    return cabeza + `<div class="sub" style="margin-top:8px">Necesito la venta de la semana pasada (cortes) para proyectar; o escríbela arriba.</div>`;
 
   return cabeza + `
     <div class="row-stats" style="margin-top:12px">
       <div class="stat"><div class="n" style="color:var(--verde)">${money(sugerido)}</div><div class="l">presupuesto / semana</div></div>
       <div class="stat"><div class="n">${money(sugerido / 7)}</div><div class="l">por día</div></div>
     </div>
-    <div class="sub" style="margin-top:6px">= ${pctRef}% × ${money(ventaEsper)} de venta esperada.</div>
-    ${compara}
+    <div class="sub" style="margin-top:6px">= ${pctInt}% × ${money(proj)} (semana pasada +5%).</div>
     <button class="btn" id="usarPresu" style="margin-top:12px">Usar como meta semanal</button>`;
 }
 
