@@ -46,9 +46,10 @@ export function render(el) {
       }
     }
 
-    const costoVarPct = venta > 0 ? gastoVar / venta : 0;
-    const contrib = 1 - costoVarPct;
-    const beSem = contrib > 0.02 ? gfSem / contrib : 0;
+    // Margen de contribución ESTABLE: de todo el historial, no de una sola
+    // semana (una compra grande puntual no debe romper el cálculo).
+    const contrib = margenContrib();            // 0..1, o null si no hay ventas
+    const beSem = (contrib != null && contrib > 0.02) ? gfSem / contrib : 0;
     const beDia = beSem / 7;
     const ventaDia = venta / 7;
 
@@ -94,16 +95,7 @@ export function render(el) {
 
       <div class="card">
         <h2>Punto de equilibrio</h2>
-        ${gfMes === 0 || contrib <= 0.02
-          ? `<div class="sub">Registra tus gastos fijos y ten una semana con ventas para calcularlo.</div>`
-          : `<p class="sub" style="margin-top:-4px">Con tu margen actual, para NO perder necesitas vender:</p>
-             <div class="row-stats">
-               <div class="stat"><div class="n">${money(beDia)}</div><div class="l">por día</div></div>
-               <div class="stat"><div class="n">${money(beSem)}</div><div class="l">por semana</div></div>
-             </div>
-             <div class="${ventaDia >= beDia ? "ok-box" : "aviso-box"}" style="margin-top:10px">${ventaDia >= beDia
-               ? `✅ Vas por ${money(ventaDia)}/día, arriba del punto de equilibrio.`
-               : `⚠️ Vas por ${money(ventaDia)}/día; te faltan ${money(beDia - ventaDia)}/día para cubrir costos.`}</div>`}
+        ${beCuerpo(gfMes, contrib, beDia, beSem, ventaDia, venta)}
       </div>
 
       <div class="card">
@@ -138,6 +130,43 @@ export function render(el) {
   }
 
   return unsub;
+}
+
+// Margen de contribución promedio de TODO el historial (venta − compras)/venta.
+// Estable: una semana con compras grandes no lo distorsiona. null si no hay ventas.
+function margenContrib() {
+  const cortes = store.state.cortes || [];
+  if (!cortes.length) return null;
+  let min = null, max = null, vTot = 0;
+  for (const c of cortes) {
+    if (!c.fecha) continue;
+    if (!min || c.fecha < min) min = c.fecha;
+    if (!max || c.fecha > max) max = c.fecha;
+    vTot += num(c.ventas_total);
+  }
+  if (vTot <= 0) return null;
+  const gTot = store.lineasEnRango(min || "0000-01-01", max || "9999-12-31")
+    .reduce((a, l) => a + num(l.monto), 0);
+  return 1 - gTot / vTot;
+}
+
+function beCuerpo(gfMes, contrib, beDia, beSem, ventaDia, venta) {
+  if (gfMes === 0)
+    return `<div class="sub">Registra tus gastos fijos (abajo) para calcular el punto de equilibrio.</div>`;
+  if (contrib == null)
+    return `<div class="sub">Necesito ventas cargadas (cortes de caja) para calcularlo.</div>`;
+  if (contrib <= 0.02)
+    return `<div class="aviso-box">Tu costo de insumos se está comiendo casi toda la venta (margen ${Math.round(contrib * 100)}%). Baja el costo variable antes de que haya punto de equilibrio.</div>`;
+  return `
+    <p class="sub" style="margin-top:-4px">Con tu margen promedio (<b>${Math.round(contrib * 100)}%</b>), para NO perder necesitas vender:</p>
+    <div class="row-stats">
+      <div class="stat"><div class="n">${money(beDia)}</div><div class="l">por día</div></div>
+      <div class="stat"><div class="n">${money(beSem)}</div><div class="l">por semana</div></div>
+    </div>
+    ${venta > 0 ? `<div class="${ventaDia >= beDia ? "ok-box" : "aviso-box"}" style="margin-top:10px">${ventaDia >= beDia
+      ? `✅ Vas por ${money(ventaDia)}/día, arriba del punto de equilibrio.`
+      : `⚠️ Vas por ${money(ventaDia)}/día; te faltan ${money(beDia - ventaDia)}/día para cubrir costos.`}</div>`
+      : `<div class="sub" style="margin-top:10px">Aún no hay ventas esta semana para comparar.</div>`}`;
 }
 
 function filaCalc(etq, val, color) {
