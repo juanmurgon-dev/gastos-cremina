@@ -12,6 +12,9 @@ function kmoney(n) {
 }
 function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 
+// Gasto variable "sano" como % de la venta (referencia: $45k sobre $170k = 26%).
+const RATIO_SANO = 0.26;
+
 export function render(el) {
   let off = 0;
   let ventaEsperEd = null;   // override editable de venta esperada (no persistido)
@@ -56,10 +59,8 @@ export function render(el) {
 
     const gf = (store.state.gastosFijos || []).slice().sort((a, b) => num(b.monto_mensual) - num(a.monto_mensual));
 
-    // Presupuesto de compras: % sano (de una época buena) × venta esperada actual.
+    // Presupuesto de compras: 26% sano × venta esperada de la semana actual.
     const prom = promSemReciente();
-    const refV = num(store.state.config.refVenta) || 170000;
-    const refG = num(store.state.config.refGasto) || 45000;
     const ventaEsper = ventaEsperEd != null ? ventaEsperEd : Math.round(prom.venta);
 
     el.innerHTML = `
@@ -107,7 +108,7 @@ export function render(el) {
 
       <div class="card">
         <h2>Presupuesto de compras sugerido</h2>
-        ${presuCuerpo(refV, refG, ventaEsper, prom.gasto)}
+        ${presuCuerpo(ventaEsper, prom.gasto)}
       </div>
 
       <div class="card">
@@ -125,16 +126,11 @@ export function render(el) {
     el.querySelector("#ant").addEventListener("click", () => { off++; pintar(); });
     el.querySelector("#sig").addEventListener("click", () => { off = Math.max(0, off - 1); pintar(); });
 
-    const inpRefV = el.querySelector("#refV");
-    const inpRefG = el.querySelector("#refG");
     const inpVE = el.querySelector("#veEsper");
-    if (inpRefV) inpRefV.addEventListener("change", () => store.guardarConfig({ refVenta: num(inpRefV.value) }).catch(() => {}));
-    if (inpRefG) inpRefG.addEventListener("change", () => store.guardarConfig({ refGasto: num(inpRefG.value) }).catch(() => {}));
     if (inpVE) inpVE.addEventListener("change", () => { ventaEsperEd = num(inpVE.value); pintar(); });
     const usar = el.querySelector("#usarPresu");
     if (usar) usar.addEventListener("click", async () => {
-      const ratio = refV > 0 ? refG / refV : 0;
-      const sug = Math.round(ratio * ventaEsper);
+      const sug = Math.round(RATIO_SANO * ventaEsper);
       if (sug <= 0) return;
       usar.disabled = true; usar.textContent = "Guardando…";
       try {
@@ -196,26 +192,17 @@ function promSemReciente() {
   return { venta, gasto, n: sems.length };
 }
 
-// Presupuesto = tu % sano (de una época buena) × venta esperada actual.
-function presuCuerpo(refV, refG, ventaEsper, gastoRealSem) {
-  const ratio = refV > 0 ? refG / refV : 0;
-  const pctRef = Math.round(ratio * 100);
-  const sugerido = Math.round(ratio * ventaEsper);
+// Presupuesto = 26% sano × venta esperada de la semana actual.
+function presuCuerpo(ventaEsper, gastoRealSem) {
+  const pctRef = Math.round(RATIO_SANO * 100);
+  const sugerido = Math.round(RATIO_SANO * ventaEsper);
 
-  const refInputs = `
-    <p class="sub" style="margin-top:-4px">Ajusta el gasto en insumos al nivel de ventas: si vendes menos, compra menos.</p>
-    <div class="titulo-seccion">Tu ritmo sano (referencia)</div>
-    <p class="sub" style="margin-top:-2px">Cuando el negocio salía bien: ¿cuánto <b>vendías</b> y cuánto <b>gastabas</b> en insumos por semana?</p>
-    <div style="display:flex;gap:8px">
-      <label class="campo" style="flex:1"><span>Venta ref. / sem</span><input id="refV" type="number" inputmode="decimal" value="${refV}" /></label>
-      <label class="campo" style="flex:1"><span>Gasto ref. / sem</span><input id="refG" type="number" inputmode="decimal" value="${refG}" /></label>
-    </div>
-    <div class="sub" style="margin-top:-4px">Eso es un gasto sano de <b>${pctRef}%</b> de la venta.</div>
-    <div class="titulo-seccion" style="margin-top:12px">Venta esperada ahora</div>
-    <label class="campo"><span>Venta semanal actual (MXN)</span><input id="veEsper" type="number" inputmode="decimal" value="${Math.round(ventaEsper)}" /></label>`;
+  const cabeza = `
+    <p class="sub" style="margin-top:-4px">Al ${pctRef}% sano de la venta (tu proporción de la buena época). Si vendes menos, compra menos.</p>
+    <label class="campo"><span>Venta semanal esperada (MXN)</span><input id="veEsper" type="number" inputmode="decimal" value="${Math.round(ventaEsper)}" /></label>`;
 
-  if (ventaEsper <= 0 || ratio <= 0)
-    return refInputs + `<div class="sub" style="margin-top:8px">Llena la referencia y una venta esperada para ver el presupuesto.</div>`;
+  if (ventaEsper <= 0)
+    return cabeza + `<div class="sub" style="margin-top:8px">Escribe tu venta esperada (o carga cortes) para ver el presupuesto.</div>`;
 
   let compara = "";
   if (gastoRealSem > 0) {
@@ -229,7 +216,7 @@ function presuCuerpo(refV, refG, ventaEsper, gastoRealSem) {
       compara = `<div class="ok-box" style="margin-top:10px">✅ Hoy gastas ~${money(gastoRealSem)}/sem, justo en el presupuesto.</div>`;
   }
 
-  return refInputs + `
+  return cabeza + `
     <div class="row-stats" style="margin-top:12px">
       <div class="stat"><div class="n" style="color:var(--verde)">${money(sugerido)}</div><div class="l">presupuesto / semana</div></div>
       <div class="stat"><div class="n">${money(sugerido / 7)}</div><div class="l">por día</div></div>
