@@ -12,6 +12,10 @@ import * as ventas from "./views/ventas.js";
 import * as insumos from "./views/insumos.js";
 import * as proyeccion from "./views/proyeccion.js";
 
+// ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
+export const APP_VERSION = "v23";
+export const APP_FECHA = "15 jul 2026";
+
 const VISTAS = {
   inicio:      { mod: inicio,      ic: "🏠", txt: "Inicio" },
   proyeccion:  { mod: proyeccion,  ic: "📈", txt: "Proyec." },
@@ -86,6 +90,8 @@ function montarShell(user) {
         <div style="text-align:right">
           <div class="quien">${user.email}</div>
           <button class="linkbtn" id="salir">Salir</button>
+          <button class="linkbtn" id="ver" title="Tocar para buscar actualización"
+            style="display:block;font-size:10px;color:var(--gris);margin-top:2px">${APP_VERSION} · ${APP_FECHA}</button>
         </div>
       </header>
       <main class="vista" id="vista"></main>
@@ -93,6 +99,8 @@ function montarShell(user) {
     </div>`;
 
   document.getElementById("salir").addEventListener("click", () => supabase.auth.signOut());
+  const verBtn = document.getElementById("ver");
+  if (verBtn) verBtn.addEventListener("click", buscarActualizacion);
 
   const tabs = document.getElementById("tabs");
   tabs.innerHTML = Object.entries(VISTAS).map(([k, v]) =>
@@ -147,9 +155,74 @@ function ruta() {
   limpiarVista = VISTAS[clave].mod.render(vistaEl, { user: usuarioActual }) || null;
 }
 
-// Registrar el service worker (hace la app instalable y de arranque rápido)
+// ── Service worker + actualización sin reinstalar ──────────────
+let swReg = null;
+
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+  window.addEventListener("load", async () => {
+    try {
+      swReg = await navigator.serviceWorker.register("sw.js");
+
+      // ¿Ya hay una versión nueva esperando de una visita anterior?
+      if (swReg.waiting && navigator.serviceWorker.controller) bannerActualizar();
+
+      // Se detectó una versión nueva mientras la app está abierta.
+      swReg.addEventListener("updatefound", () => {
+        const nuevo = swReg.installing;
+        if (!nuevo) return;
+        nuevo.addEventListener("statechange", () => {
+          if (nuevo.state === "installed" && navigator.serviceWorker.controller) bannerActualizar();
+        });
+      });
+    } catch (e) { /* sin SW no pasa nada, la app igual funciona */ }
+  });
+
+  // Al volver a primer plano (reabrir la app instalada), revisa si hay update.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && swReg) swReg.update().catch(() => {});
+  });
+
+  // Cuando el SW nuevo toma control, recarga una sola vez para ver lo nuevo.
+  let recargando = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (recargando) return;
+    recargando = true;
+    location.reload();
+  });
+}
+
+// Botón/etiqueta de versión: buscar actualización a mano.
+async function buscarActualizacion() {
+  const v = document.getElementById("ver");
+  if (!swReg) { if (v) v.textContent = "sin conexión"; return; }
+  const original = v ? v.textContent : "";
+  if (v) v.textContent = "buscando…";
+  try { await swReg.update(); } catch (e) {}
+  // updatefound (si hay algo nuevo) ya mostró el banner; si no, avisa "al día".
+  setTimeout(() => {
+    if (!v) return;
+    if (swReg.waiting || swReg.installing) v.textContent = original;
+    else { v.textContent = "✓ al día"; setTimeout(() => { v.textContent = original; }, 1600); }
+  }, 1200);
+}
+
+// Barra fija abajo: "Hay una versión nueva → Actualizar".
+function bannerActualizar() {
+  if (document.getElementById("update-bar")) return;
+  const bar = document.createElement("div");
+  bar.id = "update-bar";
+  bar.style.cssText =
+    "position:fixed;left:12px;right:12px;bottom:76px;z-index:9999;background:var(--verde,#0e3a39);" +
+    "color:#fff;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;" +
+    "box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:14px";
+  bar.innerHTML =
+    `<span style="flex:1">✨ Hay una versión nueva de la app</span>
+     <button id="upd-btn" style="background:#fff;color:var(--verde,#0e3a39);border:none;border-radius:8px;
+       padding:8px 14px;font-weight:700;cursor:pointer">Actualizar</button>`;
+  document.body.appendChild(bar);
+  document.getElementById("upd-btn").addEventListener("click", () => {
+    const w = swReg && swReg.waiting;
+    if (w) w.postMessage("SKIP_WAITING");   // el SW hace skipWaiting → controllerchange → reload
+    else location.reload();
   });
 }
