@@ -13,7 +13,7 @@ import * as insumos from "./views/insumos.js";
 import * as proyeccion from "./views/proyeccion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v23";
+export const APP_VERSION = "v24";
 export const APP_FECHA = "15 jul 2026";
 
 const VISTAS = {
