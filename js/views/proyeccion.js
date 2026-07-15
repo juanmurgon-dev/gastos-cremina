@@ -14,6 +14,7 @@ function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").repla
 
 export function render(el) {
   let off = 0;
+  let metaMargen = 0.15;   // meta de utilidad para sugerir el presupuesto de compras
   const unsub = store.subscribe(pintar);
   pintar();
 
@@ -99,6 +100,12 @@ export function render(el) {
       </div>
 
       <div class="card">
+        <h2>Presupuesto de compras sugerido</h2>
+        <p class="sub" style="margin-top:-4px">Cuánto puedes gastar en insumos por semana y aún cubrir fijos y tu utilidad.</p>
+        ${presuCuerpo(ventaEsperada(), gfSem, metaMargen, contrib)}
+      </div>
+
+      <div class="card">
         <h2>Gastos fijos</h2>
         <div class="sub" style="margin-top:-4px">Total mensual: <b>${money(gfMes)}</b> · semanal ${money(gfSem)}</div>
         <div style="margin:10px 0">
@@ -112,6 +119,22 @@ export function render(el) {
 
     el.querySelector("#ant").addEventListener("click", () => { off++; pintar(); });
     el.querySelector("#sig").addEventListener("click", () => { off = Math.max(0, off - 1); pintar(); });
+
+    const metaSel = el.querySelector("#metaSel");
+    if (metaSel) metaSel.addEventListener("change", () => { metaMargen = num(metaSel.value) / 100; pintar(); });
+    const usar = el.querySelector("#usarPresu");
+    if (usar) usar.addEventListener("click", async () => {
+      const sug = Math.round(ventaEsperada() * (1 - metaMargen) - gfSem);
+      if (sug <= 0) return;
+      usar.disabled = true; usar.textContent = "Guardando…";
+      try {
+        await store.guardarConfig({ presupuestoSemanal: sug });
+        usar.textContent = "✅ Guardado como meta";
+      } catch (e) {
+        alert("No pude guardar: " + ((e && e.message) || e));
+        usar.disabled = false; usar.textContent = "Usar como meta semanal";
+      }
+    });
 
     el.querySelector("#gfadd").addEventListener("click", async () => {
       const concepto = el.querySelector("#gfc").value.trim();
@@ -148,6 +171,47 @@ function margenContrib() {
   const gTot = store.lineasEnRango(min || "0000-01-01", max || "9999-12-31")
     .reduce((a, l) => a + num(l.monto), 0);
   return 1 - gTot / vTot;
+}
+
+// Venta semanal esperada: promedio de las semanas recientes con ventas.
+function ventaEsperada() {
+  const sems = (store.ventasSemanas(8) || []).filter((s) => s.venta > 0);
+  if (!sems.length) return 0;
+  const ult = sems.slice(-6);
+  return ult.reduce((a, s) => a + s.venta, 0) / ult.length;
+}
+
+function presuCuerpo(ventaEsper, gfSem, utilPct, contrib) {
+  if (ventaEsper <= 0)
+    return `<div class="sub">Necesito algunas semanas con ventas para sugerir un presupuesto.</div>`;
+
+  const sugerido = ventaEsper * (1 - utilPct) - gfSem;
+  const sugeridoPct = sugerido / ventaEsper;
+  const costoRealPct = contrib != null ? 1 - contrib : null;
+  const metaSel = `<label class="campo"><span>Meta de utilidad</span>
+    <select id="metaSel">${[10, 15, 20, 25].map((p) =>
+      `<option value="${p}"${Math.round(utilPct * 100) === p ? " selected" : ""}>${p}% de la venta</option>`).join("")}</select></label>`;
+
+  if (sugerido <= 0) {
+    return `${metaSel}
+      <div class="aviso-box" style="margin-top:10px">Con tus gastos fijos (${money(gfSem)}/sem) y una meta de ${Math.round(utilPct * 100)}%, no queda dinero para compras. Sube ventas o precios, o baja fijos primero.</div>`;
+  }
+
+  const col = sugeridoPct < 0.28 ? "var(--rojo)" : sugeridoPct < 0.33 ? "var(--amarillo)" : "var(--verde)";
+  return `
+    <p class="sub" style="margin-top:-4px">Venta semanal esperada <b>${money(ventaEsper)}</b> (promedio reciente).</p>
+    ${metaSel}
+    <div class="row-stats" style="margin-top:6px">
+      <div class="stat"><div class="n" style="color:${col}">${money(sugerido)}</div><div class="l">por semana</div></div>
+      <div class="stat"><div class="n">${money(sugerido / 7)}</div><div class="l">por día</div></div>
+      <div class="stat"><div class="n" style="color:${col}">${Math.round(sugeridoPct * 100)}%</div><div class="l">de la venta</div></div>
+    </div>
+    <div class="sub" style="margin-top:6px">= venta esperada − gastos fijos (${money(gfSem)}/sem) − utilidad meta (${Math.round(utilPct * 100)}%).</div>
+    ${costoRealPct != null ? `<div class="${costoRealPct <= sugeridoPct ? "ok-box" : "aviso-box"}" style="margin-top:10px">${costoRealPct <= sugeridoPct
+      ? `✅ Hoy gastas ~${Math.round(costoRealPct * 100)}% en compras, dentro del presupuesto.`
+      : `⚠️ Hoy gastas ~${Math.round(costoRealPct * 100)}% en compras. Para la meta, recorta ~${money((costoRealPct - sugeridoPct) * ventaEsper)}/semana.`}</div>` : ""}
+    ${sugeridoPct < 0.28 ? `<div class="aviso-box" style="margin-top:8px">Ese presupuesto deja los insumos en ${Math.round(sugeridoPct * 100)}% (apretado; lo típico es 30–35%). Para aflojar: sube ventas o precios, o baja fijos.</div>` : ""}
+    <button class="btn" id="usarPresu" style="margin-top:12px">Usar como meta semanal</button>`;
 }
 
 function beCuerpo(gfMes, contrib, beDia, beSem, ventaDia, venta) {
