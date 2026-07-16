@@ -11,9 +11,10 @@ import * as reportes from "./views/reportes.js";
 import * as ventas from "./views/ventas.js";
 import * as insumos from "./views/insumos.js";
 import * as proyeccion from "./views/proyeccion.js";
+import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.1";
+export const APP_VERSION = "v3.2";
 export const APP_FECHA = "15 jul 2026";
 
 const VISTAS = {
@@ -23,7 +24,8 @@ const VISTAS = {
   tickets:     { mod: tickets,     ic: "🧾", txt: "Tickets" },
   reportes:    { mod: reportes,    ic: "📊", txt: "Gastos" },
   ventas:      { mod: ventas,      ic: "💵", txt: "Ventas" },
-  insumos:     { mod: insumos,     ic: "📦", txt: "Insumos" }
+  insumos:     { mod: insumos,     ic: "📦", txt: "Insumos" },
+  requisicion: { mod: requisicion, ic: "🛒", txt: "Requis." }
 };
 
 const app = document.getElementById("app");

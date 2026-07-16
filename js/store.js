@@ -23,6 +23,7 @@ export const state = {
   combos: [],
   variantes: [],
   gastosFijos: [],
+  requisiciones: [],
   perfil: { nombre: "", email: "", cargado: false },
   config: { presupuestoSemanal: 35000, presupuestoPorArea: {} },
   listo: false
@@ -83,6 +84,33 @@ async function cargarProductos() {
 async function cargarGastosFijos() {
   const { data, error } = await supabase.from("gastos_fijos").select("*").order("monto_mensual", { ascending: false });
   if (!error && data) { state.gastosFijos = data; notify(); }
+}
+
+async function cargarRequisiciones() {
+  // La tabla puede no existir aún (si no corren requisiciones.sql).
+  const { data, error } = await supabase.from("requisiciones").select("*").order("creado_en", { ascending: false });
+  if (!error && data) { state.requisiciones = data; notify(); }
+}
+
+export async function guardarRequisicion(req) {
+  const row = {
+    id: req.id,
+    fecha: req.fecha || hoyISO(),
+    titulo: req.titulo || "",
+    estatus: req.estatus || "pendiente",
+    items: Array.isArray(req.items) ? req.items : [],
+    total: num(req.total),
+    creado_por: req.creadoPor || miNombre()
+  };
+  const { error } = await supabase.from("requisiciones").upsert(row);
+  if (error) throw error;
+  await cargarRequisiciones();
+}
+
+export async function borrarRequisicion(id) {
+  const { error } = await supabase.from("requisiciones").delete().eq("id", id);
+  if (error) throw error;
+  await cargarRequisiciones();
 }
 
 // Suma mensual de los gastos fijos activos.
@@ -152,13 +180,14 @@ export async function init() {
   if (arrancado) return;
   arrancado = true;
   // allSettled: aunque una consulta falle, la app SIEMPRE deja de estar "cargando".
-  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos()]);
+  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones()]);
   state.listo = true;
   notify();
   // Realtime: cuando alguien registra/edita, todos se actualizan.
   supabase.channel("cambios-gastos")
     .on("postgres_changes", { event: "*", schema: "public", table: "tickets" }, cargarTickets)
     .on("postgres_changes", { event: "*", schema: "public", table: "config" }, cargarConfig)
+    .on("postgres_changes", { event: "*", schema: "public", table: "requisiciones" }, cargarRequisiciones)
     .subscribe();
 }
 
