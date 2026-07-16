@@ -215,17 +215,17 @@ export function render(el) {
     const idx = editing.items.indexOf(it);
     const provs = provsDe(it.nombre);
     const provCampo = provs.length
-      ? `<select data-f="prov" style="flex:1;min-width:130px">
+      ? `<select data-f="prov" style="flex:1 1 100px;min-width:0">
           ${provs.map((p) => `<option value="${esc(p.proveedor)}"${p.proveedor === it.proveedor ? " selected" : ""}>${esc(p.proveedor)} · ${money(p.precio)}</option>`).join("")}
           ${it.proveedor && !provs.some((p) => p.proveedor === it.proveedor) ? `<option value="${esc(it.proveedor)}" selected>${esc(it.proveedor)}</option>` : ""}
           <option value="__otro__">✏️ Otro proveedor…</option>
         </select>`
-      : `<input data-f="prov" value="${esc(it.proveedor)}" placeholder="Proveedor" style="flex:1;min-width:110px" />`;
+      : `<input data-f="prov" value="${esc(it.proveedor)}" placeholder="Proveedor" style="flex:1 1 100px;min-width:0" />`;
     const ie = estatusInfo(it.estatus);
     return `<div class="barra-row" data-i="${idx}" style="gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--linea);padding:8px 0">
       <span class="etq" style="width:100%;font-weight:600;display:flex;align-items:center;gap:8px">
-        <button data-f="estat" class="chip" title="Cambiar estatus" style="background:${ie.c};border:none;cursor:pointer">${ie.t}</button>
-        <span>${esc(it.nombre)}</span>
+        <button data-f="estat" class="chip" title="Cambiar estatus" style="background:${ie.c};border:none;cursor:pointer;flex:none">${ie.t}</button>
+        <span style="flex:1;min-width:0">${esc(it.nombre)}</span>
         <span class="val" style="margin-left:auto">${money(montoDe(it))}</span></span>
       <input data-f="cant" type="number" step="any" inputmode="decimal" value="${it.cantidad}" style="width:64px" />
       <span class="sub" style="align-self:center">${esc(it.unidad)} ×</span>
