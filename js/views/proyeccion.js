@@ -48,12 +48,11 @@ export function render(el) {
       }
     }
 
-    // Margen de contribución ESTABLE: de todo el historial, no de una sola
-    // semana (una compra grande puntual no debe romper el cálculo).
-    const contrib = margenContrib();            // 0..1, o null si no hay ventas
-    const beSem = (contrib != null && contrib > 0.02) ? gfSem / contrib : 0;
-    const beDia = beSem / 7;
-    const ventaDia = venta / 7;
+    // Punto de equilibrio: gastos fijos ÷ margen. El % de costo variable es
+    // editable (los tickets capturados suelen estar incompletos, así que NO
+    // sirven para estimar el margen real). Default 26% (tu ritmo sano).
+    const costoVarPct = num(store.state.config.costoVarPct) || 26;
+    const ventaRefDia = ventaSemanaAnterior() / 7;
 
     const gf = (store.state.gastosFijos || []).slice().sort((a, b) => num(b.monto_mensual) - num(a.monto_mensual));
 
@@ -100,7 +99,7 @@ export function render(el) {
 
       <div class="card">
         <h2>Punto de equilibrio</h2>
-        ${beCuerpo(gfMes, contrib, beDia, beSem, ventaDia, venta)}
+        ${beCuerpo(gfMes, gfSem, costoVarPct, ventaRefDia)}
       </div>
 
       <div class="card">
@@ -123,6 +122,8 @@ export function render(el) {
     el.querySelector("#ant").addEventListener("click", () => { off++; pintar(); });
     el.querySelector("#sig").addEventListener("click", () => { off = Math.max(0, off - 1); pintar(); });
 
+    const cvEl = el.querySelector("#cvpct");
+    if (cvEl) cvEl.addEventListener("change", () => store.guardarConfig({ costoVarPct: num(cvEl.value) }).catch(() => {}));
     const pctSelEl = el.querySelector("#pctSel");
     if (pctSelEl) pctSelEl.addEventListener("change", () => { pctSel = num(pctSelEl.value) / 100; pintar(); });
     const inpVE = el.querySelector("#veEsper");
@@ -210,23 +211,29 @@ function presuCuerpo(proj, pct) {
     <button class="btn" id="usarPresu" style="margin-top:12px">Usar como meta semanal</button>`;
 }
 
-function beCuerpo(gfMes, contrib, beDia, beSem, ventaDia, venta) {
+function beCuerpo(gfMes, gfSem, costoVarPct, ventaRefDia) {
   if (gfMes === 0)
     return `<div class="sub">Registra tus gastos fijos (abajo) para calcular el punto de equilibrio.</div>`;
-  if (contrib == null)
-    return `<div class="sub">Necesito ventas cargadas (cortes de caja) para calcularlo.</div>`;
+
+  const input = `<label class="campo"><span>Costo variable (% de la venta)</span>
+    <input id="cvpct" type="number" inputmode="decimal" value="${costoVarPct}" /></label>`;
+  const contrib = 1 - costoVarPct / 100;
   if (contrib <= 0.02)
-    return `<div class="aviso-box">Tu costo de insumos se está comiendo casi toda la venta (margen ${Math.round(contrib * 100)}%). Baja el costo variable antes de que haya punto de equilibrio.</div>`;
-  return `
-    <p class="sub" style="margin-top:-4px">Con tu margen promedio (<b>${Math.round(contrib * 100)}%</b>), para NO perder necesitas vender:</p>
+    return input + `<div class="aviso-box" style="margin-top:8px">Con un costo variable de ${costoVarPct}% casi no queda margen; no hay punto de equilibrio hasta bajarlo.</div>`;
+
+  const beSem = gfSem / contrib;
+  const beDia = beSem / 7;
+  const margenPct = Math.round(contrib * 100);
+  return input + `
+    <p class="sub" style="margin-top:2px">Con margen de <b>${margenPct}%</b>, para NO perder necesitas vender:</p>
     <div class="row-stats">
       <div class="stat"><div class="n">${money(beDia)}</div><div class="l">por día</div></div>
       <div class="stat"><div class="n">${money(beSem)}</div><div class="l">por semana</div></div>
     </div>
-    ${venta > 0 ? `<div class="${ventaDia >= beDia ? "ok-box" : "aviso-box"}" style="margin-top:10px">${ventaDia >= beDia
-      ? `✅ Vas por ${money(ventaDia)}/día, arriba del punto de equilibrio.`
-      : `⚠️ Vas por ${money(ventaDia)}/día; te faltan ${money(beDia - ventaDia)}/día para cubrir costos.`}</div>`
-      : `<div class="sub" style="margin-top:10px">Aún no hay ventas esta semana para comparar.</div>`}`;
+    ${ventaRefDia > 0 ? `<div class="${ventaRefDia >= beDia ? "ok-box" : "aviso-box"}" style="margin-top:10px">${ventaRefDia >= beDia
+      ? `✅ La semana pasada vendiste ${money(ventaRefDia)}/día, arriba del equilibrio.`
+      : `⚠️ La semana pasada vendiste ${money(ventaRefDia)}/día; te faltan ${money(beDia - ventaRefDia)}/día para cubrir costos.`}</div>` : ""}
+    <div class="sub" style="margin-top:8px">= gastos fijos ${money(gfSem)}/sem ÷ margen ${margenPct}%.</div>`;
 }
 
 function filaCalc(etq, val, color) {

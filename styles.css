@@ -65,12 +65,22 @@ nav.tabs {
   padding-bottom: var(--safe-b);
 }
 nav.tabs a {
-  flex: 1; text-align: center; text-decoration: none;
+  position: relative; flex: 1; text-align: center; text-decoration: none;
   color: var(--gris); font-size: 9px; padding: 7px 1px 6px;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
 nav.tabs a .ic { font-size: 19px; line-height: 1; }
-nav.tabs a.activo { color: var(--naranja); font-weight: 600; }
+nav.tabs a.activo { color: var(--naranja); font-weight: 700; }
+nav.tabs a.activo .ic { transform: translateY(-1px); }
+/* barra + fondo para que sea OBVIO en qué pestaña estás */
+nav.tabs a.activo::before {
+  content: ""; position: absolute; top: 0; left: 20%; right: 20%; height: 3px;
+  background: var(--naranja); border-radius: 0 0 3px 3px;
+}
+nav.tabs a.activo::after {
+  content: ""; position: absolute; inset: 4px 6px; z-index: -1;
+  background: color-mix(in srgb, var(--naranja) 12%, transparent); border-radius: 12px;
+}
 
 /* ── Tarjetas y textos ─────────────────────────────────────── */
 .card { background: var(--blanco); border-radius: var(--radio); box-shadow: var(--sombra); padding: 16px; margin-bottom: 14px; }

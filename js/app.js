@@ -13,7 +13,7 @@ import * as insumos from "./views/insumos.js";
 import * as proyeccion from "./views/proyeccion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v29";
+export const APP_VERSION = "v3.0";
 export const APP_FECHA = "15 jul 2026";
 
 const VISTAS = {
@@ -30,6 +30,7 @@ const app = document.getElementById("app");
 let limpiarVista = null;    // cleanup de la vista actual
 let usuarioActual = null;
 let shellMontado = false;
+let rutaActual = null;      // clave de la vista montada (evita render doble)
 
 // ── Sesión ──────────────────────────────────────────────────
 supabase.auth.getSession().then(({ data }) => aplicarSesion(data.session));
@@ -106,6 +107,16 @@ function montarShell(user) {
   tabs.innerHTML = Object.entries(VISTAS).map(([k, v]) =>
     `<a href="#/${k}" data-k="${k}"><span class="ic">${v.ic}</span>${v.txt}</a>`).join("");
 
+  // Navegar al tocar la pestaña, sin depender solo de hashchange (que a veces
+  // no dispara en la PWA instalada de iOS).
+  tabs.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-k]");
+    if (!a) return;
+    e.preventDefault();
+    if (location.hash !== "#/" + a.dataset.k) location.hash = "#/" + a.dataset.k;
+    ruta();
+  });
+
   window.addEventListener("hashchange", ruta);
   ruta();
 
@@ -145,6 +156,10 @@ function ruta() {
   if (!vistaEl) return;
   let clave = (location.hash.replace("#/", "") || "inicio");
   if (!VISTAS[clave]) clave = "inicio";
+
+  // Ya estamos en esa vista: no re-render (evita el doble click+hashchange).
+  if (clave === rutaActual && vistaEl.childElementCount > 0) return;
+  rutaActual = clave;
 
   document.querySelectorAll("#tabs a").forEach((a) =>
     a.classList.toggle("activo", a.dataset.k === clave));
