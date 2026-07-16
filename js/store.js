@@ -355,6 +355,17 @@ export function ventasSemanas(n) {
   return out;
 }
 
+// Venta y gasto de SOLO los primeros `dias` de la semana que arranca en `lunes`.
+// Sirve para comparar "mismo punto de la semana" (día 3 vs día 3 de la anterior).
+export function semanaParcial(lunes, dias) {
+  const l = (lunes instanceof Date) ? new Date(lunes) : parseISO(lunes);
+  const fin = new Date(l); fin.setDate(l.getDate() + Math.max(0, dias - 1));
+  const desde = toISO(l), hasta = toISO(fin);
+  const venta = cortesEnRango(desde, hasta).reduce((a, c) => a + num(c.ventas_total), 0);
+  const gasto = ticketsEnRango(desde, hasta).reduce((a, t) => a + totalTicket(t), 0);
+  return { venta, gasto, dias };
+}
+
 // Historial de precios por insumo (agrupa por descripción normalizada)
 export function preciosPorInsumo() {
   const map = new Map();

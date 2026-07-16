@@ -43,7 +43,17 @@ export function render(el) {
       const hoy = new Date();
       const dias = Math.min(7, Math.max(1, Math.floor((hoy - lunes) / 86400000) + 1));
       if (dias < 7) {
-        const pv = venta / dias * 7, pg = gastoVar / dias * 7;
+        // Proyectar con el ritmo REAL de la semana pasada (mismos días), no lineal.
+        const pl = new Date(lunes); pl.setDate(pl.getDate() - 7);
+        const plFin = new Date(pl); plFin.setDate(pl.getDate() + 6);
+        const plPart = new Date(pl); plPart.setDate(pl.getDate() + dias - 1);
+        const vFull = store.cortesEnRango(toISO(pl), toISO(plFin)).reduce((a, c) => a + num(c.ventas_total), 0);
+        const vPart = store.cortesEnRango(toISO(pl), toISO(plPart)).reduce((a, c) => a + num(c.ventas_total), 0);
+        const gFull = store.lineasEnRango(toISO(pl), toISO(plFin)).reduce((a, l) => a + num(l.monto), 0);
+        const gPart = store.lineasEnRango(toISO(pl), toISO(plPart)).reduce((a, l) => a + num(l.monto), 0);
+        const fV = vPart > 0 ? vFull / vPart : 7 / dias;
+        const fG = gPart > 0 ? gFull / gPart : 7 / dias;
+        const pv = venta * fV, pg = gastoVar * fG;
         proy = { dias, venta: pv, util: pv - pg - gfSem };
       }
     }
@@ -87,7 +97,7 @@ export function render(el) {
       ${proy ? `
       <div class="card">
         <h2>Proyección al cierre</h2>
-        <p class="sub" style="margin-top:-4px">Vas ${proy.dias} de 7 días. Si sigue este ritmo:</p>
+        <p class="sub" style="margin-top:-4px">Vas ${proy.dias} de 7 días. Proyectado con el ritmo de la semana pasada:</p>
         <div class="row-stats">
           <div class="stat"><div class="n">${kmoney(proy.venta)}</div><div class="l">Venta proyectada</div></div>
           <div class="stat"><div class="n" style="color:${proy.util >= 0 ? "var(--verde)" : "var(--rojo)"}">${kmoney(proy.util)}</div><div class="l">Utilidad proyectada</div></div>

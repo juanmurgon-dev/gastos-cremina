@@ -12,14 +12,14 @@ function kmoney(n) {
 function opac(v, max) { return (0.4 + 0.6 * (v / (max || 1))).toFixed(2); }
 
 // Δ % entre actual y anterior; bueno=verde según el tipo de dato.
-function delta(actual, previo, subeEsBueno) {
+function delta(actual, previo, subeEsBueno, etiqueta) {
   if (!previo) return "";
   const p = (actual - previo) / previo * 100;
   if (Math.abs(p) < 0.5) return `<span class="sub">= igual</span>`;
   const sube = p > 0;
   const bueno = sube === subeEsBueno;
   const col = bueno ? "var(--verde)" : "var(--rojo)";
-  return `<span style="color:${col};font-size:12px">${sube ? "▲" : "▼"} ${Math.abs(Math.round(p))}% vs. sem. pasada</span>`;
+  return `<span style="color:${col};font-size:12px">${sube ? "▲" : "▼"} ${Math.abs(Math.round(p))}% ${etiqueta || "vs. sem. pasada"}</span>`;
 }
 
 export function render(el) {
@@ -33,21 +33,34 @@ export function render(el) {
 
     const semanas = store.ventasSemanas(14); // i=0 actual, i=1 pasada…
     const wk = semanas[off] || semanas[0];
-    const prev = semanas[off + 1] || null;
+    const prevFull = semanas[off + 1] || null;
     const meta = num(store.state.config.presupuestoSemanal) || 0;
 
     const venta = wk.venta, gasto = wk.gasto;
     const costo = venta > 0 ? (gasto / venta) * 100 : 0;
+
+    // ¿Semana en curso y a medias? Cuántos días llevamos.
+    let diasT = 7, parcial = false;
+    if (off === 0) {
+      diasT = Math.min(7, Math.max(1, Math.floor((new Date() - wk.lunes) / 86400000) + 1));
+      parcial = diasT < 7;
+    }
+    const cmpLbl = parcial ? `vs. mismos ${diasT} días` : "vs. sem. pasada";
+
+    // Comparar contra el MISMO punto de la semana pasada (no la semana completa).
+    let prev = prevFull;
+    if (parcial && prevFull) {
+      const pl = new Date(wk.lunes); pl.setDate(pl.getDate() - 7);
+      prev = store.semanaParcial(pl, diasT);
+    }
     const costoPrev = prev && prev.venta > 0 ? (prev.gasto / prev.venta) * 100 : 0;
 
-    // Proyección (solo semana actual y si no terminó)
+    // Proyección al cierre: con el ritmo REAL de la semana pasada (no lineal).
     let proy = null;
-    if (off === 0) {
-      const hoy = new Date();
-      const dias = Math.min(7, Math.max(1, Math.floor((hoy - wk.lunes) / 86400000) + 1));
-      if (dias < 7) {
-        proy = { dias, gasto: gasto / dias * 7, venta: venta / dias * 7 };
-      }
+    if (parcial) {
+      const fV = (prev && prev.venta > 0 && prevFull) ? prevFull.venta / prev.venta : 7 / diasT;
+      const fG = (prev && prev.gasto > 0 && prevFull) ? prevFull.gasto / prev.gasto : 7 / diasT;
+      proy = { dias: diasT, venta: venta * fV, gasto: gasto * fG };
     }
 
     // Meta
@@ -91,26 +104,26 @@ export function render(el) {
           <div class="stat">
             <div class="n" style="color:var(--verde-claro)">${kmoney(venta)}</div>
             <div class="l">Venta</div>
-            <div style="margin-top:3px">${prev ? delta(venta, prev.venta, true) : ""}</div>
+            <div style="margin-top:3px">${prev ? delta(venta, prev.venta, true, cmpLbl) : ""}</div>
           </div>
           <div class="stat">
             <div class="n" style="color:var(--naranja)">${kmoney(gasto)}</div>
             <div class="l">Gasto</div>
-            <div style="margin-top:3px">${prev ? delta(gasto, prev.gasto, false) : ""}</div>
+            <div style="margin-top:3px">${prev ? delta(gasto, prev.gasto, false, cmpLbl) : ""}</div>
           </div>
           <div class="stat">
             <div class="n" style="color:${costo <= 35 ? "var(--verde)" : costo <= 45 ? "var(--amarillo)" : "var(--rojo)"}">${venta > 0 ? Math.round(costo) + "%" : "—"}</div>
             <div class="l">Costo</div>
-            <div style="margin-top:3px">${(costoPrev && venta > 0) ? delta(costo, costoPrev, false) : ""}</div>
+            <div style="margin-top:3px">${(costoPrev && venta > 0) ? delta(costo, costoPrev, false, cmpLbl) : ""}</div>
           </div>
         </div>
-        <div class="sub" style="text-align:center;margin-top:8px">Costo = cuánto de tu venta se fue en compras</div>
+        <div class="sub" style="text-align:center;margin-top:8px">Costo = cuánto de tu venta se fue en compras${parcial ? ` · comparado con los mismos ${diasT} días de la semana pasada` : ""}</div>
       </div>
 
       ${proy ? `
       <div class="card">
         <h2>Proyección al cierre de semana</h2>
-        <p class="sub" style="margin-top:0">Vas ${proy.dias} de 7 días. Si sigue este ritmo:</p>
+        <p class="sub" style="margin-top:0">Vas ${proy.dias} de 7 días. Proyectado con el ritmo de la semana pasada:</p>
         <div class="row-stats">
           <div class="stat"><div class="n">${kmoney(proy.venta)}</div><div class="l">Venta proyectada</div></div>
           <div class="stat"><div class="n" style="color:${meta && proy.gasto > meta ? "var(--rojo)" : "var(--tinta)"}">${kmoney(proy.gasto)}</div><div class="l">Gasto proyectado</div></div>
