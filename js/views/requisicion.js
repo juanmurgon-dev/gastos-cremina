@@ -172,7 +172,18 @@ export function render(el) {
       const it = editing.items[Number(row.dataset.i)];
       row.querySelector("[data-f='cant']").addEventListener("change", (ev) => { it.cantidad = num(ev.target.value); pintarItems(); guardar(); });
       row.querySelector("[data-f='precio']").addEventListener("change", (ev) => { it.precio = num(ev.target.value); pintarItems(); guardar(); });
-      row.querySelector("[data-f='prov']").addEventListener("change", (ev) => { it.proveedor = ev.target.value.trim(); pintarItems(); guardar(); });
+      row.querySelector("[data-f='prov']").addEventListener("change", (ev) => {
+        const v = ev.target.value;
+        if (v === "__otro__") {
+          const nom = (prompt("Nombre del proveedor:", it.proveedor || "") || "").trim();
+          if (nom) it.proveedor = nom;
+          pintarItems(); guardar(); return;
+        }
+        it.proveedor = v.trim();
+        const pr = provsDe(it.nombre).find((p) => p.proveedor === it.proveedor);
+        if (pr) it.precio = pr.precio;   // toma el precio de ESE proveedor
+        pintarItems(); guardar();
+      });
       row.querySelector("[data-del]").addEventListener("click", () => { editing.items.splice(Number(row.dataset.i), 1); pintarItems(); guardar(); });
     });
     cont.querySelector("#rqWa").addEventListener("click", copiarWa);
@@ -180,15 +191,35 @@ export function render(el) {
     cont.querySelector("#rqDel").addEventListener("click", borrar);
   }
 
+  // Proveedores a los que ya le compramos ESTE insumo (con su último precio).
+  function provsDe(nombre) {
+    const hit = byName.get((nombre || "").toLowerCase());
+    if (!hit) return [];
+    const seen = new Map(); // registros vienen recientes primero → 1er precio = el último
+    for (const r of hit.registros) {
+      const p = (r.proveedor || "").trim();
+      if (p && !seen.has(p)) seen.set(p, num(r.precio));
+    }
+    return [...seen.entries()].map(([proveedor, precio]) => ({ proveedor, precio }));
+  }
+
   function filaItem(it) {
     const idx = editing.items.indexOf(it);
+    const provs = provsDe(it.nombre);
+    const provCampo = provs.length
+      ? `<select data-f="prov" style="flex:1;min-width:130px">
+          ${provs.map((p) => `<option value="${esc(p.proveedor)}"${p.proveedor === it.proveedor ? " selected" : ""}>${esc(p.proveedor)} · ${money(p.precio)}</option>`).join("")}
+          ${it.proveedor && !provs.some((p) => p.proveedor === it.proveedor) ? `<option value="${esc(it.proveedor)}" selected>${esc(it.proveedor)}</option>` : ""}
+          <option value="__otro__">✏️ Otro proveedor…</option>
+        </select>`
+      : `<input data-f="prov" value="${esc(it.proveedor)}" placeholder="Proveedor" style="flex:1;min-width:110px" />`;
     return `<div class="barra-row" data-i="${idx}" style="gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--linea);padding:8px 0">
       <span class="etq" style="width:100%;font-weight:600">
         ${esc(it.nombre)}<span class="val" style="float:right">${money(montoDe(it))}</span></span>
       <input data-f="cant" type="number" step="any" inputmode="decimal" value="${it.cantidad}" style="width:64px" />
       <span class="sub" style="align-self:center">${esc(it.unidad)} ×</span>
       <input data-f="precio" type="number" step="any" inputmode="decimal" value="${it.precio}" style="width:80px" />
-      <input data-f="prov" value="${esc(it.proveedor)}" placeholder="Proveedor" style="flex:1;min-width:110px" />
+      ${provCampo}
       <button class="linkbtn" data-del style="color:var(--rojo);padding:0 6px;font-size:16px">✕</button>
     </div>`;
   }

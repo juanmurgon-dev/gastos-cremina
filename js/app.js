@@ -14,7 +14,7 @@ import * as proyeccion from "./views/proyeccion.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.3";
+export const APP_VERSION = "v3.4";
 export const APP_FECHA = "15 jul 2026";
 
 const VISTAS = {
