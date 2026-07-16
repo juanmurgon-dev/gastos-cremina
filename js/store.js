@@ -134,6 +134,19 @@ export async function borrarRequisicion(id) {
   await cargarRequisiciones();
 }
 
+// Respaldo: descarga TODO el historial del restaurante en un solo archivo JSON.
+// El usuario está autenticado, así que RLS le devuelve solo sus datos.
+export async function exportarRespaldo() {
+  const tablas = ["tickets", "cortes", "gastos_fijos", "productos_venta",
+    "modificadores_venta", "combos_venta", "variantes_venta", "requisiciones", "config", "perfiles"];
+  const out = { app: "Cifra", exportado: new Date().toISOString(), tablas: {} };
+  for (const t of tablas) {
+    const { data, error } = await supabase.from(t).select("*");
+    out.tablas[t] = error ? { error: error.message } : (data || []);
+  }
+  return out;
+}
+
 // Suma mensual de los gastos fijos activos.
 export function gastoFijoMensual() {
   return (state.gastosFijos || []).filter((g) => g.activo !== false).reduce((a, g) => a + num(g.monto_mensual), 0);

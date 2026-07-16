@@ -243,7 +243,35 @@ export function montar(el) {
       Puedes soltar varios de golpe; yo detecto cuál es cuál.</p>
       <label class="btn"><input id="files" type="file" accept=".xlsx,.pdf" multiple hidden> ⬆ Elegir archivos</label>
       <div id="res"></div>
+    </div>
+
+    <div class="card">
+      <h2>Respaldo de tus datos</h2>
+      <p class="sub" style="margin-top:-4px">Descarga TODO tu historial (gastos, ventas, gastos fijos, requisiciones…) en un archivo. Guárdalo por seguridad.</p>
+      <button class="btn sec" id="respaldo">⬇ Descargar respaldo (todo)</button>
+      <div id="resp-msg"></div>
     </div>`;
+
+  el.querySelector("#respaldo").addEventListener("click", async () => {
+    const btn = el.querySelector("#respaldo");
+    const msg = el.querySelector("#resp-msg");
+    btn.disabled = true; btn.textContent = "Preparando…";
+    try {
+      const data = await store.exportarRespaldo();
+      const fecha = new Date().toISOString().slice(0, 10);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `respaldo-cifra-${fecha}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      const n = Object.values(data.tablas).reduce((s, v) => s + (Array.isArray(v) ? v.length : 0), 0);
+      msg.innerHTML = `<div class="ok-box" style="margin-top:10px">✅ Respaldo descargado (${n} registros). Guárdalo en un lugar seguro.</div>`;
+    } catch (e) {
+      msg.innerHTML = `<div class="error-box" style="margin-top:10px">No pude generar el respaldo: ${(e && e.message) || e}</div>`;
+    }
+    btn.disabled = false; btn.textContent = "⬇ Descargar respaldo (todo)";
+  });
 
   el.querySelector("#files").addEventListener("change", async (e) => {
     const files = [...e.target.files];
