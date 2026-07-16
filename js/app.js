@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 //  Arranque de la app: login, navegación y montaje de pantallas.
 // ─────────────────────────────────────────────────────────────
-import { supabase } from "./supabase-init.js";
+import { supabase, ENV } from "./supabase-init.js";
 import * as store from "./store.js";
 
 import * as inicio from "./views/inicio.js";
@@ -14,7 +14,7 @@ import * as proyeccion from "./views/proyeccion.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.6";
+export const APP_VERSION = "v3.7";
 export const APP_FECHA = "15 jul 2026";
 
 const VISTAS = {
@@ -94,7 +94,7 @@ function montarShell(user) {
           <div class="quien">${user.email}</div>
           <button class="linkbtn" id="salir">Salir</button>
           <button class="linkbtn" id="ver" title="Tocar para buscar actualización"
-            style="display:block;font-size:10px;color:var(--gris);margin-top:2px">${APP_VERSION} · ${APP_FECHA}</button>
+            style="display:block;font-size:10px;color:${ENV === "staging" ? "#eaa84e" : "var(--gris)"};margin-top:2px;font-weight:${ENV === "staging" ? "700" : "400"}">${ENV === "staging" ? "🧪 STAGING · " : ""}${APP_VERSION} · ${APP_FECHA}</button>
         </div>
       </header>
       <main class="vista" id="vista"></main>
@@ -122,12 +122,47 @@ function montarShell(user) {
   window.addEventListener("hashchange", ruta);
   ruta();
 
-  // Pedir el nombre la primera vez (para saber quién hace cada cosa).
-  let nombrePedido = false;
+  // Onboarding: si la BD es multi-tenant y el usuario aún no tiene restaurante,
+  // pídelo antes que nada. Luego, el nombre de la persona.
+  let orgPedida = false, nombrePedido = false;
   store.subscribe(() => {
+    if (store.state.listo && store.state.multiTenant && !store.state.orgId && !orgPedida) {
+      orgPedida = true;
+      pedirRestaurante();
+      return;
+    }
     if (store.state.perfil.cargado && !store.state.perfil.nombre && !nombrePedido) {
       nombrePedido = true;
       pedirNombre();
+    }
+  });
+}
+
+function pedirRestaurante() {
+  const bg = document.createElement("div");
+  bg.className = "modal-bg";
+  bg.innerHTML = `
+    <div class="modal">
+      <h2>¿Cómo se llama tu restaurante?</h2>
+      <p class="sub" style="margin-top:0">Creamos tu espacio. Solo tú y tu equipo verán sus datos.</p>
+      <input id="rest" placeholder="Ej. Mi Bistró" />
+      <button class="btn" id="okrest" style="margin-top:12px">Crear mi restaurante</button>
+      <div id="resterr"></div>
+    </div>`;
+  document.body.appendChild(bg);
+  const input = bg.querySelector("#rest");
+  input.focus();
+  bg.querySelector("#okrest").addEventListener("click", async () => {
+    const nombre = input.value.trim();
+    if (!nombre) return;
+    const btn = bg.querySelector("#okrest");
+    btn.disabled = true; btn.textContent = "Creando…";
+    try {
+      await store.crearOrg(nombre);
+      location.reload();   // recarga limpia con el restaurante nuevo
+    } catch (e) {
+      bg.querySelector("#resterr").innerHTML = `<div class="error-box" style="margin-top:10px">No pude crear el restaurante: ${(e && e.message) || e}</div>`;
+      btn.disabled = false; btn.textContent = "Crear mi restaurante";
     }
   });
 }

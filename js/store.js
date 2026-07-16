@@ -26,6 +26,8 @@ export const state = {
   requisiciones: [],
   perfil: { nombre: "", email: "", cargado: false },
   config: { presupuestoSemanal: 35000, presupuestoPorArea: {} },
+  orgId: null,          // id del restaurante (multi-tenant); null = single-tenant
+  multiTenant: false,   // true si la BD ya tiene la tabla 'miembros'
   listo: false
 };
 
@@ -58,9 +60,28 @@ async function cargarTickets() {
 }
 
 async function cargarConfig() {
-  const { data } = await supabase.from("config").select("data").eq("id", "app").maybeSingle();
-  if (data && data.data) state.config = { ...state.config, ...data.data };
+  // Sin filtrar por id='app': en single-tenant hay una sola fila; en multi-tenant
+  // RLS ya devuelve solo la del restaurante del usuario.
+  const { data } = await supabase.from("config").select("data").limit(1);
+  const row = data && data[0];
+  if (row && row.data) state.config = { ...state.config, ...row.data };
   notify();
+}
+
+// ¿La BD es multi-tenant? ¿A qué restaurante(s) pertenece el usuario?
+async function cargarMiOrg() {
+  const { data, error } = await supabase.from("miembros").select("org_id").limit(1);
+  if (error) { state.multiTenant = false; state.orgId = null; return; } // tabla no existe → single-tenant
+  state.multiTenant = true;
+  state.orgId = (data && data[0] && data[0].org_id) || null;
+}
+
+// Onboarding: crea un restaurante nuevo y deja al usuario como dueño.
+export async function crearOrg(nombre) {
+  const { data, error } = await supabase.rpc("crear_org", { nombre });
+  if (error) throw error;
+  state.orgId = data;
+  return data;
 }
 
 async function cargarCortes() {
@@ -180,6 +201,7 @@ export async function init() {
   if (arrancado) return;
   arrancado = true;
   // allSettled: aunque una consulta falle, la app SIEMPRE deja de estar "cargando".
+  await cargarMiOrg();  // primero: define single vs multi-tenant y el orgId
   await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones()]);
   state.listo = true;
   notify();
@@ -229,7 +251,12 @@ export async function borrarTicket(id) {
 
 export async function guardarConfig(cfg) {
   const merged = { ...state.config, ...cfg };
-  const { error } = await supabase.from("config").upsert({ id: "app", data: merged });
+  let error;
+  if (state.multiTenant && state.orgId) {
+    ({ error } = await supabase.from("config").upsert({ org_id: state.orgId, data: merged }, { onConflict: "org_id" }));
+  } else {
+    ({ error } = await supabase.from("config").upsert({ id: "app", data: merged }));
+  }
   if (error) throw error;
   state.config = merged;
   notify();
