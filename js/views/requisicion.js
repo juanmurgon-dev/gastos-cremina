@@ -8,9 +8,18 @@ import { descargarCSV } from "../csv.js";
 const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const ESTATUS = [
   { k: "pendiente", t: "Pendiente", c: "var(--amarillo)" },
+  { k: "parcial", t: "Parcial", c: "var(--olive)" },
   { k: "pedido", t: "Pedido", c: "var(--verde)" },
 ];
 const estatusInfo = (k) => ESTATUS.find((e) => e.k === k) || ESTATUS[0];
+// Estatus general de la requisición, derivado del de cada producto.
+function derivar(items) {
+  const its = items || [];
+  if (!its.length) return "pendiente";
+  if (its.every((x) => x.estatus === "pedido")) return "pedido";
+  if (its.some((x) => x.estatus === "pedido")) return "parcial";
+  return "pendiente";
+}
 
 function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function hoyISO() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
@@ -60,7 +69,7 @@ export function render(el) {
     const n = (r.items || []).length;
     return `<div class="ticket" data-open="${r.id}" style="cursor:pointer">
       <div class="cab">
-        <span class="prov">${esc(r.titulo || "Requisición")} · ${fechaBonita(r.fecha)}</span>
+        <span class="prov">Requisición · ${fechaBonita(r.fecha)}</span>
         <span class="monto">${money(r.total)}</span></div>
       <div class="meta" style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
         <span><span class="chip" style="background:${e.c}">${e.t}</span> · ${n} insumos</span>
@@ -70,18 +79,15 @@ export function render(el) {
 
   // ───────────── EDITOR ─────────────
   function pintarEditor() {
-    const e = estatusInfo(editing.estatus);
+    const e = estatusInfo(derivar(editing.items));
     el.innerHTML = `
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <button class="btn sec chico" id="volver">‹ Volver</button>
-          <span class="chip" style="background:${e.c}">${e.t}</span>
+          <span class="chip" id="rqChip" style="background:${e.c}">${e.t}</span>
         </div>
-        <label class="campo" style="margin-top:10px"><span>Título (opcional)</span>
-          <input id="rqTit" value="${esc(editing.titulo)}" placeholder="Ej. Compras de la semana" /></label>
-        <label class="campo"><span>Estatus</span>
-          <select id="rqEst">${ESTATUS.map((s) => `<option value="${s.k}"${s.k === editing.estatus ? " selected" : ""}>${s.t}</option>`).join("")}</select></label>
-        <button class="btn" id="rqGuardar">💾 Guardar requisición</button>
+        <p class="sub" style="margin:8px 0 0">Toca el estatus de cada producto para cambiarlo entre <b>Pendiente</b> y <b>Pedido</b>.</p>
+        <button class="btn" id="rqGuardar" style="margin-top:10px">💾 Guardar requisición</button>
         <div id="rqSaveMsg"></div>
       </div>
 
@@ -106,8 +112,6 @@ export function render(el) {
       if (editing.items.length) await guardar();   // guarda el último avance al salir
       vista = "lista"; editing = null; pintar();
     });
-    $("#rqTit").addEventListener("change", () => { editing.titulo = $("#rqTit").value.trim(); guardar(); });
-    $("#rqEst").addEventListener("change", () => { editing.estatus = $("#rqEst").value; guardar(); pintarEditor(); });
     $("#rqGuardar").addEventListener("click", () => guardar(true));
 
     $("#rqNom").addEventListener("change", () => {
@@ -122,7 +126,7 @@ export function render(el) {
       const precio = hit ? num(hit.precioActual) : 0;
       const proveedor = hit && hit.registros[0] ? (hit.registros[0].proveedor || "") : "";
       const unidad = $("#rqUni").value.trim() || (hit && hit.unidad) || "pz";
-      editing.items.push({ nombre, cantidad, unidad, precio, proveedor });
+      editing.items.push({ nombre, cantidad, unidad, precio, proveedor, estatus: "pendiente" });
       $("#rqNom").value = ""; $("#rqCant").value = ""; $("#rqUni").value = "";
       $("#rqNom").focus();
       pintarItems(); guardar();
@@ -170,6 +174,10 @@ export function render(el) {
 
     cont.querySelectorAll("[data-i]").forEach((row) => {
       const it = editing.items[Number(row.dataset.i)];
+      row.querySelector("[data-f='estat']").addEventListener("click", () => {
+        it.estatus = it.estatus === "pedido" ? "pendiente" : "pedido";
+        actualizarChip(); pintarItems(); guardar();
+      });
       row.querySelector("[data-f='cant']").addEventListener("change", (ev) => { it.cantidad = num(ev.target.value); pintarItems(); guardar(); });
       row.querySelector("[data-f='precio']").addEventListener("change", (ev) => { it.precio = num(ev.target.value); pintarItems(); guardar(); });
       row.querySelector("[data-f='prov']").addEventListener("change", (ev) => {
@@ -213,9 +221,12 @@ export function render(el) {
           <option value="__otro__">✏️ Otro proveedor…</option>
         </select>`
       : `<input data-f="prov" value="${esc(it.proveedor)}" placeholder="Proveedor" style="flex:1;min-width:110px" />`;
+    const ie = estatusInfo(it.estatus);
     return `<div class="barra-row" data-i="${idx}" style="gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--linea);padding:8px 0">
-      <span class="etq" style="width:100%;font-weight:600">
-        ${esc(it.nombre)}<span class="val" style="float:right">${money(montoDe(it))}</span></span>
+      <span class="etq" style="width:100%;font-weight:600;display:flex;align-items:center;gap:8px">
+        <button data-f="estat" class="chip" title="Cambiar estatus" style="background:${ie.c};border:none;cursor:pointer">${ie.t}</button>
+        <span>${esc(it.nombre)}</span>
+        <span class="val" style="margin-left:auto">${money(montoDe(it))}</span></span>
       <input data-f="cant" type="number" step="any" inputmode="decimal" value="${it.cantidad}" style="width:64px" />
       <span class="sub" style="align-self:center">${esc(it.unidad)} ×</span>
       <input data-f="precio" type="number" step="any" inputmode="decimal" value="${it.precio}" style="width:80px" />
@@ -224,14 +235,21 @@ export function render(el) {
     </div>`;
   }
 
+  function actualizarChip() {
+    const c = el.querySelector("#rqChip");
+    if (!c) return;
+    const e = estatusInfo(derivar(editing.items));
+    c.textContent = e.t; c.style.background = e.c;
+  }
+
   // ───────────── exportar / guardar ─────────────
   function textoWa() {
-    const e = estatusInfo(editing.estatus);
-    let t = `📋 *${editing.titulo || "Requisición"} ${hoyTxt()}*  (${e.t})\n`;
+    const e = estatusInfo(derivar(editing.items));
+    let t = `📋 *Requisición ${hoyTxt()}*  (${e.t})\n`;
     for (const [prov, list] of grupos()) {
       t += `\n🏪 *${prov}*\n`;
       for (const it of list) {
-        t += `• ${it.nombre} — ${num(it.cantidad)} ${it.unidad}${num(it.precio) ? ` — ${money(montoDe(it))}` : ""}\n`;
+        t += `${it.estatus === "pedido" ? "✅" : "•"} ${it.nombre} — ${num(it.cantidad)} ${it.unidad}${num(it.precio) ? ` — ${money(montoDe(it))}` : ""}\n`;
       }
       t += `   Subtotal: ${money(totalDe(list))}\n`;
     }
@@ -265,6 +283,7 @@ export function render(el) {
 
   async function guardar(explicito) {
     editing.total = totalDe(editing.items);
+    editing.estatus = derivar(editing.items);   // el general sale del de cada producto
     editing._nuevo = false;
     const msg = el.querySelector("#rqSaveMsg");
     if (explicito && msg) msg.innerHTML = `<div class="sub" style="margin-top:6px">Guardando…</div>`;
