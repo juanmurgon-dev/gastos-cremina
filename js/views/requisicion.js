@@ -81,6 +81,8 @@ export function render(el) {
           <input id="rqTit" value="${esc(editing.titulo)}" placeholder="Ej. Compras de la semana" /></label>
         <label class="campo"><span>Estatus</span>
           <select id="rqEst">${ESTATUS.map((s) => `<option value="${s.k}"${s.k === editing.estatus ? " selected" : ""}>${s.t}</option>`).join("")}</select></label>
+        <button class="btn" id="rqGuardar">💾 Guardar requisición</button>
+        <div id="rqSaveMsg"></div>
       </div>
 
       <div class="card">
@@ -100,9 +102,13 @@ export function render(el) {
       <div id="rqLista"></div>`;
 
     const $ = (s) => el.querySelector(s);
-    $("#volver").addEventListener("click", () => { vista = "lista"; editing = null; pintar(); });
+    $("#volver").addEventListener("click", async () => {
+      if (editing.items.length) await guardar();   // guarda el último avance al salir
+      vista = "lista"; editing = null; pintar();
+    });
     $("#rqTit").addEventListener("change", () => { editing.titulo = $("#rqTit").value.trim(); guardar(); });
     $("#rqEst").addEventListener("change", () => { editing.estatus = $("#rqEst").value; guardar(); pintarEditor(); });
+    $("#rqGuardar").addEventListener("click", () => guardar(true));
 
     $("#rqNom").addEventListener("change", () => {
       const hit = byName.get($("#rqNom").value.trim().toLowerCase());
@@ -226,11 +232,18 @@ export function render(el) {
     } catch (e) { alert("No pude borrar: " + ((e && e.message) || e)); }
   }
 
-  async function guardar() {
+  async function guardar(explicito) {
     editing.total = totalDe(editing.items);
     editing._nuevo = false;
-    try { await store.guardarRequisicion(editing); }
-    catch (e) { /* queda local; se reintenta al siguiente cambio */ }
+    const msg = el.querySelector("#rqSaveMsg");
+    if (explicito && msg) msg.innerHTML = `<div class="sub" style="margin-top:6px">Guardando…</div>`;
+    try {
+      await store.guardarRequisicion(editing);
+      if (explicito && msg) msg.innerHTML = `<div class="ok-box" style="margin-top:6px">✅ Guardado. Puedes volver y editarla cuando quieras.</div>`;
+    } catch (e) {
+      if (explicito && msg) msg.innerHTML = `<div class="error-box" style="margin-top:6px">No pude guardar. ¿Corriste <b>requisiciones.sql</b> en Supabase? (${esc((e && e.message) || e)})</div>`;
+      // sin `explicito` queda local y se reintenta al siguiente cambio
+    }
   }
 
   return unsub;
