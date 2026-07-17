@@ -14,7 +14,7 @@ import * as proyeccion from "./views/proyeccion.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.9";
+export const APP_VERSION = "v3.10";
 export const APP_FECHA = "15 jul 2026";
 
 const VISTAS = {
@@ -105,7 +105,7 @@ function montarShell(user) {
   app.innerHTML = `
     <div class="shell">
       <header class="top">
-        <img class="logo-img" src="assets/cremina-wordmark.png" alt="Cremina" />
+        <span id="marca"><img class="logo-img" src="assets/cremina-wordmark.png" alt="Cremina" /></span>
         <div style="text-align:right">
           <div class="quien">${user.email}</div>
           <button class="linkbtn" id="salir">Salir</button>
@@ -139,7 +139,7 @@ function montarShell(user) {
 
   // Onboarding: si la BD es multi-tenant y el usuario aún no tiene restaurante,
   // pídelo antes que nada. Luego, el nombre de la persona.
-  let orgPedida = false, nombrePedido = false, rolPintado = "__none__";
+  let orgPedida = false, nombrePedido = false, rolPintado = "__none__", marcaPuesta = false;
   store.subscribe(() => {
     // Cuando ya se conoce el rol, ajusta las pestañas visibles.
     if (store.state.miRol !== rolPintado) {
@@ -147,6 +147,8 @@ function montarShell(user) {
       pintarTabs();
       if (!puedeVer(location.hash.replace("#/", "") || "inicio")) location.hash = "#/inicio";
     }
+    // White-label: mostrar el nombre del restaurante en vez del logo.
+    if (!marcaPuesta && store.state.orgNombre) { marcaPuesta = true; actualizarMarca(); }
     if (store.state.listo && store.state.multiTenant && !store.state.orgId && !orgPedida) {
       orgPedida = true;
       pedirRestaurante();
@@ -157,6 +159,16 @@ function montarShell(user) {
       pedirNombre();
     }
   });
+}
+
+function escaparHtml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+// White-label: si hay nombre de restaurante (multi-tenant), muéstralo en el
+// encabezado en vez del logo de Cremina. En single-tenant se queda el logo.
+function actualizarMarca() {
+  const m = document.getElementById("marca");
+  if (!m || !store.state.orgNombre) return;
+  m.innerHTML = `<span style="font-family:'Playfair Display',Georgia,serif;color:var(--crema);font-size:18px;font-weight:600;line-height:1.1">${escaparHtml(store.state.orgNombre)}</span>`;
 }
 
 function pintarTabs() {
