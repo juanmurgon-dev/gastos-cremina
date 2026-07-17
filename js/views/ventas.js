@@ -133,6 +133,13 @@ function resumen(cont) {
 function productos(cont) {
   const prodAll = store.state.productos || [];
   const varAll = store.state.variantes || [];
+  // Grupo de comida de cada platillo, de TODO el historial (no cambia por semana).
+  const prodCatGlobal = new Map();
+  for (const p of prodAll) {
+    if (ES_CORTESIA.test(p.producto || "")) continue;
+    if (!prodCatGlobal.has(p.producto)) prodCatGlobal.set(p.producto, new Set());
+    prodCatGlobal.get(p.producto).add(p.categoria || "Otros");
+  }
   if (!prodAll.length && !varAll.length) {
     cont.innerHTML = `<div class="card"><div class="aviso-box">Aún no hay ventas por producto. Corre <b>importar-productos.sql</b> e <b>importar-variantes.sql</b> en Supabase.</div></div>`;
     return;
@@ -163,13 +170,7 @@ function productos(cont) {
     for (const p of prods) porCat[p.categoria || "Otros"] = (porCat[p.categoria || "Otros"] || 0) + store.num(p.venta);
 
     const ventaProd = {};
-    const prodCat = new Map(); // producto → set de categorías
-    for (const p of prods) {
-      ventaProd[p.producto] = (ventaProd[p.producto] || 0) + store.num(p.venta);
-      if (!prodCat.has(p.producto)) prodCat.set(p.producto, new Set());
-      prodCat.get(p.producto).add(p.categoria || "Otros");
-    }
-    const categorias = [...new Set(prods.map((p) => p.categoria || "Otros"))].sort((a, b) => a.localeCompare(b, "es"));
+    for (const p of prods) ventaProd[p.producto] = (ventaProd[p.producto] || 0) + store.num(p.venta);
 
     // agrupar variantes por platillo → grupo
     const porProd = new Map();
@@ -184,6 +185,11 @@ function productos(cont) {
       return { prod, grupo: gname, rows, ventaProd: ventaProd[prod] || rows.reduce((a, r) => a + store.num(r.venta), 0) };
     });
     platillos.sort((a, b) => b.ventaProd - a.ventaProd);
+
+    // Grupos de comida presentes entre los platillos mostrados (del historial global).
+    const catSet = new Set();
+    for (const x of platillos) { const cs = prodCatGlobal.get(x.prod); if (cs) cs.forEach((c) => catSet.add(c)); }
+    const categorias = [...catSet].sort((a, b) => a.localeCompare(b, "es"));
 
     // Leche como su propia categoría (avena / deslactosada / entera), sumada de todas las bebidas
     const leche = {};
@@ -227,7 +233,7 @@ function productos(cont) {
 
     function pintarList() {
       let lista = platillos;
-      if (cat !== "todas") lista = lista.filter((x) => prodCat.get(x.prod) && prodCat.get(x.prod).has(cat));
+      if (cat !== "todas") lista = lista.filter((x) => prodCatGlobal.get(x.prod) && prodCatGlobal.get(x.prod).has(cat));
       if (q) lista = lista.filter((x) => x.prod.toLowerCase().includes(q));
       pc.querySelector("#plist").innerHTML = lista.map(cardPlatillo).join("") || `<div class="sub">Sin resultados.</div>`;
     }
