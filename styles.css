@@ -36,6 +36,19 @@ body {
 }
 h1, h2, h3, .card h2 { font-family: 'Playfair Display', Georgia, serif; }
 .marca-script { font-family: 'Grand Hotel', cursive; }
+
+/* Marca del producto: "Cifra" */
+.marca-cifra {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 46px; font-weight: 700; letter-spacing: -.02em; line-height: 1;
+  color: var(--naranja);
+}
+.marca-cifra::after { content: "."; color: var(--flame); }
+.wordmark-cifra {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 21px; font-weight: 700; letter-spacing: -.01em; color: var(--crema);
+}
+.wordmark-cifra::after { content: "."; color: var(--flame); }
 #app { min-height: 100%; }
 
 .cargando {

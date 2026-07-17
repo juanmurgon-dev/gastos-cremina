@@ -1,7 +1,7 @@
 {
-  "name": "Gastos Cremina",
-  "short_name": "Gastos",
-  "description": "Control de gastos del restaurante Cremina",
+  "name": "Cifra",
+  "short_name": "Cifra",
+  "description": "Control y análisis financiero para restaurantes",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

@@ -14,7 +14,7 @@ import * as proyeccion from "./views/proyeccion.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.11";
+export const APP_VERSION = "v3.12";
 export const APP_FECHA = "15 jul 2026";
 
 const VISTAS = {
@@ -70,8 +70,8 @@ function montarLogin() {
   app.innerHTML = `
     <div class="login">
       <div class="card">
-        <div class="logo-banner"><img src="assets/cremina-wordmark.png" alt="Cremina Bistro & Café" /></div>
-        <p class="sub" style="margin-top:2px">Control de gastos</p>
+        <div class="marca-cifra">Cifra</div>
+        <p class="sub" style="margin-top:2px">El control financiero de tu restaurante</p>
         <div id="err"></div>
         <form id="f" style="margin-top:16px;text-align:left">
           <label class="campo"><span>Correo</span>
@@ -105,7 +105,7 @@ function montarShell(user) {
   app.innerHTML = `
     <div class="shell">
       <header class="top">
-        <span id="marca"><img class="logo-img" src="assets/cremina-wordmark.png" alt="Cremina" /></span>
+        <span id="marca"><span class="wordmark-cifra">Cifra</span></span>
         <div style="text-align:right">
           <div class="quien">${user.email}</div>
           <button class="linkbtn" id="salir">Salir</button>
