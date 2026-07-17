@@ -28,6 +28,7 @@ export const state = {
   config: { presupuestoSemanal: 35000, presupuestoPorArea: {} },
   orgId: null,          // id del restaurante (multi-tenant); null = single-tenant
   multiTenant: false,   // true si la BD ya tiene la tabla 'miembros'
+  miRol: null,          // rol del usuario en su restaurante: owner|gerente|chef|compras|staff
   listo: false
 };
 
@@ -70,10 +71,12 @@ async function cargarConfig() {
 
 // ¿La BD es multi-tenant? ¿A qué restaurante(s) pertenece el usuario?
 async function cargarMiOrg() {
-  const { data, error } = await supabase.from("miembros").select("org_id").limit(1);
-  if (error) { state.multiTenant = false; state.orgId = null; return; } // tabla no existe → single-tenant
+  const { data, error } = await supabase.from("miembros").select("org_id, rol").limit(1);
+  if (error) { state.multiTenant = false; state.orgId = null; state.miRol = null; return; } // tabla no existe → single-tenant
   state.multiTenant = true;
-  state.orgId = (data && data[0] && data[0].org_id) || null;
+  const row = data && data[0];
+  state.orgId = (row && row.org_id) || null;
+  state.miRol = (row && row.rol) || null;
 }
 
 // Onboarding: crea un restaurante nuevo y deja al usuario como dueño.

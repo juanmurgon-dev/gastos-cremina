@@ -14,7 +14,7 @@ import * as proyeccion from "./views/proyeccion.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.8";
+export const APP_VERSION = "v3.9";
 export const APP_FECHA = "15 jul 2026";
 
 const VISTAS = {
@@ -27,6 +27,22 @@ const VISTAS = {
   insumos:     { mod: insumos,     ic: "📦", txt: "Insumos" },
   requisicion: { mod: requisicion, ic: "🛒", txt: "Requis." }
 };
+
+// Pestañas visibles por rol. Los que NO están aquí (owner, admin, gerente y
+// desconocido) ven TODAS. En single-tenant (miRol=null) también ven todas.
+const TABS_ROL = {
+  chef:    ["inicio", "insumos", "requisicion", "capturar", "tickets"],
+  compras: ["inicio", "requisicion", "insumos", "capturar", "tickets"],
+  staff:   ["inicio", "capturar", "tickets"],
+};
+function tabsPermitidas() {
+  const permit = TABS_ROL[store.state.miRol];
+  return Object.keys(VISTAS).filter((k) => !permit || permit.includes(k));
+}
+function puedeVer(clave) {
+  const permit = TABS_ROL[store.state.miRol];
+  return !permit || permit.includes(clave);
+}
 
 const app = document.getElementById("app");
 let limpiarVista = null;    // cleanup de la vista actual
@@ -106,8 +122,7 @@ function montarShell(user) {
   if (verBtn) verBtn.addEventListener("click", buscarActualizacion);
 
   const tabs = document.getElementById("tabs");
-  tabs.innerHTML = Object.entries(VISTAS).map(([k, v]) =>
-    `<a href="#/${k}" data-k="${k}"><span class="ic">${v.ic}</span>${v.txt}</a>`).join("");
+  pintarTabs();
 
   // Navegar al tocar la pestaña, sin depender solo de hashchange (que a veces
   // no dispara en la PWA instalada de iOS).
@@ -124,8 +139,14 @@ function montarShell(user) {
 
   // Onboarding: si la BD es multi-tenant y el usuario aún no tiene restaurante,
   // pídelo antes que nada. Luego, el nombre de la persona.
-  let orgPedida = false, nombrePedido = false;
+  let orgPedida = false, nombrePedido = false, rolPintado = "__none__";
   store.subscribe(() => {
+    // Cuando ya se conoce el rol, ajusta las pestañas visibles.
+    if (store.state.miRol !== rolPintado) {
+      rolPintado = store.state.miRol;
+      pintarTabs();
+      if (!puedeVer(location.hash.replace("#/", "") || "inicio")) location.hash = "#/inicio";
+    }
     if (store.state.listo && store.state.multiTenant && !store.state.orgId && !orgPedida) {
       orgPedida = true;
       pedirRestaurante();
@@ -136,6 +157,17 @@ function montarShell(user) {
       pedirNombre();
     }
   });
+}
+
+function pintarTabs() {
+  const tabs = document.getElementById("tabs");
+  if (!tabs) return;
+  tabs.innerHTML = tabsPermitidas().map((k) => {
+    const v = VISTAS[k];
+    return `<a href="#/${k}" data-k="${k}"><span class="ic">${v.ic}</span>${v.txt}</a>`;
+  }).join("");
+  const clave = (location.hash.replace("#/", "") || "inicio");
+  tabs.querySelectorAll("a").forEach((a) => a.classList.toggle("activo", a.dataset.k === clave));
 }
 
 function pedirRestaurante() {
@@ -193,6 +225,7 @@ function ruta() {
   if (!vistaEl) return;
   let clave = (location.hash.replace("#/", "") || "inicio");
   if (!VISTAS[clave]) clave = "inicio";
+  if (!puedeVer(clave)) clave = "inicio";   // rol sin acceso → a Inicio
 
   // Ya estamos en esa vista: no re-render (evita el doble click+hashchange).
   if (clave === rutaActual && vistaEl.childElementCount > 0) return;
