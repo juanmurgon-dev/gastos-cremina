@@ -83,16 +83,35 @@ export function render(el) {
       if (dv <= -12) alertas.push(`🔻 La venta bajó <b>${Math.round(Math.abs(dv))}%</b> vs. la semana pasada.`);
     }
 
+    // ── Hero: la respuesta clara de "¿cómo voy?" ──
+    const gfSem = store.gastoFijoMensual() / 30 * 7;
+    const usaProy = (off === 0 && parcial && proy);
+    const hVenta = usaProy ? proy.venta : venta;
+    const hGasto = usaProy ? proy.gasto : gasto;
+    const util = hVenta - hGasto - gfSem;
+    const sinDatos = venta === 0;
+    const colU = sinDatos ? "var(--gris)" : util > 0 ? "var(--verde)" : util < 0 ? "var(--rojo)" : "var(--tinta)";
+    const verdicto = sinDatos ? "Aún sin ventas esta semana" : util > 0 ? "Vas ganando" : util < 0 ? "Vas perdiendo" : "Vas a mano";
+    const heroTit = usaProy ? "Proyección al cierre" : (off === 0 ? "Utilidad de la semana" : "Utilidad de esa semana");
+    const costoCol = costo <= 35 ? "var(--verde)" : costo <= 45 ? "var(--amarillo)" : "var(--rojo)";
+
     el.innerHTML = `
-      <div class="card" style="padding:12px">
+      <div class="card" style="text-align:center;padding:18px 16px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <button class="btn sec chico" id="ant">◀</button>
-          <div style="text-align:center;flex:1">
-            <div style="font-weight:700">${wk.etiqueta}</div>
-            <div class="sub">${off === 0 ? "Esta semana" : off === 1 ? "Semana pasada" : "hace " + off + " semanas"}</div>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:14px">${wk.etiqueta}</div>
+            <div class="sub" style="font-size:11px">${off === 0 ? "Esta semana" : off === 1 ? "Semana pasada" : "hace " + off + " semanas"}</div>
           </div>
           <button class="btn sec chico" id="sig">▶</button>
         </div>
+        <div class="sub" style="text-transform:uppercase;letter-spacing:.09em;font-size:10.5px;margin-top:12px">${heroTit}</div>
+        <div style="font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1.05;color:${colU}">${sinDatos ? "—" : money(util)}</div>
+        <div style="font-weight:700;color:${colU}">${verdicto}${usaProy && !sinDatos ? " (a este ritmo)" : ""}</div>
+        ${!sinDatos
+          ? `<div class="sub" style="margin-top:8px;font-size:12.5px">Venta ${kmoney(hVenta)} − compras ${kmoney(hGasto)}${gfSem ? ` − fijos ${kmoney(gfSem)}` : ""}</div>`
+          : `<div class="sub" style="margin-top:8px">Espera el corte del día para ver cómo vas.</div>`}
+        ${(!sinDatos && gfSem === 0) ? `<div class="sub" style="margin-top:4px;font-size:12px">💡 Registra gastos fijos (Proyec.) para la utilidad real.</div>` : ""}
       </div>
       ${alertas.length ? `<div class="card" style="border-left:4px solid var(--flame)">
         <h2 style="margin-bottom:8px">Alertas</h2>
@@ -117,34 +136,22 @@ export function render(el) {
             <div style="margin-top:3px">${(costoPrev && venta > 0) ? delta(costo, costoPrev, false, cmpLbl) : ""}</div>
           </div>
         </div>
-        <div class="sub" style="text-align:center;margin-top:8px">Costo = cuánto de tu venta se fue en compras${parcial ? ` · comparado con los mismos ${diasT} días de la semana pasada` : ""}</div>
+        ${parcial ? `<div class="sub" style="text-align:center;margin-top:8px;font-size:11.5px">Comparado con los mismos ${diasT} días de la semana pasada</div>` : ""}
       </div>
 
-      ${proy ? `
       <div class="card">
-        <h2>Proyección al cierre de semana</h2>
-        <p class="sub" style="margin-top:0">Vas ${proy.dias} de 7 días. Proyectado con el ritmo de la semana pasada:</p>
-        <div class="row-stats">
-          <div class="stat"><div class="n">${kmoney(proy.venta)}</div><div class="l">Venta proyectada</div></div>
-          <div class="stat"><div class="n" style="color:${meta && proy.gasto > meta ? "var(--rojo)" : "var(--tinta)"}">${kmoney(proy.gasto)}</div><div class="l">Gasto proyectado</div></div>
-        </div>
-        ${meta ? `<div class="${proy.gasto > meta ? "aviso-box" : "ok-box"}" style="margin-top:10px">${proy.gasto > meta
-          ? `⚠️ A este ritmo cerrarías en ${money(proy.gasto)}, por encima de tu meta de ${money(meta)}.`
-          : `✅ A este ritmo cierras dentro de la meta de ${money(meta)}.`}</div>` : ""}
-      </div>` : ""}
-
-      <div class="card">
-        <h2>Meta de la semana</h2>
-        <div class="row-stats" style="margin-bottom:12px">
-          <div class="stat"><div class="n">${money(gasto)}</div><div class="l">Gastado</div></div>
-          <div class="stat"><div class="n" style="color:${meta - gasto < 0 ? "var(--rojo)" : "var(--verde)"}">${money(meta - gasto)}</div><div class="l">${meta - gasto < 0 ? "Excedido" : "Disponible"}</div></div>
-        </div>
+        <h2 style="margin-bottom:8px">Meta de compras (semana)</h2>
         <div class="barra-track" style="height:14px"><span class="barra-fill" style="width:${pct}%;background:${cMeta}"></span></div>
-        <div class="sub" style="margin-top:6px">${meta > 0 ? `Meta: ${money(meta)} · ${Math.round(pct)}% usado` : "Sin meta definida"}</div>
+        <div class="sub" style="margin-top:6px">${meta > 0 ? `Llevas ${money(gasto)} de ${money(meta)} · ${Math.round(pct)}% usado` : "Define tu meta de compras semanal abajo."}</div>
+        <div class="fila" style="margin-top:10px;gap:8px">
+          <input id="meta" type="number" step="any" inputmode="decimal" value="${meta || ""}" placeholder="Meta semanal (MXN)" style="flex:1" />
+          <button class="btn sec" id="guardar" style="flex:none;width:auto">Guardar</button>
+        </div>
+        <div id="ok"></div>
       </div>
 
       <div class="card">
-        <h2>Últimas 6 semanas</h2>
+        <h2>Tendencia · últimas 6 semanas</h2>
         ${ultimas.map((s) => {
           const c = s.venta > 0 ? (s.gasto / s.venta) * 100 : 0;
           return `<div class="barra-row">
@@ -153,15 +160,7 @@ export function render(el) {
             <span class="val" style="width:120px">${kmoney(s.venta)} · <span style="color:${c <= 35 ? "var(--verde)" : c <= 45 ? "var(--amarillo)" : "var(--rojo)"}">${s.venta > 0 ? Math.round(c) + "%" : "—"}</span></span>
           </div>`;
         }).join("")}
-        <div class="leyenda"><span><i style="background:var(--verde-claro)"></i>Venta</span><span>% = costo (gasto/venta)</span></div>
-      </div>
-
-      <div class="card">
-        <h2>Configurar meta</h2>
-        <label class="campo"><span>Meta de gasto por semana (MXN)</span>
-          <input id="meta" type="number" step="any" inputmode="decimal" value="${meta || ""}" placeholder="45000" /></label>
-        <button class="btn" id="guardar">Guardar meta</button>
-        <div id="ok"></div>
+        <div class="leyenda"><span><i style="background:var(--verde-claro)"></i>Venta</span><span>% = costo</span></div>
       </div>`;
 
     el.querySelector("#ant").addEventListener("click", () => { off++; rerender(); });
