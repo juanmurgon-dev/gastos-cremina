@@ -143,13 +143,12 @@ export function render(el) {
         <h2 style="margin-bottom:8px">Meta de compras (semana)</h2>
         <div class="barra-track" style="height:14px"><span class="barra-fill" style="width:${pct}%;background:${cMeta}"></span></div>
         <div class="sub" style="margin-top:6px">${meta > 0 ? `Llevas ${money(gasto)} de ${money(meta)} · ${Math.round(pct)}% usado` : "Define tu meta de compras semanal abajo."}</div>
-        ${off === 0
-          ? `<div class="fila" style="margin-top:10px;gap:8px">
-              <input id="meta" type="number" step="any" inputmode="decimal" value="${meta || ""}" placeholder="Meta semanal (MXN)" style="flex:1" />
-              <button class="btn sec" id="guardar" style="flex:none;width:auto">Guardar</button>
-            </div>
-            <div id="ok"></div>`
-          : `<div class="sub" style="margin-top:8px;font-size:12px">Meta de esa semana (referencia). La meta se edita en la semana actual.</div>`}
+        <div class="fila" style="margin-top:10px;gap:8px">
+          <input id="meta" type="number" step="any" inputmode="decimal" value="${meta || ""}" placeholder="Meta semanal (MXN)" style="flex:1" />
+          <button class="btn sec" id="guardar" style="flex:none;width:auto">Guardar</button>
+        </div>
+        <div class="sub" style="margin-top:6px;font-size:11.5px">Aplica de esta semana en adelante; las anteriores quedan fijas.</div>
+        <div id="ok"></div>
       </div>
 
       <div class="card">

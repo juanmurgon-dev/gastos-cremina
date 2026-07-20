@@ -288,14 +288,21 @@ export function metaDeSemana(lunesISO) {
     hist.sort((a, b) => (a.desde < b.desde ? 1 : -1));
     return num(hist[0].meta);
   }
-  return num(state.config.presupuestoSemanal) || 0; // respaldo para semanas viejas
+  // Semanas anteriores a cualquier meta guardada: base FIJA (no cambia al guardar).
+  const base = state.config.metaBase;
+  return num(base == null ? state.config.presupuestoSemanal : base) || 0;
 }
 
 export async function guardarMetaSemana(lunesISO, valor) {
+  const cfg = {};
+  // La 1ª vez fija la base = meta previa, para que las semanas viejas queden fijas.
+  if (state.config.metaBase == null) cfg.metaBase = num(state.config.presupuestoSemanal) || 0;
   const hist = (state.config.metaHist || []).filter((e) => e && e.desde !== lunesISO);
   hist.push({ desde: lunesISO, meta: num(valor) });
   hist.sort((a, b) => (a.desde < b.desde ? -1 : 1));
-  await guardarConfig({ metaHist: hist, presupuestoSemanal: num(valor) });
+  cfg.metaHist = hist;
+  cfg.presupuestoSemanal = num(valor);
+  await guardarConfig(cfg);
 }
 
 function limpiarLinea(l) {
