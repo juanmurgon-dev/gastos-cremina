@@ -14,8 +14,6 @@ function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").repla
 
 export function render(el) {
   let off = 0;
-  let ventaEsperEd = null;   // override editable de la venta proyectada
-  let pctSel = 0.26;         // meta de gasto elegida (máx 26%)
   const unsub = store.subscribe(pintar);
   pintar();
 
@@ -66,9 +64,6 @@ export function render(el) {
 
     const gf = (store.state.gastosFijos || []).slice().sort((a, b) => num(b.monto_mensual) - num(a.monto_mensual));
 
-    // Presupuesto de compras: % elegido × venta proyectada (semana pasada +5%).
-    const proj = ventaEsperEd != null ? ventaEsperEd : Math.round(ventaSemanaAnterior() * 1.05);
-
     el.innerHTML = `
       <div class="card" style="padding:12px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -113,11 +108,6 @@ export function render(el) {
       </div>
 
       <div class="card">
-        <h2>Presupuesto de compras sugerido</h2>
-        ${presuCuerpo(proj, pctSel)}
-      </div>
-
-      <div class="card">
         <h2>Gastos fijos</h2>
         <div class="sub" style="margin-top:-4px">Total mensual: <b>${money(gfMes)}</b> · semanal ${money(gfSem)}</div>
         <div style="margin:10px 0">
@@ -134,23 +124,6 @@ export function render(el) {
 
     const cvEl = el.querySelector("#cvpct");
     if (cvEl) cvEl.addEventListener("change", () => store.guardarConfig({ costoVarPct: num(cvEl.value) }).catch(() => {}));
-    const pctSelEl = el.querySelector("#pctSel");
-    if (pctSelEl) pctSelEl.addEventListener("change", () => { pctSel = num(pctSelEl.value) / 100; pintar(); });
-    const inpVE = el.querySelector("#veEsper");
-    if (inpVE) inpVE.addEventListener("change", () => { ventaEsperEd = num(inpVE.value); pintar(); });
-    const usar = el.querySelector("#usarPresu");
-    if (usar) usar.addEventListener("click", async () => {
-      const sug = Math.round(pctSel * proj);
-      if (sug <= 0) return;
-      usar.disabled = true; usar.textContent = "Guardando…";
-      try {
-        await store.guardarMetaSemana(toISO(lunesDe(new Date())), sug);  // meta de esta semana en adelante
-        usar.textContent = "✅ Guardado como meta";
-      } catch (e) {
-        alert("No pude guardar: " + ((e && e.message) || e));
-        usar.disabled = false; usar.textContent = "Usar como meta semanal";
-      }
-    });
 
     el.querySelector("#gfadd").addEventListener("click", async () => {
       const concepto = el.querySelector("#gfc").value.trim();
@@ -194,31 +167,6 @@ function ventaSemanaAnterior() {
   const sems = store.ventasSemanas(8) || [];
   for (let i = 1; i < sems.length; i++) if (sems[i].venta > 0) return sems[i].venta;
   return sems[0] && sems[0].venta > 0 ? sems[0].venta : 0;  // respaldo: semana en curso
-}
-
-// Presupuesto = % elegido (máx 26%) × venta proyectada (semana pasada +5%).
-function presuCuerpo(proj, pct) {
-  const opciones = [26, 24, 22, 20, 18, 15];
-  const pctInt = Math.round(pct * 100);
-  const sugerido = Math.round(pct * proj);
-  const selHtml = `<select id="pctSel">${opciones.map((p) =>
-    `<option value="${p}"${p === pctInt ? " selected" : ""}>${p}%${p === 26 ? " (tu ritmo sano)" : ""}</option>`).join("")}</select>`;
-
-  const cabeza = `
-    <p class="sub" style="margin-top:-4px">Cuánto gastar en insumos esta semana, según tu venta proyectada.</p>
-    <label class="campo"><span>Meta de gasto (% de la venta)</span>${selHtml}</label>
-    <label class="campo"><span>Venta proyectada (semana pasada +5%)</span><input id="veEsper" type="number" inputmode="decimal" value="${Math.round(proj)}" /></label>`;
-
-  if (proj <= 0)
-    return cabeza + `<div class="sub" style="margin-top:8px">Necesito la venta de la semana pasada (cortes) para proyectar; o escríbela arriba.</div>`;
-
-  return cabeza + `
-    <div class="row-stats" style="margin-top:12px">
-      <div class="stat"><div class="n" style="color:var(--verde)">${money(sugerido)}</div><div class="l">presupuesto / semana</div></div>
-      <div class="stat"><div class="n">${money(sugerido / 7)}</div><div class="l">por día</div></div>
-    </div>
-    <div class="sub" style="margin-top:6px">= ${pctInt}% × ${money(proj)} (semana pasada +5%).</div>
-    <button class="btn" id="usarPresu" style="margin-top:12px">Usar como meta semanal</button>`;
 }
 
 function beCuerpo(gfMes, gfSem, costoVarPct, ventaRefDia) {
