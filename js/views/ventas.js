@@ -40,7 +40,6 @@ export function render(el) {
     <div class="segmented" style="font-size:13px">
       <button data-s="resumen">Resumen</button>
       <button data-s="productos">Productos</button>
-      <button data-s="rentab">Rentab.</button>
       <button data-s="importar">Importar</button>
     </div>
     <div id="sub"></div>`;
@@ -54,7 +53,6 @@ export function render(el) {
     if (!store.state.listo) { subEl.innerHTML = `<div class="vacio">Cargando…</div>`; return; }
     if (sub === "resumen") resumen(subEl);
     else if (sub === "productos") productos(subEl);
-    else if (sub === "rentab") rentabilidad(subEl);
     else importar.montar(subEl);
   }
 
