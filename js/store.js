@@ -223,6 +223,11 @@ export async function init() {
   await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones()]);
   state.listo = true;
   notify();
+  // Fija la base de la meta UNA sola vez, para que las semanas viejas queden
+  // con su referencia y no "floten" al cambiar la meta actual.
+  if (state.config.metaBase == null && ("presupuestoSemanal" in state.config || "metaHist" in state.config)) {
+    guardarConfig({ metaBase: num(state.config.presupuestoSemanal) || 0 }).catch(() => {});
+  }
   // Realtime: cuando alguien registra/edita, todos se actualizan.
   supabase.channel("cambios-gastos")
     .on("postgres_changes", { event: "*", schema: "public", table: "tickets" }, cargarTickets)
