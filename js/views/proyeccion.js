@@ -144,7 +144,7 @@ export function render(el) {
       if (sug <= 0) return;
       usar.disabled = true; usar.textContent = "Guardando…";
       try {
-        await store.guardarConfig({ presupuestoSemanal: sug });
+        await store.guardarMetaSemana(toISO(lunesDe(new Date())), sug);  // meta de esta semana en adelante
         usar.textContent = "✅ Guardado como meta";
       } catch (e) {
         alert("No pude guardar: " + ((e && e.message) || e));

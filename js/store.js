@@ -280,6 +280,24 @@ export async function guardarConfig(cfg) {
   notify();
 }
 
+// Meta de gasto POR SEMANA (historial con fecha de inicio). Cambiar la meta NO
+// toca las semanas anteriores: cada una conserva la que tenía como referencia.
+export function metaDeSemana(lunesISO) {
+  const hist = (state.config.metaHist || []).filter((e) => e && e.desde <= lunesISO);
+  if (hist.length) {
+    hist.sort((a, b) => (a.desde < b.desde ? 1 : -1));
+    return num(hist[0].meta);
+  }
+  return num(state.config.presupuestoSemanal) || 0; // respaldo para semanas viejas
+}
+
+export async function guardarMetaSemana(lunesISO, valor) {
+  const hist = (state.config.metaHist || []).filter((e) => e && e.desde !== lunesISO);
+  hist.push({ desde: lunesISO, meta: num(valor) });
+  hist.sort((a, b) => (a.desde < b.desde ? -1 : 1));
+  await guardarConfig({ metaHist: hist, presupuestoSemanal: num(valor) });
+}
+
 function limpiarLinea(l) {
   return {
     area: AREAS.includes(l.area) ? l.area : "otro",

@@ -34,7 +34,7 @@ export function render(el) {
     const semanas = store.ventasSemanas(14); // i=0 actual, i=1 pasada…
     const wk = semanas[off] || semanas[0];
     const prevFull = semanas[off + 1] || null;
-    const meta = num(store.state.config.presupuestoSemanal) || 0;
+    const meta = store.metaDeSemana(wk.desde);
 
     const venta = wk.venta, gasto = wk.gasto;
     const costo = venta > 0 ? (gasto / venta) * 100 : 0;
@@ -143,11 +143,13 @@ export function render(el) {
         <h2 style="margin-bottom:8px">Meta de compras (semana)</h2>
         <div class="barra-track" style="height:14px"><span class="barra-fill" style="width:${pct}%;background:${cMeta}"></span></div>
         <div class="sub" style="margin-top:6px">${meta > 0 ? `Llevas ${money(gasto)} de ${money(meta)} · ${Math.round(pct)}% usado` : "Define tu meta de compras semanal abajo."}</div>
-        <div class="fila" style="margin-top:10px;gap:8px">
-          <input id="meta" type="number" step="any" inputmode="decimal" value="${meta || ""}" placeholder="Meta semanal (MXN)" style="flex:1" />
-          <button class="btn sec" id="guardar" style="flex:none;width:auto">Guardar</button>
-        </div>
-        <div id="ok"></div>
+        ${off === 0
+          ? `<div class="fila" style="margin-top:10px;gap:8px">
+              <input id="meta" type="number" step="any" inputmode="decimal" value="${meta || ""}" placeholder="Meta semanal (MXN)" style="flex:1" />
+              <button class="btn sec" id="guardar" style="flex:none;width:auto">Guardar</button>
+            </div>
+            <div id="ok"></div>`
+          : `<div class="sub" style="margin-top:8px;font-size:12px">Meta de esa semana (referencia). La meta se edita en la semana actual.</div>`}
       </div>
 
       <div class="card">
@@ -165,11 +167,12 @@ export function render(el) {
 
     el.querySelector("#ant").addEventListener("click", () => { off++; rerender(); });
     el.querySelector("#sig").addEventListener("click", () => { off = Math.max(0, off - 1); rerender(); });
-    el.querySelector("#guardar").addEventListener("click", async () => {
+    const gBtn = el.querySelector("#guardar");
+    if (gBtn) gBtn.addEventListener("click", async () => {
       const v = num(el.querySelector("#meta").value);
       try {
-        await store.guardarConfig({ presupuestoSemanal: v });
-        el.querySelector("#ok").innerHTML = `<div class="ok-box" style="margin-top:10px">Meta guardada.</div>`;
+        await store.guardarMetaSemana(wk.desde, v);   // solo esta semana en adelante
+        el.querySelector("#ok").innerHTML = `<div class="ok-box" style="margin-top:10px">Meta guardada (solo esta semana en adelante).</div>`;
       } catch (err) { alert("No pude guardar: " + ((err && err.message) || err)); }
     });
   }
