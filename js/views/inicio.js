@@ -147,12 +147,14 @@ function grid2(tiles) {
   return `<div style="display:grid;grid-template-columns:${cols};gap:10px">${tiles.join("")}</div>`;
 }
 
-// Título "producto · tipo" y subtítulo con las unidades del tipo dentro del total.
+// Título = producto; subtítulo = total vendido y, si hay un grupo de tipo/sabor
+// real (no leche/temperatura), cuál variante fue la más pedida y cuántas.
 function tituloTop(x) {
   const t = x.tipo;
+  const usarTipo = t && !ES_SECUNDARIO.test(t.grupo || "");   // no tomes leche/temperatura como "tipo"
   return {
-    titulo: esc(x.producto) + (t ? ` · ${esc(t.opcion)}` : ""),
-    sub: t ? `${Math.round(t.u)} de ${Math.round(x.u)} vendidos` : `${Math.round(x.u)} vendidos`,
+    titulo: esc(x.producto),
+    sub: `${Math.round(x.u)} vendidos` + (usarTipo ? ` · +pedido: ${esc(t.opcion)} (${Math.round(t.u)})` : ""),
   };
 }
 
