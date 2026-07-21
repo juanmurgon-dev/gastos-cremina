@@ -2,7 +2,7 @@
 // Estrategia "network-first" para archivos propios: siempre intenta la
 // versión más nueva de internet y solo usa el caché si no hay conexión.
 // Así, cuando publicas una actualización, aparece de inmediato.
-const CACHE = "cremina-gastos-v329";
+const CACHE = "cremina-gastos-v330";
 // Rutas relativas: la app funciona igual en la raíz de un dominio propio
 // o en un subpath tipo usuario.github.io/repo/ (GitHub Pages).
 const SHELL = [
