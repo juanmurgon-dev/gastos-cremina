@@ -2,8 +2,35 @@
 import * as store from "../store.js";
 import { COLOR_AREA, AREAS, money, fechaBonita } from "../store.js";
 import { descargarCSV } from "../csv.js";
+import * as capturar from "./capturar.js";
+import * as tickets from "./tickets.js";
 
-export function render(el) {
+// Hub de Insumos: Capturar (registrar gasto) · Tickets (historial) · Precios.
+export function render(el, ctx) {
+  let sub = "capturar", limpiar = null;
+  el.innerHTML = `
+    <div class="segmented" style="font-size:13px">
+      <button data-s="capturar">Capturar</button>
+      <button data-s="tickets">Tickets</button>
+      <button data-s="precios">Lista de Precios</button>
+    </div>
+    <div id="isub"></div>`;
+  const subEl = el.querySelector("#isub");
+  const btns = [...el.querySelectorAll(".segmented button")];
+  btns.forEach((b) => b.addEventListener("click", () => { sub = b.dataset.s; marcar(); renderSub(); }));
+  function marcar() { btns.forEach((b) => b.classList.toggle("act", b.dataset.s === sub)); }
+  function renderSub() {
+    if (typeof limpiar === "function") { try { limpiar(); } catch (e) {} }
+    subEl.innerHTML = "";
+    limpiar = sub === "capturar" ? capturar.render(subEl, ctx)
+      : sub === "tickets" ? tickets.render(subEl, ctx)
+      : renderPrecios(subEl);
+  }
+  marcar(); renderSub();
+  return () => { if (typeof limpiar === "function") limpiar(); };
+}
+
+function renderPrecios(el) {
   const st = { q: "", area: "todas", orden: "az" };
 
   el.innerHTML = `
@@ -167,14 +194,14 @@ function grafica(asc) {
   const Y = (v) => padT + (1 - (v - min) / (max - min)) * (H - padT - padB);
   const line = asc.map((r, i) => `${X(i).toFixed(1)},${Y(val(r)).toFixed(1)}`).join(" ");
   const area = `${X(0).toFixed(1)},${(H - padB).toFixed(1)} ${line} ${X(n - 1).toFixed(1)},${(H - padB).toFixed(1)}`;
-  const dots = asc.map((r, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(val(r)).toFixed(1)}" r="2.6" fill="#dd6031"/>`).join("");
+  const dots = asc.map((r, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(val(r)).toFixed(1)}" r="2.6" fill="#ff9f1c"/>`).join("");
   return `
-    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;background:#efe9dd;border-radius:12px">
-      <polygon points="${area}" fill="rgba(221,96,49,.15)"/>
-      <polyline points="${line}" fill="none" stroke="#dd6031" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;background:#eafaf8;border-radius:12px">
+      <polygon points="${area}" fill="rgba(46,196,182,.16)"/>
+      <polyline points="${line}" fill="none" stroke="#2ec4b6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
       ${dots}
-      <text x="${padL + 2}" y="${H - 6}" font-size="8" fill="#6f6a5c">${fechaCorta(asc[0].fecha)}</text>
-      <text x="${W - padR - 2}" y="${H - 6}" font-size="8" fill="#6f6a5c" text-anchor="end">${fechaCorta(asc[n - 1].fecha)}</text>
+      <text x="${padL + 2}" y="${H - 6}" font-size="8" fill="#3f827b">${fechaCorta(asc[0].fecha)}</text>
+      <text x="${W - padR - 2}" y="${H - 6}" font-size="8" fill="#3f827b" text-anchor="end">${fechaCorta(asc[n - 1].fecha)}</text>
     </svg>`;
 }
 

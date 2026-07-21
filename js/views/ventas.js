@@ -15,7 +15,7 @@ function escapar(s) {
   return String(s || "—").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-const PALETA = ["#0e3a39", "#dd6031", "#767522", "#491208", "#16514f", "#2e1e1f", "#9c9482"];
+const PALETA = ["#2ec4b6", "#ff9f1c", "#ffbf69", "#148b7f", "#0f3f3a", "#7ad9cf", "#e88910"];
 const ES_CORTESIA = /pan de cortes[íi]a/i;   // cortesía, no cuenta como venta
 const MES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 let vistaVenta = "semana";   // "semana" | "mes" — se recuerda entre redibujos
@@ -108,8 +108,8 @@ function resumen(cont) {
     </div>
     <div class="card">
       <h2>Cómo te pagan</h2>
-      ${mezcla("Efectivo", efectivoT, mezclaTot, "#0e3a39")}
-      ${mezcla("Tarjeta", tarjetaT, mezclaTot, "#dd6031")}
+      ${mezcla("Efectivo", efectivoT, mezclaTot, "#2ec4b6")}
+      ${mezcla("Tarjeta", tarjetaT, mezclaTot, "#ff9f1c")}
       ${mezcla("Transferencia", transfT, mezclaTot, "#3f8a5c")}
     </div>
     <div class="card"><h2>Cortes de caja</h2>${cortes.slice(0, 40).map(filaCorte).join("")}</div>`;

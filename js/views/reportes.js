@@ -141,7 +141,7 @@ function renderVariables(el) {
         </div>
       </div>
       <div class="card"><h2>Gasto por área</h2>${barras(porArea, total, (k) => COLOR_AREA[k] || "#9c9482")}</div>
-      <div class="card"><h2>Costo de venta vs. operativo</h2>${barras(porTipo, total, (k) => k === "costo de venta" ? "#0e3a39" : "#d9a441")}</div>
+      <div class="card"><h2>Costo de venta vs. operativo</h2>${barras(porTipo, total, (k) => k === "costo de venta" ? "#2ec4b6" : "#ff9f1c")}</div>
       <div class="card"><h2>Top proveedores</h2>${barras(porProv, total, () => "#16514f", 8)}</div>
       <div class="card"><h2>Gasto por semana (comparativo)</h2>${columnas(semanas)}</div>`;
   }

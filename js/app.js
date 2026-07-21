@@ -3,37 +3,33 @@
 // ─────────────────────────────────────────────────────────────
 import { supabase, ENV } from "./supabase-init.js";
 import * as store from "./store.js";
+import * as marca from "./marca.js";
+import * as proveedores from "./proveedores.js";
 
 import * as inicio from "./views/inicio.js";
-import * as capturar from "./views/capturar.js";
-import * as tickets from "./views/tickets.js";
 import * as reportes from "./views/reportes.js";
 import * as ventas from "./views/ventas.js";
 import * as insumos from "./views/insumos.js";
-import * as proyeccion from "./views/proyeccion.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.18";
+export const APP_VERSION = "v3.27";
 export const APP_FECHA = "15 jul 2026";
 
 const VISTAS = {
   inicio:      { mod: inicio,      ic: "🏠", txt: "Inicio" },
-  proyeccion:  { mod: proyeccion,  ic: "📈", txt: "Proyec." },
-  capturar:    { mod: capturar,    ic: "📸", txt: "Capturar" },
-  tickets:     { mod: tickets,     ic: "🧾", txt: "Tickets" },
-  reportes:    { mod: reportes,    ic: "📊", txt: "Gastos" },
-  ventas:      { mod: ventas,      ic: "💵", txt: "Ventas" },
   insumos:     { mod: insumos,     ic: "📦", txt: "Insumos" },
+  ventas:      { mod: ventas,      ic: "💵", txt: "Ventas" },
+  reportes:    { mod: reportes,    ic: "📊", txt: "Gastos" },
   requisicion: { mod: requisicion, ic: "🛒", txt: "Requis." }
 };
 
 // Pestañas visibles por rol. Los que NO están aquí (owner, admin, gerente y
 // desconocido) ven TODAS. En single-tenant (miRol=null) también ven todas.
 const TABS_ROL = {
-  chef:    ["inicio", "insumos", "requisicion", "capturar", "tickets"],
-  compras: ["inicio", "requisicion", "insumos", "capturar", "tickets"],
-  staff:   ["inicio", "capturar", "tickets"],
+  chef:    ["inicio", "insumos", "requisicion"],
+  compras: ["inicio", "requisicion", "insumos"],
+  staff:   ["inicio", "insumos"],
 };
 function tabsPermitidas() {
   const permit = TABS_ROL[store.state.miRol];
@@ -105,21 +101,19 @@ function montarShell(user) {
   app.innerHTML = `
     <div class="shell">
       <header class="top">
-        <span id="marca"><span class="wordmark-cifra">Cifra</span></span>
-        <div style="text-align:right">
-          <div class="quien">${user.email}</div>
-          <button class="linkbtn" id="salir">Salir</button>
-          <button class="linkbtn" id="ver" title="Tocar para buscar actualización"
-            style="display:block;font-size:10px;color:${ENV === "staging" ? "#eaa84e" : "var(--gris)"};margin-top:2px;font-weight:${ENV === "staging" ? "700" : "400"}">${ENV === "staging" ? "🧪 STAGING · " : ""}${APP_VERSION} · ${APP_FECHA}</button>
-        </div>
+        <span id="marca" style="cursor:pointer" title="Personalizar tu marca"><span class="wordmark-cifra">Cifra</span></span>
+        <button class="hamb" id="menu" aria-label="Ajustes" title="Ajustes">☰</button>
       </header>
       <main class="vista" id="vista"></main>
       <nav class="tabs" id="tabs"></nav>
     </div>`;
 
-  document.getElementById("salir").addEventListener("click", () => supabase.auth.signOut());
-  const verBtn = document.getElementById("ver");
-  if (verBtn) verBtn.addEventListener("click", buscarActualizacion);
+  const menuBtn = document.getElementById("menu");
+  if (menuBtn) menuBtn.addEventListener("click", abrirMenu);
+  const marcaEl = document.getElementById("marca");
+  if (marcaEl) marcaEl.addEventListener("click", () => {
+    if (!store.state.multiTenant || store.state.miRol === "owner") marca.abrirPersonalizar();
+  });
 
   const tabs = document.getElementById("tabs");
   pintarTabs();
@@ -139,7 +133,7 @@ function montarShell(user) {
 
   // Onboarding: si la BD es multi-tenant y el usuario aún no tiene restaurante,
   // pídelo antes que nada. Luego, el nombre de la persona.
-  let orgPedida = false, nombrePedido = false, rolPintado = "__none__", marcaPuesta = false;
+  let orgPedida = false, nombrePedido = false, rolPintado = "__none__";
   store.subscribe(() => {
     // Cuando ya se conoce el rol, ajusta las pestañas visibles.
     if (store.state.miRol !== rolPintado) {
@@ -147,8 +141,8 @@ function montarShell(user) {
       pintarTabs();
       if (!puedeVer(location.hash.replace("#/", "") || "inicio")) location.hash = "#/inicio";
     }
-    // White-label: mostrar el nombre del restaurante en vez del logo.
-    if (!marcaPuesta && store.state.orgNombre) { marcaPuesta = true; actualizarMarca(); }
+    // White-label: logo + nombre del restaurante en el header y en el ícono.
+    marca.aplicarMarcaActual();
     if (store.state.listo && store.state.multiTenant && !store.state.orgId && !orgPedida) {
       orgPedida = true;
       pedirRestaurante();
@@ -163,12 +157,36 @@ function montarShell(user) {
 
 function escaparHtml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
-// White-label: si hay nombre de restaurante (multi-tenant), muéstralo en el
-// encabezado en vez del logo de Cremina. En single-tenant se queda el logo.
-function actualizarMarca() {
-  const m = document.getElementById("marca");
-  if (!m || !store.state.orgNombre) return;
-  m.innerHTML = `<span style="font-family:'Playfair Display',Georgia,serif;color:var(--crema);font-size:18px;font-weight:600;line-height:1.1">${escaparHtml(store.state.orgNombre)}</span>`;
+// Menú ☰ → Ajustes: personalizar marca, actualizar, cerrar sesión.
+function abrirMenu() {
+  const puedePersonalizar = !store.state.multiTenant || store.state.miRol === "owner";
+  const badge = ENV === "staging" ? "🧪 STAGING · " : "";
+  const bg = document.createElement("div");
+  bg.className = "modal-bg";
+  bg.innerHTML = `
+    <div class="modal">
+      <h2>Ajustes</h2>
+      <div class="sub" style="margin:-8px 2px 14px;word-break:break-all">${escaparHtml(usuarioActual?.email || "")}</div>
+      <div class="menu-lista">
+        ${puedePersonalizar ? `<button class="menu-item" data-a="marca"><span class="mi-ic">🎨</span><span class="mi-tx"><b>Personalizar marca</b><span class="sub">Cambiar logo y nombre del restaurante</span></span></button>` : ""}
+        <button class="menu-item" data-a="prov"><span class="mi-ic">🏪</span><span class="mi-tx"><b>Unificar proveedores</b><span class="sub">Juntar los que son el mismo</span></span></button>
+        <button class="menu-item" data-a="update"><span class="mi-ic">🔄</span><span class="mi-tx"><b>Buscar actualización</b><span class="sub">${badge}${APP_VERSION} · ${APP_FECHA}</span></span></button>
+        <button class="menu-item" data-a="salir"><span class="mi-ic">🚪</span><span class="mi-tx"><b>Cerrar sesión</b></span></button>
+      </div>
+      <button class="btn sec" data-cerrar style="margin-top:14px">Cerrar</button>
+    </div>`;
+  document.body.appendChild(bg);
+  const cerrar = () => bg.remove();
+  bg.addEventListener("click", (e) => { if (e.target === bg) cerrar(); });
+  bg.querySelector("[data-cerrar]").addEventListener("click", cerrar);
+  bg.querySelectorAll(".menu-item").forEach((b) => b.addEventListener("click", () => {
+    const a = b.dataset.a;
+    cerrar();
+    if (a === "marca") marca.abrirPersonalizar();
+    else if (a === "prov") proveedores.abrirProveedores();
+    else if (a === "update") buscarActualizacion();
+    else if (a === "salir") supabase.auth.signOut();
+  }));
 }
 
 function pintarTabs() {

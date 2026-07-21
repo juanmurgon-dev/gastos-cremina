@@ -10,8 +10,8 @@ export const TIPOS = ["costo de venta", "operativo"];
 export const UNIDADES = ["kg", "pz", "L", "caja", "paq", "manojo", "lt", "gr", "otro"];
 
 export const COLOR_AREA = {
-  cocina: "#0e3a39", barra: "#dd6031", piso: "#767522",
-  limpieza: "#491208", otro: "#9c9482"
+  cocina: "#2ec4b6", barra: "#ff9f1c", piso: "#ffbf69",
+  limpieza: "#148b7f", otro: "#7ea8a2"
 };
 
 // ── Estado en memoria ───────────────────────────────────────
@@ -471,6 +471,109 @@ export function semanaParcial(lunes, dias) {
 }
 
 // Historial de precios por insumo (agrupa por descripción normalizada)
+// ── Proveedores: unificar nombres que son el mismo ──────────
+// Palabras que no distinguen un proveedor (conectores y sufijos de razón social).
+const STOP_PROV = new Set(["de", "del", "la", "el", "los", "las", "y", "e",
+  "s", "a", "c", "v", "r", "l", "rl", "cv", "sa", "sc", "srl", "sapi", "sab", "sadecv"]);
+// Clave normalizada: minúsculas, sin acentos, sin conectores ni "S de RL / SA de CV".
+export function normProv(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w && !STOP_PROV.has(w)).join(" ").trim();
+}
+// Nombre canónico de un proveedor según el mapa de alias guardado en config.
+export function canonProv(nombre) {
+  const key = normProv(nombre);
+  const al = (state.config && state.config.proveedorAlias) || {};
+  return (key && al[key]) || (nombre || "");
+}
+// Agrupa los proveedores de los tickets por clave normalizada → Map(clave → Map(rawNombre → veces)).
+export function clustersProveedor() {
+  const byKey = new Map();
+  for (const t of state.tickets) {
+    const raw = (t.proveedor || "").trim();
+    if (!raw) continue;
+    const k = normProv(raw);
+    if (!k) continue;
+    if (!byKey.has(k)) byKey.set(k, new Map());
+    const m = byKey.get(k);
+    m.set(raw, (m.get(raw) || 0) + 1);
+  }
+  return byKey;
+}
+// Fusiona: para cada clave dada, apunta su alias al nombre canónico. Guarda en config.
+export async function unificarProveedores(claves, canonico) {
+  const al = { ...((state.config && state.config.proveedorAlias) || {}) };
+  for (const k of claves) if (k) al[k] = canonico;
+  await guardarConfig({ proveedorAlias: al });
+}
+export async function deshacerAliasProveedor(claves) {
+  const al = { ...((state.config && state.config.proveedorAlias) || {}) };
+  for (const k of claves) delete al[k];
+  await guardarConfig({ proveedorAlias: al });
+}
+// Distancia de edición (Levenshtein) para tolerar errores de dedo.
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+// Proveedores existentes (ya canonizados) con cuántos tickets tiene cada uno.
+export function proveedoresConocidos() {
+  const m = new Map();
+  for (const t of state.tickets) {
+    const raw = (t.proveedor || "").trim();
+    if (!raw) continue;
+    const c = canonProv(raw);
+    m.set(c, (m.get(c) || 0) + 1);
+  }
+  return [...m.entries()].map(([nombre, veces]) => ({ nombre, veces })).sort((a, b) => b.veces - a.veces);
+}
+// Sugiere un proveedor existente parecido (tolera "Crntral de Verdiras" → "Central de Verduras").
+// Devuelve null si no hay parecido o si ya coincide con uno existente.
+export function sugerirProveedor(nombre) {
+  const key = normProv(nombre);
+  if (!key || key.length < 4) return null;
+  let best = null, bestSim = 0;
+  for (const p of proveedoresConocidos()) {
+    const k2 = normProv(p.nombre);
+    if (!k2) continue;
+    if (k2 === key) return null; // ya es un proveedor existente
+    const sim = 1 - lev(key, k2) / Math.max(key.length, k2.length);
+    if (sim > bestSim) { bestSim = sim; best = p; }
+  }
+  return best && bestSim >= 0.7 ? { ...best, sim: bestSim } : null;
+}
+// Agrupa proveedores que probablemente son el mismo (misma clave o muy parecidos).
+// Devuelve solo los grupos con 2+ variantes (candidatos a unificar), el más usado primero.
+export function agruparProveedores() {
+  const nombres = proveedoresConocidos();
+  const usado = new Set();
+  const grupos = [];
+  for (let i = 0; i < nombres.length; i++) {
+    if (usado.has(i)) continue;
+    usado.add(i);
+    const grupo = [nombres[i]];
+    const kBase = normProv(nombres[i].nombre);
+    for (let j = i + 1; j < nombres.length; j++) {
+      if (usado.has(j)) continue;
+      const k2 = normProv(nombres[j].nombre);
+      const sim = kBase && k2 ? 1 - lev(kBase, k2) / Math.max(kBase.length, k2.length) : 0;
+      if (k2 === kBase || sim >= 0.8) { grupo.push(nombres[j]); usado.add(j); }
+    }
+    if (grupo.length > 1) grupos.push(grupo);
+  }
+  return grupos;
+}
+
 export function preciosPorInsumo() {
   const map = new Map();
   for (const t of state.tickets) {
@@ -481,7 +584,7 @@ export function preciosPorInsumo() {
       if (!map.has(key)) map.set(key, { nombre, area: l.area, registros: [] });
       const pu = num(l.precio_unitario) || (num(l.cantidad) ? num(l.monto) / num(l.cantidad) : num(l.monto));
       map.get(key).registros.push({
-        fecha: t.fecha, precio: pu, unidad: l.unidad, proveedor: t.proveedor, monto: num(l.monto)
+        fecha: t.fecha, precio: pu, unidad: l.unidad, proveedor: canonProv(t.proveedor), monto: num(l.monto)
       });
     }
   }

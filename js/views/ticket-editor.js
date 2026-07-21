@@ -1,6 +1,6 @@
 // Editor de un ticket (proveedor, fecha y líneas). Se reutiliza al
 // capturar un ticket nuevo y al corregir uno existente.
-import { AREAS, TIPOS, UNIDADES, num, money } from "../store.js";
+import { AREAS, TIPOS, UNIDADES, num, money, proveedoresConocidos, sugerirProveedor } from "../store.js";
 
 function opciones(lista, sel) {
   return lista.map((o) => `<option value="${o}"${o === sel ? " selected" : ""}>${o}</option>`).join("");
@@ -43,7 +43,9 @@ export function crearEditor(contenedor, ticket = {}) {
   contenedor.innerHTML = `
     <div class="fila">
       <label class="campo"><span>Proveedor</span>
-        <input data-prov value="${escapar(ticket.proveedor || "")}" placeholder="Ej. Central de Abastos" /></label>
+        <input data-prov list="provDL" autocomplete="off" value="${escapar(ticket.proveedor || "")}" placeholder="Ej. Central de Abastos" />
+        <datalist id="provDL">${proveedoresConocidos().map((p) => `<option value="${escapar(p.nombre)}"></option>`).join("")}</datalist>
+        <div data-prov-sug></div></label>
       <label class="campo"><span>Fecha</span>
         <input data-fecha type="date" value="${ticket.fecha || ""}" /></label>
     </div>
@@ -55,6 +57,18 @@ export function crearEditor(contenedor, ticket = {}) {
 
   const cont = contenedor.querySelector("[data-lineas]");
   const totalEl = contenedor.querySelector("[data-total]");
+
+  // Sugerir un proveedor existente si el escrito se parece (errores de dedo).
+  const provInput = contenedor.querySelector("[data-prov]");
+  const provSug = contenedor.querySelector("[data-prov-sug]");
+  function revisarProv() {
+    const s = sugerirProveedor(provInput.value.trim());
+    if (!s) { provSug.innerHTML = ""; return; }
+    provSug.innerHTML = `<button type="button" class="pill" data-usar style="margin-top:6px;cursor:pointer;border:none">¿Quisiste decir <b style="margin:0 4px">${escapar(s.nombre)}</b>? Usar</button>`;
+    provSug.querySelector("[data-usar]").addEventListener("click", () => { provInput.value = s.nombre; provSug.innerHTML = ""; });
+  }
+  provInput.addEventListener("change", revisarProv);
+  provInput.addEventListener("blur", revisarProv);
 
   function recalc() {
     let t = 0;

@@ -2,6 +2,24 @@
 // con semanas pasadas, proyección de cierre de semana y avance de la meta.
 import * as store from "../store.js";
 import { money, num } from "../store.js";
+import * as dashCompras from "./dash-compras.js";
+
+// Inicio se adapta al ROL: compras ve su tablero; los demás (owner/gerente/
+// staff/single-tenant) ven el resumen financiero de siempre.
+export function render(el) {
+  let sub = null, rolActual = "__none__";
+  const unsub = store.subscribe(evaluar);
+  evaluar();
+  function evaluar() {
+    const rol = store.state.miRol;
+    if (rol === rolActual) return;         // el rol no cambió → no re-montar
+    rolActual = rol;
+    if (typeof sub === "function") { try { sub(); } catch (e) {} }
+    el.innerHTML = "";
+    sub = (rol === "compras") ? dashCompras.render(el) : renderOwner(el);
+  }
+  return () => { if (typeof sub === "function") { try { sub(); } catch (e) {} } unsub(); };
+}
 
 function kmoney(n) {
   const a = Math.abs(n);
@@ -22,7 +40,7 @@ function delta(actual, previo, subeEsBueno, etiqueta) {
   return `<span style="color:${col};font-size:12px">${sube ? "▲" : "▼"} ${Math.abs(Math.round(p))}% ${etiqueta || "vs. sem. pasada"}</span>`;
 }
 
-export function render(el) {
+function renderOwner(el) {
   let off = 0; // 0 = esta semana
   const rerender = () => pintar();
   const unsub = store.subscribe(pintar);
@@ -95,6 +113,14 @@ export function render(el) {
     const heroTit = usaProy ? "Proyección al cierre" : (off === 0 ? "Utilidad de la semana" : "Utilidad de esa semana");
     const costoCol = costo <= 35 ? "var(--verde)" : costo <= 45 ? "var(--amarillo)" : "var(--rojo)";
 
+    // Punto de equilibrio (antes en Proyec.): gastos fijos ÷ margen.
+    const gfMes = store.gastoFijoMensual();
+    const costoVarPct = num(store.state.config.costoVarPct) || 26;
+    const contrib = 1 - costoVarPct / 100;
+    const beSem = contrib > 0.02 ? gfSem / contrib : 0;
+    const beDia = beSem / 7;
+    const ventaRefDia = prevFull ? prevFull.venta / 7 : 0;
+
     el.innerHTML = `
       <div class="card" style="text-align:center;padding:18px 16px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -111,7 +137,7 @@ export function render(el) {
         ${!sinDatos
           ? `<div class="sub" style="margin-top:8px;font-size:12.5px">Venta ${kmoney(hVenta)} − compras ${kmoney(hGasto)}${gfSem ? ` − fijos ${kmoney(gfSem)}` : ""}</div>`
           : `<div class="sub" style="margin-top:8px">Espera el corte del día para ver cómo vas.</div>`}
-        ${(!sinDatos && gfSem === 0) ? `<div class="sub" style="margin-top:4px;font-size:12px">💡 Registra gastos fijos (Proyec.) para la utilidad real.</div>` : ""}
+        ${(!sinDatos && gfSem === 0) ? `<div class="sub" style="margin-top:4px;font-size:12px">💡 Registra gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : ""}
       </div>
       ${alertas.length ? `<div class="card" style="border-left:4px solid var(--flame)">
         <h2 style="margin-bottom:8px">Alertas</h2>
@@ -152,6 +178,21 @@ export function render(el) {
       </div>
 
       <div class="card">
+        <h2 style="margin-bottom:6px">Punto de equilibrio</h2>
+        ${gfMes === 0
+          ? `<div class="sub">Registra tus gastos fijos (Gastos → Fijos) para calcularlo.</div>`
+          : contrib <= 0.02
+          ? `<div class="aviso-box">Con costo variable ${costoVarPct}% casi no queda margen; bájalo primero.</div>`
+          : `<div class="row-stats">
+               <div class="stat"><div class="n">${money(beDia)}</div><div class="l">por día</div></div>
+               <div class="stat"><div class="n">${money(beSem)}</div><div class="l">por semana</div></div>
+             </div>
+             <div class="sub" style="margin-top:6px">Para NO perder, con margen <b>${Math.round(contrib * 100)}%</b>.${ventaRefDia > 0 ? (ventaRefDia >= beDia ? ` La semana pasada vendiste ${money(ventaRefDia)}/día ✅` : ` La semana pasada vendiste ${money(ventaRefDia)}/día ⚠️`) : ""}</div>
+             <label class="campo" style="margin-top:8px"><span>Costo variable (% de la venta)</span>
+               <input id="cvpct" type="number" step="any" inputmode="decimal" value="${costoVarPct}" /></label>`}
+      </div>
+
+      <div class="card">
         <h2>Tendencia · últimas 6 semanas</h2>
         ${ultimas.map((s) => {
           const c = s.venta > 0 ? (s.gasto / s.venta) * 100 : 0;
@@ -166,6 +207,8 @@ export function render(el) {
 
     el.querySelector("#ant").addEventListener("click", () => { off++; rerender(); });
     el.querySelector("#sig").addEventListener("click", () => { off = Math.max(0, off - 1); rerender(); });
+    const cvEl = el.querySelector("#cvpct");
+    if (cvEl) cvEl.addEventListener("change", () => store.guardarConfig({ costoVarPct: num(cvEl.value) }).catch(() => {}));
     const gBtn = el.querySelector("#guardar");
     if (gBtn) gBtn.addEventListener("click", async () => {
       const v = num(el.querySelector("#meta").value);

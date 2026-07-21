@@ -28,6 +28,76 @@ function uuid() { return (crypto.randomUUID ? crypto.randomUUID() : String(Date.
 const montoDe = (it) => num(it.cantidad) * num(it.precio);
 const totalDe = (its) => (its || []).reduce((a, it) => a + montoDe(it), 0);
 
+// ───────────── Desglose de un pedido pegado ─────────────
+// Convierte un mensaje libre ("5 kg tomate, 2 cajas leche…") en una lista de
+// insumos {nombre, cantidad, unidad}. Todo local: sin costo y sin internet.
+const UNIDADES_MATCH = [
+  [/\b(kilos?|kilogramos?|kgs?|kg)\b/i, "kg"],
+  [/\b(gramos?|grs?|gr)\b/i, "gr"],
+  [/\b(litros?|lts?|lt)\b/i, "lt"],
+  [/\b(mililitros?|ml)\b/i, "ml"],
+  [/\b(piezas?|pzas?|pza|pz)\b/i, "pz"],
+  [/\b(cajas?|caja)\b/i, "caja"],
+  [/\b(paquetes?|paqs?|paq)\b/i, "paq"],
+  [/\b(bolsas?|bolsa)\b/i, "bolsa"],
+  [/\b(manojos?|manojo)\b/i, "manojo"],
+  [/\b(docenas?|docena)\b/i, "docena"],
+  [/\b(costales?|costal)\b/i, "costal"],
+  [/\b(atados?|atado)\b/i, "atado"],
+  [/\b(charolas?|charola)\b/i, "charola"],
+  [/\b(latas?|lata)\b/i, "lata"],
+  [/\b(botes?|bote)\b/i, "bote"],
+  [/\b(rollos?|rollo)\b/i, "rollo"],
+  [/\b(conos?|cono)\b/i, "cono"],
+];
+const NUM_PAL = { un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, docena: 12, media: 0.5, medio: 0.5 };
+const FILLER = /\b(de|del|la|el|los|las|unos|unas|por\s*favor|porfa(?:vor)?|favor|necesito|ocupo|quiero|comprar|traer|tr[aá]eme|mandar|manda|pedir|pide|hay\s*que)\b/gi;
+const IGNORAR = /^(hola|buenas|buenos d[ií]as|buenas tardes|buenas noches|gracias|ok|listo|pedido|orden|lista|para (hoy|ma[ñn]ana|el)|del d[ií]a|hola,?)/i;
+
+function parsearPedido(texto, byName) {
+  const partes = String(texto || "").replace(/\r/g, "").split(/[\n,;]+|\s[•·]\s/);
+  const out = [];
+  for (const linea of partes) {
+    let s = linea.trim().replace(/^[\s\-*•·►▪✅☑▫◦]+/, "").trim();
+    if (!s || s.length < 2 || IGNORAR.test(s) || /[:：]\s*$/.test(s)) continue;
+
+    let cantidad = null, unidad = "";
+    // 1) número en dígitos (también si viene pegado a la unidad: "4kg")
+    const mNum = s.match(/(\d+(?:[.,]\d+)?|\d+\/\d+)/);
+    if (mNum) {
+      const raw = mNum[1];
+      cantidad = raw.includes("/")
+        ? parseFloat(raw.split("/")[0]) / parseFloat(raw.split("/")[1])
+        : parseFloat(raw.replace(",", "."));
+      if (!isFinite(cantidad)) cantidad = null;
+      s = s.replace(mNum[1], " ");
+    }
+    // 2) unidad (ya sin el dígito, "kg" en "4kg" queda suelto)
+    for (const [re, canon] of UNIDADES_MATCH) {
+      if (re.test(s)) { unidad = canon; s = s.replace(re, " "); break; }
+    }
+    // 3) si no hubo dígito, busca el número escrito con palabra
+    if (cantidad == null) {
+      for (const t of s.toLowerCase().split(/\s+/)) {
+        if (NUM_PAL[t] != null) { cantidad = NUM_PAL[t]; s = s.replace(new RegExp("\\b" + t + "\\b", "i"), " "); break; }
+      }
+    }
+    let nombre = s.replace(FILLER, " ").replace(/\s+/g, " ").trim();
+    if (!nombre || nombre.length < 2) continue;
+
+    const hit = byName.get(nombre.toLowerCase());
+    if (hit) { nombre = hit.nombre; if (!unidad) unidad = hit.unidad || ""; }
+    else if (!unidad) {
+      const alt = [...byName.values()].find((i) =>
+        i.nombre.toLowerCase().includes(nombre.toLowerCase()) || nombre.toLowerCase().includes(i.nombre.toLowerCase()));
+      if (alt) unidad = alt.unidad || "";
+    }
+    nombre = nombre.charAt(0).toUpperCase() + nombre.slice(1);
+    out.push({ nombre, cantidad: cantidad == null ? 1 : cantidad, unidad, enInventario: !!hit });
+  }
+  return out;
+}
+
 export function render(el) {
   let vista = "lista";        // "lista" | "editor"
   let editing = null;         // requisición en edición (copia local)
@@ -92,6 +162,13 @@ export function render(el) {
       </div>
 
       <div class="card">
+        <h2>📋 Pegar pedido completo</h2>
+        <p class="sub" style="margin-top:-4px">Pega el mensaje de lo que necesitas (una línea por insumo o separado por comas) y la app lo desglosa solo.</p>
+        <textarea id="rqPegar" rows="4" placeholder="Ej.&#10;5 kg tomate&#10;2 cajas de leche&#10;1 manojo cilantro&#10;3 aguacate"></textarea>
+        <button class="btn" id="rqDesglosar" style="margin-top:10px">✨ Desglosar pedido</button>
+      </div>
+
+      <div class="card">
         <h2>Agregar insumo</h2>
         <label class="campo"><span>Insumo</span>
           <input id="rqNom" list="rqDL" placeholder="Ej. Tomate saladet" autocomplete="off" /></label>
@@ -114,6 +191,14 @@ export function render(el) {
     });
     $("#rqGuardar").addEventListener("click", () => guardar(true));
 
+    $("#rqDesglosar").addEventListener("click", () => {
+      const t = $("#rqPegar").value.trim();
+      if (!t) return;
+      const items = parsearPedido(t, byName);
+      if (!items.length) { alert("No reconocí insumos en ese texto. Prueba una línea por insumo, ej: “5 kg tomate”."); return; }
+      revisarPedido(items);
+    });
+
     $("#rqNom").addEventListener("change", () => {
       const hit = byName.get($("#rqNom").value.trim().toLowerCase());
       if (hit && !$("#rqUni").value) $("#rqUni").value = hit.unidad || "";
@@ -133,6 +218,59 @@ export function render(el) {
     });
 
     pintarItems();
+  }
+
+  // Crea un item de requisición completando precio/proveedor del historial.
+  function itemDesde(nombre, cantidad, unidad) {
+    const hit = byName.get((nombre || "").toLowerCase());
+    const precio = hit ? num(hit.precioActual) : 0;
+    const proveedor = hit && hit.registros[0] ? (hit.registros[0].proveedor || "") : "";
+    const uni = unidad || (hit && hit.unidad) || "pz";
+    return { nombre, cantidad: num(cantidad) || 1, unidad: uni, precio, proveedor, estatus: "pendiente" };
+  }
+
+  // Modal de revisión: el usuario ajusta/quita antes de agregar a la lista.
+  function revisarPedido(items) {
+    const bg = document.createElement("div");
+    bg.className = "modal-bg";
+    bg.innerHTML = `
+      <div class="modal">
+        <h2>Revisa el pedido</h2>
+        <p class="sub" style="margin:-8px 0 12px">Desglosé <b>${items.length}</b> insumo(s). Ajusta lo que haga falta y quita lo que no quieras.</p>
+        <div id="rvLista">${items.map(filaRev).join("")}</div>
+        <button class="btn" id="rvAdd" style="margin-top:12px">Agregar a la lista</button>
+        <button class="btn sec" id="rvCancel" style="margin-top:8px">Cancelar</button>
+      </div>`;
+    document.body.appendChild(bg);
+    const cerrar = () => bg.remove();
+    bg.addEventListener("click", (e) => { if (e.target === bg) cerrar(); });
+    bg.querySelector("#rvCancel").addEventListener("click", cerrar);
+    bg.querySelectorAll("[data-del-rev]").forEach((b) =>
+      b.addEventListener("click", () => { const r = b.closest("[data-row]"); if (r) r.remove(); }));
+    bg.querySelector("#rvAdd").addEventListener("click", () => {
+      let n = 0;
+      for (const row of bg.querySelectorAll("[data-row]")) {
+        const nombre = row.querySelector("[data-f='nom']").value.trim();
+        if (!nombre) continue;
+        const cantidad = num(row.querySelector("[data-f='cant']").value);
+        const unidad = row.querySelector("[data-f='uni']").value.trim();
+        editing.items.push(itemDesde(nombre, cantidad, unidad));
+        n++;
+      }
+      cerrar();
+      const ta = el.querySelector("#rqPegar"); if (ta) ta.value = "";
+      pintarItems(); guardar();
+    });
+  }
+
+  function filaRev(it) {
+    return `<div class="linea-edit" data-row style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 34px 8px 12px">
+      <input data-f="nom" value="${esc(it.nombre)}" style="flex:1 1 140px;min-width:0" />
+      <input data-f="cant" type="number" step="any" inputmode="decimal" value="${it.cantidad}" style="width:64px" />
+      <input data-f="uni" value="${esc(it.unidad)}" placeholder="uni" style="width:72px" />
+      <button data-del-rev class="quitar" title="Quitar">✕</button>
+      <span class="sub" style="flex-basis:100%;font-size:11px${it.enInventario ? "" : ";color:var(--amber-osc)"}">${it.enInventario ? "✓ en tu inventario" : "insumo nuevo"}</span>
+    </div>`;
   }
 
   function grupos() {
