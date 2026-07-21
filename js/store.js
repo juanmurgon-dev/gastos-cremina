@@ -580,6 +580,7 @@ export function preciosPorInsumo() {
     for (const l of t.lineas || []) {
       const nombre = (l.descripcion || "").trim();
       if (!nombre) continue;
+      if (/propina/i.test(nombre)) continue;   // la propina no es un insumo
       const key = nombre.toLowerCase();
       if (!map.has(key)) map.set(key, { nombre, area: l.area, registros: [] });
       const pu = num(l.precio_unitario) || (num(l.cantidad) ? num(l.monto) / num(l.cantidad) : num(l.monto));

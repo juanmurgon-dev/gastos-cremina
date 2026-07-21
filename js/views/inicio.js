@@ -30,8 +30,31 @@ function kmoney(n) {
 function opac(v, max) { return (0.4 + 0.6 * (v / (max || 1))).toFixed(2); }
 function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
-const ES_CORTESIA = /pan de cortes[íi]a/i;
+const ES_CORTESIA = /pan de cortes[íi]a|propina/i;   // cortesía y propina no cuentan como venta
 const CAT_BEBIDA = new Set(["Barra de Café", "Bebidas"]);
+
+// Grupo modificador "principal" de un platillo/bebida (Tipo → Sabor; evita leche/temperatura).
+const ES_SECUNDARIO = /leche|fr[íi]o|caliente|shot|cold foam/i;
+function elegirGrupo(grupos) {
+  const nombres = Object.keys(grupos);
+  const unidades = (g) => grupos[g].reduce((a, r) => a + store.num(r.unidades), 0);
+  let cand = nombres.filter((n) => n.toLowerCase().startsWith("tipo"));
+  if (!cand.length) cand = nombres.filter((n) => n.toLowerCase().startsWith("sabor"));
+  if (!cand.length) cand = nombres.filter((n) => !ES_SECUNDARIO.test(n));
+  if (!cand.length) cand = nombres;
+  return cand.sort((a, b) => unidades(b) - unidades(a))[0];
+}
+// El tipo/variante más vendido de un producto en un periodo ("qué tipo de chilaquiles/bebida").
+function topVariante(producto, periodo) {
+  const vars = (store.state.variantes || []).filter((v) =>
+    v.producto === producto && v.periodo === periodo && !ES_CORTESIA.test(v.opcion || ""));
+  if (!vars.length) return null;
+  const grupos = {};
+  for (const v of vars) (grupos[v.grupo] = grupos[v.grupo] || []).push(v);
+  const gname = elegirGrupo(grupos);
+  const top = (grupos[gname] || []).slice().sort((a, b) => store.num(b.unidades) - store.num(a.unidades))[0];
+  return top ? { grupo: gname, opcion: top.opcion, u: store.num(top.unidades) } : null;
+}
 
 // Más vendidos (platillo y bebida) del periodo más reciente con datos.
 function topProductos() {
@@ -55,11 +78,16 @@ function topProductos() {
   const top = arr.slice().sort((a, b) => b.u - a.u);
   const topFood = arr.filter((x) => !CAT_BEBIDA.has(x.cat)).sort((a, b) => b.u - a.u)[0] || null;
   const topBebida = arr.filter((x) => CAT_BEBIDA.has(x.cat)).sort((a, b) => b.u - a.u)[0] || null;
+  if (topFood) topFood.tipo = topVariante(topFood.producto, periodo);      // qué tipo de platillo
+  if (topBebida) topBebida.tipo = topVariante(topBebida.producto, periodo); // qué tipo de bebida
   return { periodo, top, topFood, topBebida };
 }
 
-// Productos que cayeron considerablemente (≥15%) de un periodo a otro.
-function caidasProductos() {
+// Movimientos de venta entre el periodo reciente y el anterior:
+//  · Caídas: productos de buena venta (>15/sem) que bajaron ≥15%.
+//  · Subidas ("ojo del bueno"): productos que subieron ≥15%.
+const MIN_VENTA = 15;   // arriba de 15 vendidos por semana = producto que sí importa
+function movimientosProductos() {
   const prod = (store.state.productos || []).filter((p) =>
     !ES_CORTESIA.test(p.producto || "") && !ES_CORTESIA.test(p.categoria || ""));
   if (!prod.length) return null;
@@ -78,15 +106,20 @@ function caidasProductos() {
     return m;
   };
   const A = agg(prev), B = agg(cur);
-  const caidas = [];
-  for (const [nombre, av] of A) {
-    if (av.u < 5) continue;                          // base muy chica → ruido, ignora
-    const bu = B.get(nombre) ? B.get(nombre).u : 0;
-    const drop = (bu - av.u) / av.u;                 // negativo = bajó
-    if (drop <= -0.15) caidas.push({ nombre, cat: av.cat, prev: av.u, cur: bu, drop });
+  const caidas = [], subidas = [];
+  for (const nombre of new Set([...A.keys(), ...B.keys()])) {
+    const av = A.get(nombre) ? A.get(nombre).u : 0;
+    const bv = B.get(nombre) ? B.get(nombre).u : 0;
+    const cat = (B.get(nombre) || A.get(nombre)).cat;
+    if (av <= 0) continue;                           // sin base previa no hay %
+    if (Math.max(av, bv) < MIN_VENTA) continue;      // debe ser de buena venta
+    const chg = (bv - av) / av;
+    if (chg <= -0.15) caidas.push({ nombre, cat, prev: av, cur: bv, drop: chg });
+    else if (chg >= 0.15) subidas.push({ nombre, cat, prev: av, cur: bv, rise: chg });
   }
-  caidas.sort((a, b) => a.drop - b.drop);            // la mayor caída primero
-  return { cur, prev, caidas };
+  caidas.sort((a, b) => a.drop - b.drop);            // mayor caída primero
+  subidas.sort((a, b) => b.rise - a.rise);           // mayor subida primero
+  return { cur, prev, caidas, subidas };
 }
 
 // Insumo en el que más gastas y el que más subió de precio.
@@ -114,12 +147,26 @@ function grid2(tiles) {
   return `<div style="display:grid;grid-template-columns:${cols};gap:10px">${tiles.join("")}</div>`;
 }
 
-// "De un vistazo": lo que más vendes, lo que cae, y tu insumo clave, en una tarjeta.
+// Título "producto · tipo" y subtítulo con las unidades del tipo dentro del total.
+function tituloTop(x) {
+  const t = x.tipo;
+  return {
+    titulo: esc(x.producto) + (t ? ` · ${esc(t.opcion)}` : ""),
+    sub: t ? `${Math.round(t.u)} de ${Math.round(x.u)} vendidos` : `${Math.round(x.u)} vendidos`,
+  };
+}
+
+// "De un vistazo": lo que más vendes (con su tipo), lo que sube/baja, y tu insumo clave.
 function cardVistazo(tp, ins, cd) {
   const tiles = [];
-  if (tp && tp.topFood) tiles.push(tile("🍽️", "Platillo top", esc(tp.topFood.producto), `${Math.round(tp.topFood.u)} vendidos`, "var(--verde)"));
-  if (tp && tp.topBebida) tiles.push(tile("☕", "Bebida top", esc(tp.topBebida.producto), `${Math.round(tp.topBebida.u)} vendidas`, "var(--verde)"));
-  if (tp && !tp.topFood && !tp.topBebida && tp.top[0]) tiles.push(tile("⭐", "Más vendido", esc(tp.top[0].producto), `${Math.round(tp.top[0].u)} vendidos`, "var(--verde)"));
+  if (tp && tp.topFood) { const t = tituloTop(tp.topFood); tiles.push(tile("🍽️", "Platillo top", t.titulo, t.sub, "var(--verde)")); }
+  if (tp && tp.topBebida) { const t = tituloTop(tp.topBebida); tiles.push(tile("☕", "Bebida top", t.titulo, t.sub, "var(--verde)")); }
+  if (tp && !tp.topFood && !tp.topBebida && tp.top[0]) { const t = tituloTop(tp.top[0]); tiles.push(tile("⭐", "Más vendido", t.titulo, t.sub, "var(--verde)")); }
+  if (cd && cd.subidas.length) {
+    const s = cd.subidas[0];
+    tiles.push(tile("🚀", "Subiendo (ojo del bueno)", esc(s.nombre),
+      `▲ ${Math.round(s.rise * 100)}% · ${Math.round(s.prev)}→${Math.round(s.cur)} vendidos`, "var(--verde)"));
+  }
   if (cd && cd.caidas.length) {
     const c = cd.caidas[0];
     tiles.push(tile("📉", "Está cayendo", esc(c.nombre),
@@ -217,7 +264,7 @@ function renderOwner(el) {
 
     const tp = topProductos();
     const ins = insumosDestacados();
-    const cd = caidasProductos();
+    const cd = movimientosProductos();
 
     // ── Para actuar: máximo 3 cosas, lo crítico primero ──
     const acc = [];
@@ -227,7 +274,11 @@ function renderOwner(el) {
       acc.push(`🔻 La venta bajó <b>${Math.round(Math.abs((venta - prev.venta) / prev.venta * 100))}%</b> vs. la semana pasada. Activa una promo o busca a tus clientes frecuentes.`);
     if (cd && cd.caidas.length) {
       const c = cd.caidas[0];
-      acc.push(`🔻 <b>${esc(c.nombre)}</b> se vendió <b>${Math.round(Math.abs(c.drop) * 100)}% menos</b> que el periodo pasado (${Math.round(c.prev)}→${Math.round(c.cur)}). ¿Se agotó, subió de precio o hay que promocionarlo?`);
+      acc.push(`🔻 <b>${esc(c.nombre)}</b> se vendía bien y cayó <b>${Math.round(Math.abs(c.drop) * 100)}%</b> (${Math.round(c.prev)}→${Math.round(c.cur)}). ¿Se agotó, subió de precio o hay que promocionarlo?`);
+    }
+    if (cd && cd.subidas.length) {
+      const s = cd.subidas[0];
+      acc.push(`🚀 <b>${esc(s.nombre)}</b> subió <b>${Math.round(s.rise * 100)}%</b> en ventas (${Math.round(s.prev)}→${Math.round(s.cur)}). ¡Ojo del bueno! Dale más salida mientras está caliente.`);
     }
     if (ins && ins.masSubio) acc.push(`📈 <b>${esc(ins.masSubio.nombre)}</b> subió <b>${money(ins.masSubio.cambio)}</b> por ${esc(ins.masSubio.unidad || "unidad")}. Renegocia con tu proveedor o ajústalo en el menú.`);
     if (tp && (tp.topFood || tp.topBebida)) {
