@@ -28,6 +28,77 @@ function kmoney(n) {
   return "$" + Math.round(n);
 }
 function opac(v, max) { return (0.4 + 0.6 * (v / (max || 1))).toFixed(2); }
+function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+const ES_CORTESIA = /pan de cortes[íi]a/i;
+const CAT_BEBIDA = new Set(["Barra de Café", "Bebidas"]);
+
+// Más vendidos (platillo y bebida) del periodo más reciente con datos.
+function topProductos() {
+  const prod = (store.state.productos || []).filter((p) =>
+    !ES_CORTESIA.test(p.producto || "") && !ES_CORTESIA.test(p.categoria || ""));
+  if (!prod.length) return null;
+  const pmap = new Map();
+  for (const p of prod) if (!pmap.has(p.periodo)) pmap.set(p.periodo, p.desde);
+  const periodos = [...pmap.entries()].sort((a, b) => (a[1] < b[1] ? 1 : -1));
+  const periodo = periodos.length ? periodos[0][0] : null;
+  const agg = new Map();
+  for (const p of prod) {
+    if (p.periodo !== periodo) continue;
+    const k = p.producto || "—";
+    const a = agg.get(k) || { producto: k, cat: p.categoria || "Otros", u: 0, venta: 0 };
+    a.u += store.num(p.cantidad); a.venta += store.num(p.venta);
+    agg.set(k, a);
+  }
+  const arr = [...agg.values()];
+  if (!arr.length) return null;
+  const top = arr.slice().sort((a, b) => b.u - a.u);
+  const topFood = arr.filter((x) => !CAT_BEBIDA.has(x.cat)).sort((a, b) => b.u - a.u)[0] || null;
+  const topBebida = arr.filter((x) => CAT_BEBIDA.has(x.cat)).sort((a, b) => b.u - a.u)[0] || null;
+  return { periodo, top, topFood, topBebida };
+}
+
+// Insumo en el que más gastas y el que más subió de precio.
+function insumosDestacados() {
+  const ins = store.preciosPorInsumo();
+  if (!ins.length) return null;
+  const conGasto = ins.map((i) => ({ ...i, gasto: (i.registros || []).reduce((a, r) => a + store.num(r.monto), 0) }));
+  const masGasto = conGasto.slice().sort((a, b) => b.gasto - a.gasto)[0] || null;
+  // El que más subió, pero solo si el alza es de al menos $1 (no centavos).
+  const masSubio = ins.filter((i) => i.veces >= 2 && i.cambio >= 1)
+    .sort((a, b) => b.cambio - a.cambio)[0] || null;
+  return { masGasto, masSubio };
+}
+
+// Mini-tarjeta para los vistazos operativos.
+function tile(icon, label, big, sub, color) {
+  return `<div style="background:rgba(46,196,182,.07);border:1px solid var(--linea);border-radius:14px;padding:13px 14px;min-width:0">
+    <div class="sub" style="font-size:11.5px;font-weight:600">${icon} ${label}</div>
+    <div style="font-size:16px;font-weight:700;letter-spacing:-.01em;margin-top:3px;line-height:1.2;color:${color || "var(--tinta)"};overflow-wrap:anywhere">${big}</div>
+    <div class="sub" style="font-size:12px;margin-top:3px">${sub}</div>
+  </div>`;
+}
+function grid2(tiles) {
+  const cols = tiles.length > 1 ? "1fr 1fr" : "1fr";
+  return `<div style="display:grid;grid-template-columns:${cols};gap:10px">${tiles.join("")}</div>`;
+}
+
+// "De un vistazo": lo que más vendes y tu insumo clave, en una sola tarjeta.
+function cardVistazo(tp, ins) {
+  const tiles = [];
+  if (tp && tp.topFood) tiles.push(tile("🍽️", "Platillo top", esc(tp.topFood.producto), `${Math.round(tp.topFood.u)} vendidos`, "var(--verde)"));
+  if (tp && tp.topBebida) tiles.push(tile("☕", "Bebida top", esc(tp.topBebida.producto), `${Math.round(tp.topBebida.u)} vendidas`, "var(--verde)"));
+  if (tp && !tp.topFood && !tp.topBebida && tp.top[0]) tiles.push(tile("⭐", "Más vendido", esc(tp.top[0].producto), `${Math.round(tp.top[0].u)} vendidos`, "var(--verde)"));
+  if (ins && ins.masSubio) tiles.push(tile("📈", "Insumo que más subió", esc(ins.masSubio.nombre),
+    `▲ ${Math.round(ins.masSubio.variacion * 100)}% · ${money(ins.masSubio.precioActual)}${ins.masSubio.unidad ? "/" + esc(ins.masSubio.unidad) : ""}`, "var(--rojo)"));
+  if (ins && ins.masGasto) tiles.push(tile("💸", "En lo que más gastas", esc(ins.masGasto.nombre),
+    `${kmoney(ins.masGasto.gasto)} · ${ins.masGasto.veces} compra(s)`, "var(--naranja)"));
+  if (!tiles.length) {
+    return `<div class="card"><h2 style="margin-bottom:6px">De un vistazo</h2>
+      <div class="sub">Captura tickets e importa tus ventas por producto para ver aquí tu radiografía operativa.</div></div>`;
+  }
+  return `<div class="card"><h2 style="margin-bottom:11px">De un vistazo</h2>${grid2(tiles)}</div>`;
+}
 
 // Δ % entre actual y anterior; bueno=verde según el tipo de dato.
 function delta(actual, previo, subeEsBueno, etiqueta) {
@@ -88,20 +159,7 @@ function renderOwner(el) {
     const ultimas = semanas.slice(0, 6).slice().reverse(); // 6 semanas, viejo→nuevo
     const maxV = Math.max(1, ...ultimas.map((s) => s.venta));
 
-    // Alertas automáticas
-    const alertas = [];
-    if (prev && prev.gasto > 0) {
-      const d = (gasto - prev.gasto) / prev.gasto * 100;
-      if (d >= 8) alertas.push(`🔺 Los gastos subieron <b>${Math.round(d)}%</b> vs. la semana pasada.`);
-    }
-    if (venta > 0 && costo > 45) alertas.push(`🔺 Costo alto: <b>${Math.round(costo)}%</b> de tu venta se fue en compras.`);
-    if (meta > 0 && gasto > meta) alertas.push(`🔴 Te pasaste de la meta por <b>${money(gasto - meta)}</b>.`);
-    if (prev && prev.venta > 0) {
-      const dv = (venta - prev.venta) / prev.venta * 100;
-      if (dv <= -12) alertas.push(`🔻 La venta bajó <b>${Math.round(Math.abs(dv))}%</b> vs. la semana pasada.`);
-    }
-
-    // ── Hero: la respuesta clara de "¿cómo voy?" ──
+    // ── Vitales para la radiografía ──
     const gfSem = store.gastoFijoMensual() / 30 * 7;
     const usaProy = (off === 0 && parcial && proy);
     const hVenta = usaProy ? proy.venta : venta;
@@ -110,16 +168,35 @@ function renderOwner(el) {
     const sinDatos = venta === 0;
     const colU = sinDatos ? "var(--gris)" : util > 0 ? "var(--verde)" : util < 0 ? "var(--rojo)" : "var(--tinta)";
     const verdicto = sinDatos ? "Aún sin ventas esta semana" : util > 0 ? "Vas ganando" : util < 0 ? "Vas perdiendo" : "Vas a mano";
-    const heroTit = usaProy ? "Proyección al cierre" : (off === 0 ? "Utilidad de la semana" : "Utilidad de esa semana");
+    const heroTit = usaProy ? "Utilidad proyectada al cierre" : (off === 0 ? "Utilidad de la semana" : "Utilidad de esa semana");
     const costoCol = costo <= 35 ? "var(--verde)" : costo <= 45 ? "var(--amarillo)" : "var(--rojo)";
 
-    // Punto de equilibrio (antes en Proyec.): gastos fijos ÷ margen.
+    // Punto de equilibrio: cuánto vender para no perder.
     const gfMes = store.gastoFijoMensual();
     const costoVarPct = num(store.state.config.costoVarPct) || 26;
     const contrib = 1 - costoVarPct / 100;
     const beSem = contrib > 0.02 ? gfSem / contrib : 0;
     const beDia = beSem / 7;
-    const ventaRefDia = prevFull ? prevFull.venta / 7 : 0;
+    const ventaDiaAct = venta > 0 ? venta / (off === 0 ? diasT : 7) : 0;
+
+    const tp = topProductos();
+    const ins = insumosDestacados();
+
+    // ── Para actuar: máximo 3 cosas, lo crítico primero ──
+    const acc = [];
+    if (meta > 0 && gasto > meta) acc.push(`🔴 Te pasaste de tu meta de compras por <b>${money(gasto - meta)}</b>. Frena pedidos que no sean urgentes.`);
+    if (venta > 0 && costo > 45) acc.push(`🔴 Tu costo de insumos va en <b>${Math.round(costo)}%</b> (sano ≤35%). Sube precio, ajusta porciones o baja mermas.`);
+    if (prev && prev.venta > 0 && ((venta - prev.venta) / prev.venta * 100) <= -12)
+      acc.push(`🔻 La venta bajó <b>${Math.round(Math.abs((venta - prev.venta) / prev.venta * 100))}%</b> vs. la semana pasada. Activa una promo o busca a tus clientes frecuentes.`);
+    if (ins && ins.masSubio) acc.push(`📈 <b>${esc(ins.masSubio.nombre)}</b> subió <b>${money(ins.masSubio.cambio)}</b> por ${esc(ins.masSubio.unidad || "unidad")}. Renegocia con tu proveedor o ajústalo en el menú.`);
+    if (tp && (tp.topFood || tp.topBebida)) {
+      const names = [tp.topFood && tp.topFood.producto, tp.topBebida && tp.topBebida.producto].filter(Boolean).map(esc).join(" y ");
+      acc.push(`🏆 Empuja <b>${names}</b>: es lo que más vendes. Recomiéndalo u ofrécelo en combo.`);
+    }
+    if (!sinDatos && beDia > 0 && ventaDiaAct > 0 && ventaDiaAct < beDia)
+      acc.push(`🎯 Necesitas vender <b>${money(beDia)}/día</b> para no perder; vas en <b>${money(ventaDiaAct)}/día</b>. Enfócate en subir el ticket promedio.`);
+    if (!acc.length) acc.push(`✅ Vas en rango sano. Mantén el ritmo y registra tus cortes cada día.`);
+    const accTop = acc.slice(0, 3);
 
     el.innerHTML = `
       <div class="card" style="text-align:center;padding:18px 16px">
@@ -134,62 +211,31 @@ function renderOwner(el) {
         <div class="sub" style="text-transform:uppercase;letter-spacing:.09em;font-size:10.5px;margin-top:12px">${heroTit}</div>
         <div style="font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1.05;color:${colU}">${sinDatos ? "—" : money(util)}</div>
         <div style="font-weight:700;color:${colU}">${verdicto}${usaProy && !sinDatos ? " (a este ritmo)" : ""}</div>
-        ${!sinDatos
-          ? `<div class="sub" style="margin-top:8px;font-size:12.5px">Venta ${kmoney(hVenta)} − compras ${kmoney(hGasto)}${gfSem ? ` − fijos ${kmoney(gfSem)}` : ""}</div>`
-          : `<div class="sub" style="margin-top:8px">Espera el corte del día para ver cómo vas.</div>`}
-        ${(!sinDatos && gfSem === 0) ? `<div class="sub" style="margin-top:4px;font-size:12px">💡 Registra gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : ""}
-      </div>
-      ${alertas.length ? `<div class="card" style="border-left:4px solid var(--flame)">
-        <h2 style="margin-bottom:8px">Alertas</h2>
-        ${alertas.map((a) => `<div style="font-size:13px;padding:4px 0">${a}</div>`).join("")}
-      </div>` : ""}
-
-      <div class="card">
-        <div class="row-stats">
-          <div class="stat">
-            <div class="n" style="color:var(--verde-claro)">${kmoney(venta)}</div>
-            <div class="l">Venta</div>
-            <div style="margin-top:3px">${prev ? delta(venta, prev.venta, true, cmpLbl) : ""}</div>
-          </div>
-          <div class="stat">
-            <div class="n" style="color:var(--naranja)">${kmoney(gasto)}</div>
-            <div class="l">Gasto</div>
-            <div style="margin-top:3px">${prev ? delta(gasto, prev.gasto, false, cmpLbl) : ""}</div>
-          </div>
-          <div class="stat">
-            <div class="n" style="color:${costo <= 35 ? "var(--verde)" : costo <= 45 ? "var(--amarillo)" : "var(--rojo)"}">${venta > 0 ? Math.round(costo) + "%" : "—"}</div>
-            <div class="l">Costo</div>
-            <div style="margin-top:3px">${(costoPrev && venta > 0) ? delta(costo, costoPrev, false, cmpLbl) : ""}</div>
-          </div>
+        <div class="row-stats" style="margin-top:14px">
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:var(--verde-claro)">${kmoney(venta)}</div><div class="l">Venta${parcial ? " (parcial)" : ""}</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:${costoCol}">${venta > 0 ? Math.round(costo) + "%" : "—"}</div><div class="l">Costo insumos</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${beDia > 0 ? kmoney(beDia) : "—"}</div><div class="l">Vender/día p/ ganar</div></div>
         </div>
-        ${parcial ? `<div class="sub" style="text-align:center;margin-top:8px;font-size:11.5px">Comparado con los mismos ${diasT} días de la semana pasada</div>` : ""}
+        ${sinDatos ? `<div class="sub" style="margin-top:10px">Espera el corte del día para ver cómo vas.</div>`
+          : (gfSem === 0 ? `<div class="sub" style="margin-top:8px;font-size:12px">💡 Registra tus gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : "")}
       </div>
+
+      <div class="card" style="border-left:4px solid var(--flame)">
+        <h2 style="margin-bottom:10px">Para actuar</h2>
+        ${accTop.map((a) => `<div style="font-size:13.5px;padding:8px 0;border-bottom:1px solid var(--linea);line-height:1.45">${a}</div>`).join("")}
+      </div>
+
+      ${cardVistazo(tp, ins)}
 
       <div class="card">
         <h2 style="margin-bottom:8px">Meta de compras (semana)</h2>
-        <div class="barra-track" style="height:14px"><span class="barra-fill" style="width:${pct}%;background:${cMeta}"></span></div>
-        <div class="sub" style="margin-top:6px">${meta > 0 ? `Llevas ${money(gasto)} de ${money(meta)} · ${Math.round(pct)}% usado` : "Define tu meta de compras semanal abajo."}</div>
+        <div class="barra-track" style="height:12px"><span class="barra-fill" style="width:${pct}%;background:${cMeta}"></span></div>
+        <div class="sub" style="margin-top:6px">${meta > 0 ? `Llevas ${money(gasto)} de ${money(meta)} · ${Math.round(pct)}% usado` : "Aún sin meta. Defínela abajo o en Gastos → Meta."}</div>
         <div class="fila" style="margin-top:10px;gap:8px">
           <input id="meta" type="number" step="any" inputmode="decimal" value="${meta || ""}" placeholder="Meta semanal (MXN)" style="flex:1" />
           <button class="btn sec" id="guardar" style="flex:none;width:auto">Guardar</button>
         </div>
-        <div class="sub" style="margin-top:6px;font-size:11.5px">Aplica de esta semana en adelante; las anteriores quedan fijas.</div>
         <div id="ok"></div>
-      </div>
-
-      <div class="card">
-        <h2 style="margin-bottom:6px">Punto de equilibrio</h2>
-        ${gfMes === 0
-          ? `<div class="sub">Registra tus gastos fijos (Gastos → Fijos) para calcularlo.</div>`
-          : contrib <= 0.02
-          ? `<div class="aviso-box">Con costo variable ${costoVarPct}% casi no queda margen; bájalo primero.</div>`
-          : `<div class="row-stats">
-               <div class="stat"><div class="n">${money(beDia)}</div><div class="l">por día</div></div>
-               <div class="stat"><div class="n">${money(beSem)}</div><div class="l">por semana</div></div>
-             </div>
-             <div class="sub" style="margin-top:6px">Para NO perder, con margen <b>${Math.round(contrib * 100)}%</b>.${ventaRefDia > 0 ? (ventaRefDia >= beDia ? ` La semana pasada vendiste ${money(ventaRefDia)}/día ✅` : ` La semana pasada vendiste ${money(ventaRefDia)}/día ⚠️`) : ""}</div>
-             <label class="campo" style="margin-top:8px"><span>Costo variable (% de la venta)</span>
-               <input id="cvpct" type="number" step="any" inputmode="decimal" value="${costoVarPct}" /></label>`}
       </div>
 
       <div class="card">
@@ -207,8 +253,6 @@ function renderOwner(el) {
 
     el.querySelector("#ant").addEventListener("click", () => { off++; rerender(); });
     el.querySelector("#sig").addEventListener("click", () => { off = Math.max(0, off - 1); rerender(); });
-    const cvEl = el.querySelector("#cvpct");
-    if (cvEl) cvEl.addEventListener("change", () => store.guardarConfig({ costoVarPct: num(cvEl.value) }).catch(() => {}));
     const gBtn = el.querySelector("#guardar");
     if (gBtn) gBtn.addEventListener("click", async () => {
       const v = num(el.querySelector("#meta").value);

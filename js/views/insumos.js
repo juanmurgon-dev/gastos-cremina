@@ -102,8 +102,9 @@ function renderPrecios(el) {
 
     lista.innerHTML = items.slice(0, 300).map((i) => {
       const v = i.variacion;
-      const flecha = v > 0.005 ? `<span class="up">▲ ${(v * 100).toFixed(0)}%</span>`
-        : v < -0.005 ? `<span class="down">▼ ${(Math.abs(v) * 100).toFixed(0)}%</span>`
+      // Solo marca alza/baja si el precio se movió al menos $1 (evita ruido por centavos).
+      const flecha = i.cambio >= 1 ? `<span class="up">▲ ${money(i.cambio)} (${(v * 100).toFixed(0)}%)</span>`
+        : i.cambio <= -1 ? `<span class="down">▼ ${money(Math.abs(i.cambio))} (${(Math.abs(v) * 100).toFixed(0)}%)</span>`
         : `<span class="sub">=</span>`;
       return `
         <div class="ticket" data-n="${encodeURIComponent(i.nombre.toLowerCase())}">

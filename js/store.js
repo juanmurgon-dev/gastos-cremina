@@ -594,6 +594,8 @@ export function preciosPorInsumo() {
     const ultimo = v.registros[0];
     const previo = v.registros.find((r) => r.precio !== ultimo.precio && r.fecha < ultimo.fecha);
     v.precioActual = ultimo.precio;
+    v.precioPrevio = previo ? previo.precio : null;
+    v.cambio = previo ? (ultimo.precio - previo.precio) : 0;   // cambio absoluto en $ (para alertas de ±$1)
     v.unidad = ultimo.unidad;
     v.variacion = previo && previo.precio ? (ultimo.precio - previo.precio) / previo.precio : 0;
     v.veces = v.registros.length;
