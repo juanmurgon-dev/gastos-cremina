@@ -1,6 +1,6 @@
 // Editor de un ticket (proveedor, fecha y líneas). Se reutiliza al
 // capturar un ticket nuevo y al corregir uno existente.
-import { AREAS, TIPOS, UNIDADES, num, money, proveedoresConocidos, sugerirProveedor } from "../store.js";
+import { AREAS, TIPOS, UNIDADES, num, money, proveedoresConocidos, sugerirProveedor, proveedoresDir, emparejarProveedorDir, normProv } from "../store.js";
 
 function opciones(lista, sel) {
   return lista.map((o) => `<option value="${o}"${o === sel ? " selected" : ""}>${o}</option>`).join("");
@@ -35,6 +35,20 @@ function escapar(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// Nombres para el autocompletado: directorio + historial de tickets, sin repetir.
+function nombresProveedor() {
+  const vistos = new Set(), out = [];
+  for (const p of proveedoresDir()) {
+    const k = normProv(p.nombre);
+    if (p.nombre && !vistos.has(k)) { vistos.add(k); out.push(p.nombre); }
+  }
+  for (const p of proveedoresConocidos()) {
+    const k = normProv(p.nombre);
+    if (!vistos.has(k)) { vistos.add(k); out.push(p.nombre); }
+  }
+  return out;
+}
+
 /**
  * Crea un editor dentro de `contenedor`. Devuelve { getValue }.
  */
@@ -44,7 +58,7 @@ export function crearEditor(contenedor, ticket = {}) {
     <div class="fila">
       <label class="campo"><span>Proveedor</span>
         <input data-prov list="provDL" autocomplete="off" value="${escapar(ticket.proveedor || "")}" placeholder="Ej. Central de Abastos" />
-        <datalist id="provDL">${proveedoresConocidos().map((p) => `<option value="${escapar(p.nombre)}"></option>`).join("")}</datalist>
+        <datalist id="provDL">${nombresProveedor().map((n) => `<option value="${escapar(n)}"></option>`).join("")}</datalist>
         <div data-prov-sug></div></label>
       <label class="campo"><span>Fecha</span>
         <input data-fecha type="date" value="${ticket.fecha || ""}" /></label>
@@ -59,13 +73,27 @@ export function crearEditor(contenedor, ticket = {}) {
   const totalEl = contenedor.querySelector("[data-total]");
 
   // Sugerir un proveedor existente si el escrito se parece (errores de dedo).
+  // Prioriza el directorio de proveedores; si no, el historial de tickets.
   const provInput = contenedor.querySelector("[data-prov]");
   const provSug = contenedor.querySelector("[data-prov-sug]");
+  function pill(nombre, prefijo) {
+    provSug.innerHTML = `<button type="button" class="pill" data-usar style="margin-top:6px;cursor:pointer;border:none">${prefijo} <b style="margin:0 4px">${escapar(nombre)}</b>? Usar</button>`;
+    provSug.querySelector("[data-usar]").addEventListener("click", () => { provInput.value = nombre; provSug.innerHTML = ""; });
+  }
   function revisarProv() {
-    const s = sugerirProveedor(provInput.value.trim());
+    const val = provInput.value.trim();
+    if (!val) { provSug.innerHTML = ""; return; }
+    // 1) ¿coincide con una ficha del directorio, aunque escrita distinto?
+    const m = emparejarProveedorDir(val);
+    if (m) {
+      if (normProv(m.proveedor.nombre) === normProv(val)) { provSug.innerHTML = ""; return; }
+      pill(m.proveedor.nombre, "Se clasificará como");
+      return;
+    }
+    // 2) parecido en el historial de tickets
+    const s = sugerirProveedor(val);
     if (!s) { provSug.innerHTML = ""; return; }
-    provSug.innerHTML = `<button type="button" class="pill" data-usar style="margin-top:6px;cursor:pointer;border:none">¿Quisiste decir <b style="margin:0 4px">${escapar(s.nombre)}</b>? Usar</button>`;
-    provSug.querySelector("[data-usar]").addEventListener("click", () => { provInput.value = s.nombre; provSug.innerHTML = ""; });
+    pill(s.nombre, "¿Quisiste decir");
   }
   provInput.addEventListener("change", revisarProv);
   provInput.addEventListener("blur", revisarProv);

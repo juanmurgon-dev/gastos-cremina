@@ -4,6 +4,7 @@ import { COLOR_AREA, AREAS, money, fechaBonita } from "../store.js";
 import { descargarCSV } from "../csv.js";
 import * as capturar from "./capturar.js";
 import * as tickets from "./tickets.js";
+import * as proveedores from "./proveedores.js";
 
 // Hub de Insumos: Capturar (registrar gasto) · Tickets (historial) · Precios.
 export function render(el, ctx) {
@@ -12,7 +13,8 @@ export function render(el, ctx) {
     <div class="segmented" style="font-size:13px">
       <button data-s="capturar">Capturar</button>
       <button data-s="tickets">Tickets</button>
-      <button data-s="precios">Lista de Precios</button>
+      <button data-s="precios">Precios</button>
+      <button data-s="proveedores">Proveedores</button>
     </div>
     <div id="isub"></div>`;
   const subEl = el.querySelector("#isub");
@@ -24,6 +26,7 @@ export function render(el, ctx) {
     subEl.innerHTML = "";
     limpiar = sub === "capturar" ? capturar.render(subEl, ctx)
       : sub === "tickets" ? tickets.render(subEl, ctx)
+      : sub === "proveedores" ? proveedores.render(subEl, ctx)
       : renderPrecios(subEl);
   }
   marcar(); renderSub();

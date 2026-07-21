@@ -238,8 +238,9 @@ export async function init() {
 
 // ── Escribir ────────────────────────────────────────────────
 export async function guardarTicket(t) {
+  const proveedor = await clasificarProveedorTicket(t.proveedor || "");
   const { error } = await supabase.from("tickets").insert({
-    proveedor: t.proveedor || "",
+    proveedor,
     fecha: t.fecha || hoyISO(),
     total: num(t.total),
     aviso: t.aviso || "",
@@ -253,7 +254,7 @@ export async function guardarTicket(t) {
 
 export async function actualizarTicket(id, datos) {
   const patch = {};
-  if ("proveedor" in datos) patch.proveedor = datos.proveedor;
+  if ("proveedor" in datos) patch.proveedor = await clasificarProveedorTicket(datos.proveedor);
   if ("fecha" in datos) patch.fecha = datos.fecha || hoyISO();
   if ("total" in datos) patch.total = num(datos.total);
   if ("aviso" in datos) patch.aviso = datos.aviso;
@@ -511,6 +512,108 @@ export async function deshacerAliasProveedor(claves) {
   for (const k of claves) delete al[k];
   await guardarConfig({ proveedorAlias: al });
 }
+// ── Directorio de proveedores (con datos de contacto) ───────
+// Se guarda en config.proveedoresDir (JSON), igual que los alias. Cada ficha:
+// { id, nombre, telefono, correo, direccion }.
+export function proveedoresDir() {
+  const d = state.config && state.config.proveedoresDir;
+  return Array.isArray(d) ? d : [];
+}
+
+function nuevoIdProv() {
+  return (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID() : "p" + Date.now() + Math.round(Math.random() * 1e6);
+}
+
+function limpiarProv(p) {
+  return {
+    nombre: (p.nombre || "").toString().trim(),
+    telefono: (p.telefono || "").toString().trim(),
+    correo: (p.correo || "").toString().trim(),
+    direccion: (p.direccion || "").toString().trim(),
+  };
+}
+
+// Alta o edición de una ficha. Si trae id existente, la actualiza; si no, crea.
+export async function guardarProveedorDir(p) {
+  const dir = proveedoresDir().slice();
+  const limpio = { id: p.id || nuevoIdProv(), ...limpiarProv(p) };
+  if (!limpio.nombre) throw new Error("El proveedor necesita un nombre.");
+  const i = dir.findIndex((x) => x.id === limpio.id);
+  if (i >= 0) dir[i] = { ...dir[i], ...limpio };
+  else dir.push(limpio);
+  await guardarConfig({ proveedoresDir: dir });
+  return limpio;
+}
+
+export async function borrarProveedorDir(id) {
+  await guardarConfig({ proveedoresDir: proveedoresDir().filter((x) => x.id !== id) });
+}
+
+// Importa una lista (típicamente de un CSV). Fusiona por nombre normalizado:
+// actualiza la ficha existente (sin borrar datos que ya tenía) y agrega las
+// nuevas. Devuelve { nuevos, actualizados }.
+export async function importarProveedoresDir(lista) {
+  const dir = proveedoresDir().slice();
+  const idx = new Map(dir.map((p, i) => [normProv(p.nombre), i]));
+  let nuevos = 0, actualizados = 0;
+  for (const raw of lista || []) {
+    const p = limpiarProv(raw);
+    if (!p.nombre) continue;
+    const k = normProv(p.nombre);
+    if (idx.has(k)) {
+      const i = idx.get(k);
+      dir[i] = {
+        ...dir[i],
+        nombre: p.nombre,
+        telefono: p.telefono || dir[i].telefono,
+        correo: p.correo || dir[i].correo,
+        direccion: p.direccion || dir[i].direccion,
+      };
+      actualizados++;
+    } else {
+      idx.set(k, dir.length);
+      dir.push({ id: nuevoIdProv(), ...p });
+      nuevos++;
+    }
+  }
+  await guardarConfig({ proveedoresDir: dir });
+  return { nuevos, actualizados };
+}
+
+// Empareja un nombre libre contra el directorio: exacto por clave normalizada,
+// o el más parecido dentro de un margen de error de dedo. null si no hay ficha
+// suficientemente cercana. Devuelve { proveedor, exacto }.
+export function emparejarProveedorDir(nombre) {
+  const dir = proveedoresDir();
+  const raw = (nombre || "").trim();
+  if (!dir.length || !raw) return null;
+  const key = normProv(raw);
+  const exacto = dir.find((p) => normProv(p.nombre) === key);
+  if (exacto) return { proveedor: exacto, exacto: true };
+  let best = null, bestD = Infinity;
+  for (const p of dir) {
+    const k2 = normProv(p.nombre);
+    if (!k2) continue;
+    const d = lev(key, k2);
+    const tol = Math.max(1, Math.floor(Math.min(key.length, k2.length) * 0.34));
+    if (d <= tol && d < bestD) { best = p; bestD = d; }
+  }
+  return best ? { proveedor: best, exacto: false } : null;
+}
+
+// Se llama al guardar/editar un ticket: clasifica su proveedor contra el
+// directorio. Si hay ficha existente (o la más parecida) devuelve SU nombre
+// canónico; si es nuevo, crea la ficha (editable después) y lo deja como venía.
+export async function clasificarProveedorTicket(nombre) {
+  const raw = (nombre || "").trim();
+  if (!raw) return raw;
+  const m = emparejarProveedorDir(raw);
+  if (m) return m.proveedor.nombre;
+  try { await guardarProveedorDir({ nombre: raw }); } catch (e) { /* no bloquea el ticket */ }
+  return raw;
+}
+
 // Distancia de edición (Levenshtein) para tolerar errores de dedo.
 function lev(a, b) {
   const m = a.length, n = b.length;

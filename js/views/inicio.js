@@ -148,29 +148,6 @@ function grid2(tiles) {
   return `<div style="display:grid;grid-template-columns:${cols};gap:10px">${tiles.join("")}</div>`;
 }
 
-// Ranking "Más vendidos": top 3 platillos y top 3 bebidas, cada uno con su
-// tipo/sabor real (no leche/temperatura). Así ves, p.ej., cuál espresso tonic ganó.
-function filaRank(x) {
-  const t = x.tipo && !ES_SECUNDARIO.test(x.tipo.grupo || "") ? x.tipo : null;
-  const nombre = esc(x.producto) + (t ? ` · <b style="color:var(--verde)">${esc(t.opcion)}</b>` : "");
-  return `<div class="barra-row" style="justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--linea)">
-    <span style="flex:1;min-width:0;font-size:13.5px">${nombre}</span>
-    <span class="val" style="width:auto;white-space:nowrap">${Math.round(x.u)}</span>
-  </div>`;
-}
-function cardMasVendidos(tp) {
-  if (!tp || (!tp.topPlatillos.length && !tp.topBebidas.length)) {
-    return `<div class="card"><h2 style="margin-bottom:6px">🏆 Más vendidos</h2>
-      <div class="sub">Importa tu reporte de ventas por producto (Ventas → Productos) para ver aquí tus más vendidos.</div></div>`;
-  }
-  return `<div class="card">
-    <h2 style="margin-bottom:2px">🏆 Más vendidos</h2>
-    <div class="sub" style="margin-bottom:8px;font-size:11.5px">Periodo ${esc(tp.periodo || "")} · unidades</div>
-    ${tp.topPlatillos.length ? `<div class="titulo-seccion">🍽️ Platillos</div>${tp.topPlatillos.map(filaRank).join("")}` : ""}
-    ${tp.topBebidas.length ? `<div class="titulo-seccion" style="margin-top:12px">☕ Bebidas</div>${tp.topBebidas.map(filaRank).join("")}` : ""}
-  </div>`;
-}
-
 // "De un vistazo": lo que sube/baja de venta y tu insumo clave.
 function cardVistazo(tp, ins, cd) {
   const tiles = [];
@@ -326,7 +303,6 @@ function renderOwner(el) {
         ${accTop.map((a) => `<div style="font-size:13.5px;padding:8px 0;border-bottom:1px solid var(--linea);line-height:1.45">${a}</div>`).join("")}
       </div>
 
-      ${cardMasVendidos(tp)}
       ${cardVistazo(tp, ins, cd)}
 
       <div class="card">
