@@ -170,9 +170,10 @@ export function render(el) {
 
       <div class="card">
         <h2>Agregar insumo</h2>
-        <label class="campo"><span>Insumo</span>
-          <input id="rqNom" list="rqDL" placeholder="Ej. Tomate saladet" autocomplete="off" /></label>
-        <datalist id="rqDL">${insumos.map((i) => `<option value="${esc(i.nombre)}"></option>`).join("")}</datalist>
+        <label class="campo" style="position:relative"><span>Insumo</span>
+          <input id="rqNom" placeholder="Escribe y elige, ej. carne…" autocomplete="off" />
+          <div id="rqSug" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--blanco);border:1px solid var(--linea);border-radius:12px;box-shadow:var(--sombra);max-height:250px;overflow-y:auto;margin-top:4px"></div>
+        </label>
         <div style="display:flex;gap:8px">
           <label class="campo" style="flex:1"><span>Cantidad</span>
             <input id="rqCant" type="number" step="any" inputmode="decimal" placeholder="0" /></label>
@@ -203,6 +204,34 @@ export function render(el) {
       const hit = byName.get($("#rqNom").value.trim().toLowerCase());
       if (hit && !$("#rqUni").value) $("#rqUni").value = hit.unidad || "";
     });
+
+    // Autocompletar: al escribir, despliega los insumos que coinciden (ej. "carne").
+    const nomEl = $("#rqNom"), sugEl = $("#rqSug");
+    const cerrarSug = () => { sugEl.style.display = "none"; sugEl.innerHTML = ""; };
+    function abrirSug() {
+      const q = nomEl.value.trim().toLowerCase();
+      let items = insumos;
+      if (q) items = insumos.filter((i) => i.nombre.toLowerCase().includes(q));
+      items = items.slice(0, 8);
+      if (!items.length) { cerrarSug(); return; }
+      sugEl.innerHTML = items.map((i) => `
+        <div class="ac-item" data-n="${esc(i.nombre)}" style="padding:11px 13px;cursor:pointer;border-bottom:1px solid var(--linea);font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:center">
+          <span>${esc(i.nombre)}</span>
+          <span class="sub" style="font-size:11.5px;white-space:nowrap">${esc(i.unidad || "")}${i.precioActual ? " · " + money(i.precioActual) : ""}</span>
+        </div>`).join("");
+      sugEl.style.display = "block";
+      sugEl.querySelectorAll(".ac-item").forEach((it) => it.addEventListener("mousedown", (ev) => {
+        ev.preventDefault();   // selecciona antes del blur
+        nomEl.value = it.dataset.n;
+        const hit = byName.get(it.dataset.n.toLowerCase());
+        if (hit) $("#rqUni").value = hit.unidad || $("#rqUni").value;
+        cerrarSug();
+        $("#rqCant").focus();
+      }));
+    }
+    nomEl.addEventListener("input", abrirSug);
+    nomEl.addEventListener("focus", abrirSug);
+    nomEl.addEventListener("blur", () => setTimeout(cerrarSug, 150));
     $("#rqAdd").addEventListener("click", () => {
       const nombre = $("#rqNom").value.trim();
       const cantidad = num($("#rqCant").value);

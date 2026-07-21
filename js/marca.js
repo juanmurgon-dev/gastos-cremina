@@ -22,15 +22,15 @@ function pintarHeader(nombre, logo) {
   const m = document.getElementById("marca");
   if (!m) return;
   if (!nombre && !logo) {
-    m.innerHTML = `<span class="wordmark-cifra">Cifra</span>`;
+    m.innerHTML = `<span class="wordmark-cifra">Pulsify</span>`;
     return;
   }
   m.innerHTML = `
     <span style="display:inline-flex;align-items:center;gap:9px">
       ${logo ? `<img src="${logo}" alt="" style="width:30px;height:30px;border-radius:9px;object-fit:cover;border:1px solid rgba(255,255,255,.14);flex:none"/>` : ""}
       <span style="display:flex;flex-direction:column;line-height:1.05">
-        <span style="font-family:'Poppins',sans-serif;color:var(--tinta);font-size:16px;font-weight:600">${escapar(nombre || "Cifra")}</span>
-        <span style="font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--gris);margin-top:2px">por Cifra</span>
+        <span style="font-family:'Poppins',sans-serif;color:var(--tinta);font-size:16px;font-weight:600">${escapar(nombre || "Pulsify")}</span>
+        <span style="font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--gris);margin-top:2px">por Pulsify</span>
       </span>
     </span>`;
 }
@@ -40,7 +40,7 @@ let manifestURL = null;
 function aplicarPWA(nombre, logo) {
   const nom = (nombre || "").trim();
   if (nom) {
-    document.title = nom + " · Cifra";
+    document.title = nom + " · Pulsify";
     setMeta("apple-mobile-web-app-title", nom);
   }
   if (logo) setLink("apple-touch-icon", logo);
@@ -53,9 +53,9 @@ function aplicarPWA(nombre, logo) {
       : [{ src: new URL("icons/icon-192.png", location.href).href, sizes: "192x192", type: "image/png" },
          { src: new URL("icons/icon-512.png", location.href).href, sizes: "512x512", type: "image/png" }];
     const man = {
-      name: nom || "Cifra",
-      short_name: (nom || "Cifra").slice(0, 12),
-      description: "Control financiero para tu restaurante — por Cifra",
+      name: nom || "Pulsify",
+      short_name: (nom || "Pulsify").slice(0, 12),
+      description: "Control financiero para tu restaurante — por Pulsify",
       start_url: homeAbs, scope: homeAbs,
       display: "standalone", orientation: "portrait",
       background_color: "#f1fbfa", theme_color: "#f1fbfa", lang: "es-MX",
@@ -88,7 +88,7 @@ export function abrirPersonalizar() {
   bg.innerHTML = `
     <div class="modal">
       <h2>Personaliza tu marca</h2>
-      <p class="sub" style="margin-top:0">Pon el logo y nombre de tu restaurante. Aparecen aquí y en el ícono cuando guardas la app en tu pantalla de inicio. <b>Cifra</b> sigue siendo tu plataforma.</p>
+      <p class="sub" style="margin-top:0">Pon el logo y nombre de tu restaurante. Aparecen aquí y en el ícono cuando guardas la app en tu pantalla de inicio. <b>Pulsify</b> sigue siendo tu plataforma.</p>
       <div style="display:flex;align-items:center;gap:14px;margin:14px 0">
         <div id="prev" style="width:74px;height:74px;border-radius:18px;background:var(--blanco);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none">
           ${logoActual ? `<img src="${logoActual}" style="width:100%;height:100%;object-fit:cover"/>` : `<span class="sub" style="font-size:11px">Sin logo</span>`}

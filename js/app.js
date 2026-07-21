@@ -5,6 +5,7 @@ import { supabase, ENV } from "./supabase-init.js";
 import * as store from "./store.js";
 import * as marca from "./marca.js";
 import * as proveedores from "./proveedores.js";
+import * as onboarding from "./onboarding.js";
 
 import * as inicio from "./views/inicio.js";
 import * as reportes from "./views/reportes.js";
@@ -13,7 +14,7 @@ import * as insumos from "./views/insumos.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.34";
+export const APP_VERSION = "v3.36";
 export const APP_FECHA = "15 jul 2026";
 
 const VISTAS = {
@@ -66,8 +67,8 @@ function montarLogin() {
   app.innerHTML = `
     <div class="login">
       <div class="card">
-        <div class="marca-cifra">Cifra</div>
-        <p class="sub" style="margin-top:2px">El control financiero de tu restaurante</p>
+        <div class="marca-cifra">Pulsify</div>
+        <p class="sub" style="margin-top:2px">Mide el pulso de tu negocio</p>
         <div id="err"></div>
         <form id="f" style="margin-top:16px;text-align:left">
           <label class="campo"><span>Correo</span>
@@ -101,7 +102,7 @@ function montarShell(user) {
   app.innerHTML = `
     <div class="shell">
       <header class="top">
-        <span id="marca" style="cursor:pointer" title="Personalizar tu marca"><span class="wordmark-cifra">Cifra</span></span>
+        <span id="marca" style="cursor:pointer" title="Personalizar tu marca"><span class="wordmark-cifra">Pulsify</span></span>
         <button class="hamb" id="menu" aria-label="Ajustes" title="Ajustes">☰</button>
       </header>
       <main class="vista" id="vista"></main>
@@ -145,7 +146,7 @@ function montarShell(user) {
     marca.aplicarMarcaActual();
     if (store.state.listo && store.state.multiTenant && !store.state.orgId && !orgPedida) {
       orgPedida = true;
-      pedirRestaurante();
+      onboarding.abrir();
       return;
     }
     if (store.state.perfil.cargado && !store.state.perfil.nombre && !nombrePedido) {
@@ -198,35 +199,6 @@ function pintarTabs() {
   }).join("");
   const clave = (location.hash.replace("#/", "") || "inicio");
   tabs.querySelectorAll("a").forEach((a) => a.classList.toggle("activo", a.dataset.k === clave));
-}
-
-function pedirRestaurante() {
-  const bg = document.createElement("div");
-  bg.className = "modal-bg";
-  bg.innerHTML = `
-    <div class="modal">
-      <h2>¿Cómo se llama tu restaurante?</h2>
-      <p class="sub" style="margin-top:0">Creamos tu espacio. Solo tú y tu equipo verán sus datos.</p>
-      <input id="rest" placeholder="Ej. Mi Bistró" />
-      <button class="btn" id="okrest" style="margin-top:12px">Crear mi restaurante</button>
-      <div id="resterr"></div>
-    </div>`;
-  document.body.appendChild(bg);
-  const input = bg.querySelector("#rest");
-  input.focus();
-  bg.querySelector("#okrest").addEventListener("click", async () => {
-    const nombre = input.value.trim();
-    if (!nombre) return;
-    const btn = bg.querySelector("#okrest");
-    btn.disabled = true; btn.textContent = "Creando…";
-    try {
-      await store.crearOrg(nombre);
-      location.reload();   // recarga limpia con el restaurante nuevo
-    } catch (e) {
-      bg.querySelector("#resterr").innerHTML = `<div class="error-box" style="margin-top:10px">No pude crear el restaurante: ${(e && e.message) || e}</div>`;
-      btn.disabled = false; btn.textContent = "Crear mi restaurante";
-    }
-  });
 }
 
 function pedirNombre() {

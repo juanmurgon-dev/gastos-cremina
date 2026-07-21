@@ -55,13 +55,28 @@ body {
 h1, h2, h3, .card h2 { font-family: inherit; font-weight: 700; letter-spacing: -.01em; }
 
 /* Marca del producto: "Cifra" */
+/* Wordmark Pulsify: onda de pulso ámbar cruzando la palabra por la mitad. */
 .marca-cifra {
+  position: relative; display: inline-block;
   font-weight: 800; font-size: 46px; letter-spacing: -.03em; line-height: 1;
   color: var(--tinta);
 }
-.marca-cifra::after { content: "."; color: var(--amber); }
-.wordmark-cifra { font-weight: 800; font-size: 22px; letter-spacing: -.02em; color: var(--tinta); }
-.wordmark-cifra::after { content: "."; color: var(--amber); }
+.marca-cifra::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 52%; height: 22px; transform: translateY(-50%);
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 12' preserveAspectRatio='none'%3E%3Cpath d='M0 6 Q3 1 6 6 T12 6 T18 6 T24 6' fill='none' stroke='%23ff9f1c' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: repeat-x; background-position: center; background-size: 24px 14px;
+}
+.wordmark-cifra {
+  position: relative; display: inline-block;
+  font-weight: 800; font-size: 22px; letter-spacing: -.02em; color: var(--tinta);
+}
+.wordmark-cifra::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 54%; height: 12px; transform: translateY(-50%);
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 12' preserveAspectRatio='none'%3E%3Cpath d='M0 6 Q3 1 6 6 T12 6 T18 6 T24 6' fill='none' stroke='%23ff9f1c' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: repeat-x; background-position: center; background-size: 15px 9px;
+}
 #app { min-height: 100%; }
 
 .cargando { position: fixed; inset: 0; display: grid; place-items: center; color: var(--gris); font-size: 15px; }

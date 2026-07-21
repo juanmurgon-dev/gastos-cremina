@@ -1,7 +1,7 @@
 {
-  "name": "Cifra",
-  "short_name": "Cifra",
-  "description": "Control y análisis financiero para restaurantes",
+  "name": "Pulsify",
+  "short_name": "Pulsify",
+  "description": "Mide el pulso de tu negocio: márgenes, punto de equilibrio y análisis en tiempo real.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
