@@ -331,14 +331,15 @@ function barCostRow(nombre, venta, pct, color) {
 
 // Grupo "principal" de un platillo: Tipo… → Sabor → (evita Leche/temperatura).
 // La leche se analiza aparte, así que no debe ser el grupo mostrado del café.
-const ES_SECUNDARIO = /leche|fr[íi]o|caliente|shot|cold foam/i;
+const ES_SECUNDARIO = /leche|fr[íi]o|caliente|shot|cold foam|temperatura/i;
 function elegirGrupo(grupos) {
-  const nombres = Object.keys(grupos);
   const unidades = (g) => grupos[g].reduce((a, r) => a + store.num(r.unidades), 0);
-  let cand = nombres.filter((n) => n.toLowerCase().startsWith("tipo"));
-  if (!cand.length) cand = nombres.filter((n) => n.toLowerCase().startsWith("sabor"));
-  if (!cand.length) cand = nombres.filter((n) => !ES_SECUNDARIO.test(n));
-  if (!cand.length) cand = nombres;
+  // Quita leche/temperatura PRIMERO (para no confundir "Tipo de leche" con el tipo de bebida).
+  const pool = Object.keys(grupos).filter((n) => !ES_SECUNDARIO.test(n));
+  const base = pool.length ? pool : Object.keys(grupos);
+  let cand = base.filter((n) => n.toLowerCase().startsWith("tipo"));
+  if (!cand.length) cand = base.filter((n) => n.toLowerCase().startsWith("sabor"));
+  if (!cand.length) cand = base;
   return cand.sort((a, b) => unidades(b) - unidades(a))[0];
 }
 

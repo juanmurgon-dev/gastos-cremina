@@ -34,14 +34,15 @@ const ES_CORTESIA = /pan de cortes[íi]a|propina/i;   // cortesía y propina no 
 const CAT_BEBIDA = new Set(["Barra de Café", "Bebidas"]);
 
 // Grupo modificador "principal" de un platillo/bebida (Tipo → Sabor; evita leche/temperatura).
-const ES_SECUNDARIO = /leche|fr[íi]o|caliente|shot|cold foam/i;
+const ES_SECUNDARIO = /leche|fr[íi]o|caliente|shot|cold foam|temperatura/i;
 function elegirGrupo(grupos) {
-  const nombres = Object.keys(grupos);
   const unidades = (g) => grupos[g].reduce((a, r) => a + store.num(r.unidades), 0);
-  let cand = nombres.filter((n) => n.toLowerCase().startsWith("tipo"));
-  if (!cand.length) cand = nombres.filter((n) => n.toLowerCase().startsWith("sabor"));
-  if (!cand.length) cand = nombres.filter((n) => !ES_SECUNDARIO.test(n));
-  if (!cand.length) cand = nombres;
+  // Quita leche/temperatura PRIMERO (para no confundir "Tipo de leche" con el tipo de bebida).
+  const pool = Object.keys(grupos).filter((n) => !ES_SECUNDARIO.test(n));
+  const base = pool.length ? pool : Object.keys(grupos);
+  let cand = base.filter((n) => n.toLowerCase().startsWith("tipo"));
+  if (!cand.length) cand = base.filter((n) => n.toLowerCase().startsWith("sabor"));
+  if (!cand.length) cand = base;
   return cand.sort((a, b) => unidades(b) - unidades(a))[0];
 }
 // El tipo/variante más vendido de un producto en un periodo ("qué tipo de chilaquiles/bebida").
