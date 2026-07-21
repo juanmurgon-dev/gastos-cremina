@@ -4,6 +4,8 @@ import * as store from "../store.js";
 import { money, num } from "../store.js";
 
 function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+// Monto compacto (peso entero, sin centavos) para que quepa bien en celular.
+const m0 = (v) => "$" + Math.round(num(v)).toLocaleString("es-MX");
 
 // Rubros con su rango "sano" en restaurantes (% de la venta). El primero que
 // coincide con el concepto se lleva el gasto. "ideal" = tope del rango sano.
@@ -83,9 +85,9 @@ export function montar(el) {
         <h2>Gastos fijos</h2>
         <p class="sub" style="margin-top:-4px">Lo que pagas cada mes pase lo que pase: renta, sueldos, luz, internet…</p>
         <div class="row-stats" style="margin:10px 0 12px">
-          <div class="stat"><div class="n">${money(mes)}</div><div class="l">Mensual</div></div>
-          <div class="stat"><div class="n">${money(mes / 30 * 7)}</div><div class="l">Semanal</div></div>
-          <div class="stat"><div class="n">${money(mes / 30)}</div><div class="l">Diario</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${m0(mes)}</div><div class="l">Mensual</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${m0(mes / 30 * 7)}</div><div class="l">Semanal</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${m0(mes / 30)}</div><div class="l">Diario</div></div>
         </div>
         <div>${gf.length ? gf.map((g) => fila(g, ventaMes)).join("") : `<div class="sub">Aún no hay gastos fijos. Agrégalos abajo.</div>`}</div>
       </div>
@@ -159,20 +161,20 @@ export function montar(el) {
 
 function fila(g, ventaMes) {
   const pct = ventaMes > 0 ? num(g.monto_mensual) / ventaMes * 100 : 0;
-  return `<div class="barra-row" style="justify-content:space-between">
-    <span class="etq" style="width:auto;flex:1">${esc(g.concepto || "—")}</span>
-    <span class="val">${money(g.monto_mensual)}/mes${ventaMes > 0 ? ` · <b>${pct.toFixed(1)}%</b>` : ""}</span>
-    <button class="linkbtn" data-del="${g.id}" style="color:var(--rojo);padding:0 6px;font-size:16px">✕</button>
+  return `<div class="barra-row" style="justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--linea)">
+    <span class="etq" style="width:auto;flex:1;min-width:0">${esc(g.concepto || "—")}</span>
+    <span class="val" style="width:auto;white-space:nowrap;text-align:right">${m0(g.monto_mensual)}${ventaMes > 0 ? `<span class="sub" style="font-weight:400"> · ${pct.toFixed(1)}%</span>` : ""}</span>
+    <button class="linkbtn" data-del="${g.id}" style="color:var(--rojo);padding:0 2px;font-size:16px;flex:none">✕</button>
   </div>`;
 }
 
 function rowRubro(r, ventaMes) {
   const pct = r.sum / ventaMes * 100;
   const col = colorPct(pct, r.ideal);
-  return `<div class="barra-row">
-    <span class="etq" style="width:150px">${esc(r.nombre)}</span>
+  return `<div class="barra-row" style="gap:8px">
+    <span class="etq" style="width:34%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.nombre)}</span>
     <span class="barra-track"><span class="barra-fill" style="width:${Math.min(100, Math.max(3, pct * 2))}%;background:${col}"></span></span>
-    <span class="val" style="width:118px;text-align:right;color:${col};font-weight:700">${pct.toFixed(1)}%<span style="color:var(--gris);font-weight:400"> · ${r.rango}</span></span>
+    <span class="val" style="width:auto;white-space:nowrap;text-align:right;color:${col};font-weight:700">${pct.toFixed(1)}%<span style="color:var(--gris);font-weight:400"> · ${r.rango}</span></span>
   </div>`;
 }
 
