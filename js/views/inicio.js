@@ -47,8 +47,9 @@ function elegirGrupo(grupos) {
 }
 // El tipo/variante más vendido de un producto en un periodo ("qué tipo de chilaquiles/bebida").
 function topVariante(producto, periodo) {
+  const key = (producto || "").trim().toLowerCase();
   const vars = (store.state.variantes || []).filter((v) =>
-    v.producto === producto && v.periodo === periodo && !ES_CORTESIA.test(v.opcion || ""));
+    (v.producto || "").trim().toLowerCase() === key && v.periodo === periodo && !ES_CORTESIA.test(v.opcion || ""));
   if (!vars.length) return null;
   const grupos = {};
   for (const v of vars) (grupos[v.grupo] = grupos[v.grupo] || []).push(v);
@@ -77,11 +78,10 @@ function topProductos() {
   const arr = [...agg.values()];
   if (!arr.length) return null;
   const top = arr.slice().sort((a, b) => b.u - a.u);
-  const topFood = arr.filter((x) => !CAT_BEBIDA.has(x.cat)).sort((a, b) => b.u - a.u)[0] || null;
-  const topBebida = arr.filter((x) => CAT_BEBIDA.has(x.cat)).sort((a, b) => b.u - a.u)[0] || null;
-  if (topFood) topFood.tipo = topVariante(topFood.producto, periodo);      // qué tipo de platillo
-  if (topBebida) topBebida.tipo = topVariante(topBebida.producto, periodo); // qué tipo de bebida
-  return { periodo, top, topFood, topBebida };
+  const topPlatillos = arr.filter((x) => !CAT_BEBIDA.has(x.cat)).sort((a, b) => b.u - a.u).slice(0, 3);
+  const topBebidas = arr.filter((x) => CAT_BEBIDA.has(x.cat)).sort((a, b) => b.u - a.u).slice(0, 3);
+  for (const x of [...topPlatillos, ...topBebidas]) x.tipo = topVariante(x.producto, periodo); // su tipo/sabor
+  return { periodo, top, topPlatillos, topBebidas, topFood: topPlatillos[0] || null, topBebida: topBebidas[0] || null };
 }
 
 // Movimientos de venta entre el periodo reciente y el anterior:
@@ -148,23 +148,32 @@ function grid2(tiles) {
   return `<div style="display:grid;grid-template-columns:${cols};gap:10px">${tiles.join("")}</div>`;
 }
 
-// Título = producto; subtítulo = total vendido y, si hay un grupo de tipo/sabor
-// real (no leche/temperatura), cuál variante fue la más pedida y cuántas.
-function tituloTop(x) {
-  const t = x.tipo;
-  const usarTipo = t && !ES_SECUNDARIO.test(t.grupo || "");   // no tomes leche/temperatura como "tipo"
-  return {
-    titulo: esc(x.producto),
-    sub: `${Math.round(x.u)} vendidos` + (usarTipo ? ` · +pedido: ${esc(t.opcion)} (${Math.round(t.u)})` : ""),
-  };
+// Ranking "Más vendidos": top 3 platillos y top 3 bebidas, cada uno con su
+// tipo/sabor real (no leche/temperatura). Así ves, p.ej., cuál espresso tonic ganó.
+function filaRank(x) {
+  const t = x.tipo && !ES_SECUNDARIO.test(x.tipo.grupo || "") ? x.tipo : null;
+  const nombre = esc(x.producto) + (t ? ` · <b style="color:var(--verde)">${esc(t.opcion)}</b>` : "");
+  return `<div class="barra-row" style="justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--linea)">
+    <span style="flex:1;min-width:0;font-size:13.5px">${nombre}</span>
+    <span class="val" style="width:auto;white-space:nowrap">${Math.round(x.u)}</span>
+  </div>`;
+}
+function cardMasVendidos(tp) {
+  if (!tp || (!tp.topPlatillos.length && !tp.topBebidas.length)) {
+    return `<div class="card"><h2 style="margin-bottom:6px">🏆 Más vendidos</h2>
+      <div class="sub">Importa tu reporte de ventas por producto (Ventas → Productos) para ver aquí tus más vendidos.</div></div>`;
+  }
+  return `<div class="card">
+    <h2 style="margin-bottom:2px">🏆 Más vendidos</h2>
+    <div class="sub" style="margin-bottom:8px;font-size:11.5px">Periodo ${esc(tp.periodo || "")} · unidades</div>
+    ${tp.topPlatillos.length ? `<div class="titulo-seccion">🍽️ Platillos</div>${tp.topPlatillos.map(filaRank).join("")}` : ""}
+    ${tp.topBebidas.length ? `<div class="titulo-seccion" style="margin-top:12px">☕ Bebidas</div>${tp.topBebidas.map(filaRank).join("")}` : ""}
+  </div>`;
 }
 
-// "De un vistazo": lo que más vendes (con su tipo), lo que sube/baja, y tu insumo clave.
+// "De un vistazo": lo que sube/baja de venta y tu insumo clave.
 function cardVistazo(tp, ins, cd) {
   const tiles = [];
-  if (tp && tp.topFood) { const t = tituloTop(tp.topFood); tiles.push(tile("🍽️", "Platillo top", t.titulo, t.sub, "var(--verde)")); }
-  if (tp && tp.topBebida) { const t = tituloTop(tp.topBebida); tiles.push(tile("☕", "Bebida top", t.titulo, t.sub, "var(--verde)")); }
-  if (tp && !tp.topFood && !tp.topBebida && tp.top[0]) { const t = tituloTop(tp.top[0]); tiles.push(tile("⭐", "Más vendido", t.titulo, t.sub, "var(--verde)")); }
   if (cd && cd.subidas.length) {
     const s = cd.subidas[0];
     tiles.push(tile("🚀", "Subiendo (ojo del bueno)", esc(s.nombre),
@@ -179,10 +188,7 @@ function cardVistazo(tp, ins, cd) {
     `▲ ${money(ins.masSubio.cambio)} · ${money(ins.masSubio.precioActual)}${ins.masSubio.unidad ? "/" + esc(ins.masSubio.unidad) : ""}`, "var(--rojo)"));
   if (ins && ins.masGasto) tiles.push(tile("💸", "En lo que más gastas", esc(ins.masGasto.nombre),
     `${kmoney(ins.masGasto.gasto)} · ${ins.masGasto.veces} compra(s)`, "var(--naranja)"));
-  if (!tiles.length) {
-    return `<div class="card"><h2 style="margin-bottom:6px">De un vistazo</h2>
-      <div class="sub">Captura tickets e importa tus ventas por producto para ver aquí tu radiografía operativa.</div></div>`;
-  }
+  if (!tiles.length) return "";   // sin movimientos ni insumos → no muestres tarjeta vacía
   return `<div class="card"><h2 style="margin-bottom:11px">De un vistazo</h2>${grid2(tiles)}</div>`;
 }
 
@@ -320,6 +326,7 @@ function renderOwner(el) {
         ${accTop.map((a) => `<div style="font-size:13.5px;padding:8px 0;border-bottom:1px solid var(--linea);line-height:1.45">${a}</div>`).join("")}
       </div>
 
+      ${cardMasVendidos(tp)}
       ${cardVistazo(tp, ins, cd)}
 
       <div class="card">
