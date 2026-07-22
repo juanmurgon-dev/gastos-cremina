@@ -416,10 +416,20 @@ export function fechaBonita(iso) {
 
 // ── Agregados para reportes ─────────────────────────────────
 
-// Total de un ticket (suma de sus líneas; si no hay líneas usa .total)
+// El IVA es impuesto, no insumo: se ignora en TODO cálculo de gasto/insumo.
+const ES_IVA = /\biva\b/i;   // "IVA", "IVA 16%", "IVA 8%" — no matchea "oliva"/"saliva"
+
+// Total del ticket tal cual (lo que se pagó, con IVA) — para mostrar el ticket.
 export function totalTicket(t) {
   const s = (t.lineas || []).reduce((a, l) => a + num(l.monto), 0);
   return s || num(t.total);
+}
+
+// Gasto en insumos del ticket: suma sus líneas SIN el IVA (para los análisis).
+export function gastoTicket(t) {
+  const ls = t.lineas || [];
+  if (!ls.length) return num(t.total);
+  return ls.reduce((a, l) => a + (ES_IVA.test(l.descripcion || "") ? 0 : num(l.monto)), 0);
 }
 
 // Todas las líneas (con fecha del ticket) dentro de [desde, hasta] ISO inclusive
@@ -430,6 +440,7 @@ export function lineasEnRango(desdeISO, hastaISO) {
     if (desdeISO && t.fecha < desdeISO) continue;
     if (hastaISO && t.fecha > hastaISO) continue;
     for (const l of t.lineas || []) {
+      if (ES_IVA.test(l.descripcion || "")) continue;   // el IVA no cuenta como gasto de insumo
       out.push({ ...l, fecha: t.fecha, proveedor: t.proveedor, ticketId: t.id });
     }
   }
@@ -461,7 +472,7 @@ export function ultimasSemanas(n) {
     const dom = new Date(lunes);
     dom.setDate(lunes.getDate() + 6);
     const desde = toISO(lunes), hasta = toISO(dom);
-    const total = ticketsEnRango(desde, hasta).reduce((a, t) => a + totalTicket(t), 0);
+    const total = ticketsEnRango(desde, hasta).reduce((a, t) => a + gastoTicket(t), 0);
     semanas.push({ lunes, desde, hasta, etiqueta: etiquetaSemana(lunes), total });
   }
   return semanas;
@@ -484,7 +495,7 @@ export function ventasSemanas(n) {
     dom.setDate(lunes.getDate() + 6);
     const desde = toISO(lunes), hasta = toISO(dom);
     const venta = cortesEnRango(desde, hasta).reduce((a, c) => a + num(c.ventas_total), 0);
-    const gasto = ticketsEnRango(desde, hasta).reduce((a, t) => a + totalTicket(t), 0);
+    const gasto = ticketsEnRango(desde, hasta).reduce((a, t) => a + gastoTicket(t), 0);
     out.push({ lunes, desde, hasta, etiqueta: etiquetaSemana(lunes), venta, gasto });
   }
   return out;
@@ -509,7 +520,7 @@ export function semanaParcial(lunes, dias) {
   const fin = new Date(l); fin.setDate(l.getDate() + Math.max(0, dias - 1));
   const desde = toISO(l), hasta = toISO(fin);
   const venta = cortesEnRango(desde, hasta).reduce((a, c) => a + num(c.ventas_total), 0);
-  const gasto = ticketsEnRango(desde, hasta).reduce((a, t) => a + totalTicket(t), 0);
+  const gasto = ticketsEnRango(desde, hasta).reduce((a, t) => a + gastoTicket(t), 0);
   return { venta, gasto, dias };
 }
 
@@ -725,7 +736,7 @@ export function preciosPorInsumo() {
     for (const l of t.lineas || []) {
       const nombre = (l.descripcion || "").trim();
       if (!nombre) continue;
-      if (/propina/i.test(nombre)) continue;   // la propina no es un insumo
+      if (/propina/i.test(nombre) || ES_IVA.test(nombre)) continue;   // propina/IVA no son insumo
       const key = nombre.toLowerCase();
       if (!map.has(key)) map.set(key, { nombre, area: l.area, registros: [] });
       const pu = num(l.precio_unitario) || (num(l.cantidad) ? num(l.monto) / num(l.cantidad) : num(l.monto));
@@ -780,7 +791,7 @@ export function ritmoCompras() {
   for (const t of state.tickets) {
     for (const l of t.lineas || []) {
       const nombre = (l.descripcion || "").trim();
-      if (!nombre || /propina/i.test(nombre)) continue;
+      if (!nombre || /propina/i.test(nombre) || ES_IVA.test(nombre)) continue;
       const key = nombre.toLowerCase();
       let o = insMap.get(key);
       if (!o) { o = { nombre, area: l.area, fechas: [], montos: [], unidad: l.unidad || "", provs: new Set() }; insMap.set(key, o); }
@@ -807,7 +818,7 @@ export function ritmoCompras() {
     let o = provMap.get(c);
     if (!o) { o = { nombre: c, fechas: [], totales: [] }; provMap.set(c, o); }
     o.fechas.push(t.fecha);
-    o.totales.push(totalTicket(t));
+    o.totales.push(gastoTicket(t));
   }
   const proveedores = [];
   for (const o of provMap.values()) {
@@ -828,7 +839,7 @@ export function prediccionCompras() {
   const { insumos } = ritmoCompras();
   const desde = toISO(lunesDe(new Date()));
   const meta = metaDeSemana(desde);
-  const gastoSemana = ticketsEnRango(desde, hoyISO()).reduce((a, t) => a + totalTicket(t), 0);
+  const gastoSemana = ticketsEnRango(desde, hoyISO()).reduce((a, t) => a + gastoTicket(t), 0);
 
   const pendientes = [];
   for (const i of insumos) {
