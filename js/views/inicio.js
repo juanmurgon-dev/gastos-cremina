@@ -257,6 +257,14 @@ function renderOwner(el) {
     // ── Para actuar: máximo 3 cosas, lo crítico primero ──
     const acc = [];
     if (meta > 0 && gasto > meta) acc.push(`🔴 Te pasaste de tu meta de compras por <b>${money(gasto - meta)}</b>. Frena pedidos que no sean urgentes.`);
+    const pred = store.prediccionCompras();
+    if (pred.pendientes.length) {
+      const nombres = pred.pendientes.slice(0, 3).map((x) => esc(x.nombre)).join(", ");
+      if (pred.seValePasar)
+        acc.push(`🧾 Vas en <b>${money(pred.gastoSemana)}</b> de tu meta <b>${money(pred.meta)}</b>, pero según tu ritmo aún te falta pedir <b>${nombres}</b> (~${money(pred.costoPendiente)}). Ojo, te pasarías del presupuesto.`);
+      else
+        acc.push(`🧾 Según tu ritmo de compras, aún te falta pedir <b>${nombres}</b> (~${money(pred.costoPendiente)}).`);
+    }
     if (venta > 0 && costo > 45) acc.push(`🔴 Tu costo de insumos va en <b>${Math.round(costo)}%</b> (sano ≤35%). Sube precio, ajusta porciones o baja mermas.`);
     if (prev && prev.venta > 0 && ((venta - prev.venta) / prev.venta * 100) <= -12)
       acc.push(`🔻 La venta bajó <b>${Math.round(Math.abs((venta - prev.venta) / prev.venta * 100))}%</b> vs. la semana pasada. Activa una promo o busca a tus clientes frecuentes.`);

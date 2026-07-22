@@ -750,3 +750,95 @@ export function preciosPorInsumo() {
   arr.sort((a, b) => b.veces - a.veces);
   return arr;
 }
+
+// ── Ritmo de compras ────────────────────────────────────────────────────────
+// Cada cuánto compras cada insumo y a cada proveedor, y qué "ya toca pedir".
+// Todo se calcula de los tickets ya registrados (sirve para anticipar pedidos).
+function metricasRitmo(fechasISO) {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const ds = [...new Set(fechasISO.filter(Boolean))].sort();   // fechas únicas, ascendente
+  const fechas = ds.map(parseISO).filter(Boolean);
+  const n = fechas.length;
+  if (!n) return null;
+  const primera = fechas[0], ultima = fechas[n - 1];
+  const dEntre = (a, b) => Math.round((b - a) / 86400000);
+  const diasDesde = Math.max(0, dEntre(ultima, hoy));
+  const intervalo = n >= 2 ? dEntre(primera, ultima) / (n - 1) : null;   // días promedio entre compras
+  const spanDias = Math.max(7, dEntre(primera, hoy) + 1);
+  const porSemana = n / (spanDias / 7);
+  let estado = "ok", urgencia = 0;
+  if (intervalo != null && intervalo > 0) {
+    urgencia = diasDesde / intervalo;                 // 1 = justo toca; >1 = vencido
+    estado = urgencia >= 1 ? "toca" : urgencia >= 0.7 ? "pronto" : "ok";
+  }
+  return { veces: n, ultima: toISO(ultima), diasDesde, intervalo, porSemana, estado, urgencia };
+}
+
+export function ritmoCompras() {
+  // Por insumo (agrupado por descripción normalizada, como preciosPorInsumo).
+  const insMap = new Map();
+  for (const t of state.tickets) {
+    for (const l of t.lineas || []) {
+      const nombre = (l.descripcion || "").trim();
+      if (!nombre || /propina/i.test(nombre)) continue;
+      const key = nombre.toLowerCase();
+      let o = insMap.get(key);
+      if (!o) { o = { nombre, area: l.area, fechas: [], montos: [], unidad: l.unidad || "", provs: new Set() }; insMap.set(key, o); }
+      o.fechas.push(t.fecha);
+      o.montos.push(num(l.monto));
+      if (l.unidad) o.unidad = l.unidad;
+      if (t.proveedor) o.provs.add(canonProv(t.proveedor));
+    }
+  }
+  const insumos = [];
+  for (const o of insMap.values()) {
+    const m = metricasRitmo(o.fechas);
+    if (!m) continue;
+    const montoProm = o.montos.reduce((a, b) => a + b, 0) / o.montos.length;
+    insumos.push({ ...m, nombre: o.nombre, area: o.area, unidad: o.unidad, proveedor: [...o.provs][0] || "", montoProm });
+  }
+
+  // Por proveedor (nombre canónico).
+  const provMap = new Map();
+  for (const t of state.tickets) {
+    const raw = (t.proveedor || "").trim();
+    if (!raw) continue;
+    const c = canonProv(raw);
+    let o = provMap.get(c);
+    if (!o) { o = { nombre: c, fechas: [], totales: [] }; provMap.set(c, o); }
+    o.fechas.push(t.fecha);
+    o.totales.push(totalTicket(t));
+  }
+  const proveedores = [];
+  for (const o of provMap.values()) {
+    const m = metricasRitmo(o.fechas);
+    if (!m) continue;
+    const gastoProm = o.totales.reduce((a, b) => a + b, 0) / o.totales.length;
+    proveedores.push({ ...m, nombre: o.nombre, gastoProm });
+  }
+
+  const ord = (a, b) => (b.urgencia - a.urgencia) || (b.porSemana - a.porSemana);
+  insumos.sort(ord); proveedores.sort(ord);
+  return { insumos, proveedores };
+}
+
+// Predicción para el presupuesto: insumos recurrentes que YA tocan y no se han
+// pedido esta semana, con su costo típico; avisa si te pasarías de la meta.
+export function prediccionCompras() {
+  const { insumos } = ritmoCompras();
+  const desde = toISO(lunesDe(new Date()));
+  const meta = metaDeSemana(desde);
+  const gastoSemana = ticketsEnRango(desde, hoyISO()).reduce((a, t) => a + totalTicket(t), 0);
+
+  const pendientes = [];
+  for (const i of insumos) {
+    if (i.veces < 2 || i.intervalo == null || i.intervalo > 12) continue;   // solo compra frecuente
+    if (i.estado !== "toca") continue;                                      // ya vencido
+    if (i.ultima >= desde) continue;                                        // ya lo pediste esta semana
+    pendientes.push({ nombre: i.nombre, montoProm: i.montoProm, intervalo: i.intervalo, diasDesde: i.diasDesde, unidad: i.unidad });
+  }
+  pendientes.sort((a, b) => b.montoProm - a.montoProm);
+  const costoPendiente = pendientes.reduce((a, p) => a + p.montoProm, 0);
+  const proyectado = gastoSemana + costoPendiente;
+  return { meta, gastoSemana, pendientes, costoPendiente, proyectado, seValePasar: meta > 0 && proyectado > meta };
+}
