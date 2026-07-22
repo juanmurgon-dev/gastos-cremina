@@ -234,12 +234,15 @@ async function procesarPDF(f, semanaBackup) {
 }
 
 export function montar(el) {
+  const usaVar = store.usaVariantes();
+  const semanales = usaVar
+    ? "el <b>reporte de artículos</b> + <b>grupos de modificadores</b> (semanales, súbelos juntos)"
+    : "el <b>reporte de artículos</b> (semanal)";
   el.innerHTML = `
     <div class="card">
       <h2>Importar de Parrot</h2>
       <p class="sub" style="margin-top:0">Sube los archivos que descargas de Parrot:
-      los <b>cortes de caja</b> (diarios), y el <b>reporte de artículos</b> + <b>grupos de modificadores</b>
-      (semanales, súbelos juntos). Acepto <b>Excel</b> y también <b>PDF</b> de los reportes.
+      los <b>cortes de caja</b> (diarios), y ${semanales}. Acepto <b>Excel</b> y también <b>PDF</b> de los reportes.
       Puedes soltar varios de golpe; yo detecto cuál es cuál.</p>
       <label class="btn"><input id="files" type="file" accept=".xlsx,.pdf" multiple hidden> ⬆ Elegir archivos</label>
       <div id="res"></div>

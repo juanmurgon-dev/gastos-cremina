@@ -52,7 +52,9 @@ export function render(el) {
   // Arma la lista de "renglones": una por variante (platillo + opción), o una
   // por platillo cuando no tiene grupo modificador.
   function construirItems(periodo) {
-    const varAll = store.state.variantes || [];
+    // En modo "solo artículo" ignoramos las variantes: el margen se arma a
+    // nivel platillo (el costo se captura por platillo, no por variante).
+    const varAll = store.usaVariantes() ? (store.state.variantes || []) : [];
     const vars = varAll.filter((v) =>
       v.periodo === periodo && !ES_CORTESIA.test(v.producto || "") && !ES_CORTESIA.test(v.opcion || ""));
 

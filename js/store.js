@@ -490,6 +490,18 @@ export function ventasSemanas(n) {
   return out;
 }
 
+// Nivel de detalle de ventas del restaurante: "articulo" | "variante".
+// La preferencia vive en config.detalleVentas ("auto" | "articulo" | "variante").
+// "auto" (o sin definir) = variante SI el restaurante ya subió grupos
+// modificadores; si no, artículo. Así un cliente que no usa variantes no ve
+// avisos pidiéndoselas, y quien sí las usa (p. ej. Cremina) las conserva.
+export function detalleVentas() {
+  const pref = state.config && state.config.detalleVentas;
+  if (pref === "articulo" || pref === "variante") return pref;
+  return (state.variantes && state.variantes.length) ? "variante" : "articulo";
+}
+export function usaVariantes() { return detalleVentas() === "variante"; }
+
 // Venta y gasto de SOLO los primeros `dias` de la semana que arranca en `lunes`.
 // Sirve para comparar "mismo punto de la semana" (día 3 vs día 3 de la anterior).
 export function semanaParcial(lunes, dias) {

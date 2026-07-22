@@ -160,6 +160,7 @@ function productos(cont) {
 
   function pintarPeriodo() {
     const pc = cont.querySelector("#pc");
+    const usaVar = store.usaVariantes();   // ¿este restaurante desglosa por grupo modificador?
     // Pan de Cortesía es cortesía, no venta → se excluye de los análisis.
     const prods = prodAll.filter((p) => p.periodo === periodo && !ES_CORTESIA.test(p.producto || "") && !ES_CORTESIA.test(p.categoria || ""));
     const vars = varAll.filter((v) => v.periodo === periodo && !ES_CORTESIA.test(v.producto || "") && !ES_CORTESIA.test(v.opcion || ""));
@@ -198,22 +199,24 @@ function productos(cont) {
     pc.innerHTML = `
       <button class="btn sec chico" id="expP" style="margin-bottom:12px">⬇ Exportar CSV (${escapar(periodo)})</button>
       ${Object.keys(porCat).length ? `<div class="card"><h2>Venta por categoría</h2>${barrasCat(porCat)}</div>` : ""}
-      ${lecheEnt.length ? `<div class="card"><h2>Leche más pedida</h2>
+      ${(usaVar && lecheEnt.length) ? `<div class="card"><h2>Leche más pedida</h2>
         <p class="sub" style="margin-top:-4px">Total de bebidas por tipo de leche</p>${barrasLeche(lecheEnt)}</div>` : ""}
       <div class="card">
-        <h2>Venta por platillo y variante</h2>
-        ${vars.length
-          ? `<input id="bq" placeholder="Buscar platillo…" style="margin-bottom:10px" />
-             <select id="fcat" style="margin-bottom:12px">
-               <option value="todas">Todos los grupos de comida</option>
-               ${categorias.map((c) => `<option value="${escapar(c)}">${escapar(c)}</option>`).join("")}
-             </select>
-             <div id="plist"></div>`
-          : `<div class="aviso-box">Sube el <b>reporte de grupos de modificadores</b> de esta semana en <b>Importar</b> para ver el desglose por variante.</div>`}
+        <h2>${usaVar ? "Venta por platillo y variante" : "Venta por platillo"}</h2>
+        ${!usaVar
+          ? listaArticulos(prods)
+          : (vars.length
+            ? `<input id="bq" placeholder="Buscar platillo…" style="margin-bottom:10px" />
+               <select id="fcat" style="margin-bottom:12px">
+                 <option value="todas">Todos los grupos de comida</option>
+                 ${categorias.map((c) => `<option value="${escapar(c)}">${escapar(c)}</option>`).join("")}
+               </select>
+               <div id="plist"></div>`
+            : `<div class="aviso-box">Sube el <b>reporte de grupos de modificadores</b> de esta semana en <b>Importar</b> para ver el desglose por variante.</div>`)}
       </div>`;
 
     pc.querySelector("#expP").addEventListener("click", () => {
-      if (vars.length) {
+      if (usaVar && vars.length) {
         const filas = vars.map((v) => [v.producto, v.grupo, v.opcion, store.num(v.unidades), store.num(v.venta)]);
         descargarCSV("productos-variantes-" + periodo, ["Producto", "Grupo", "Variante", "Unidades", "Venta"], filas);
       } else {
@@ -222,7 +225,7 @@ function productos(cont) {
       }
     });
 
-    if (vars.length) {
+    if (usaVar && vars.length) {
       const bq = pc.querySelector("#bq"), fc = pc.querySelector("#fcat");
       bq.addEventListener("input", () => { q = bq.value.trim().toLowerCase(); pintarList(); });
       fc.addEventListener("change", () => { cat = fc.value; pintarList(); });
@@ -358,6 +361,24 @@ function cardPlatillo(x) {
     <div class="sub" style="margin:2px 0 7px">${escapar(x.grupo)}</div>
     ${filas}
   </div>`;
+}
+
+// Venta por platillo sin desglose de variantes (modo "solo artículo").
+function listaArticulos(prods) {
+  const agg = new Map();
+  for (const p of prods) {
+    const k = p.producto || "—";
+    const a = agg.get(k) || { producto: k, cantidad: 0, venta: 0 };
+    a.cantidad += store.num(p.cantidad); a.venta += store.num(p.venta);
+    agg.set(k, a);
+  }
+  const arr = [...agg.values()].sort((a, b) => b.venta - a.venta);
+  if (!arr.length) return `<div class="sub">Sin productos en este periodo.</div>`;
+  const max = Math.max(1, ...arr.map((p) => p.venta));
+  return arr.map((p) => `<div class="barra-row">
+    <span class="etq" style="width:130px">${escapar(p.producto)}</span>
+    <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * p.venta / max)}%;background:var(--naranja);opacity:${opac(p.venta, max)}"></span></span>
+    <span class="val" style="width:120px">${Math.round(p.cantidad)} pz · ${money(p.venta)}</span></div>`).join("");
 }
 
 function barrasCombos(combos) {

@@ -47,6 +47,7 @@ function elegirGrupo(grupos) {
 }
 // El tipo/variante más vendido de un producto en un periodo ("qué tipo de chilaquiles/bebida").
 function topVariante(producto, periodo) {
+  if (!store.usaVariantes()) return null;   // en modo "solo artículo" no hay variantes que mostrar
   const key = (producto || "").trim().toLowerCase();
   const vars = (store.state.variantes || []).filter((v) =>
     (v.producto || "").trim().toLowerCase() === key && v.periodo === periodo && !ES_CORTESIA.test(v.opcion || ""));

@@ -4,6 +4,7 @@
 import { supabase, ENV } from "./supabase-init.js";
 import * as store from "./store.js";
 import * as marca from "./marca.js";
+import * as preferencias from "./preferencias.js";
 import * as proveedores from "./proveedores.js";
 import * as onboarding from "./onboarding.js";
 
@@ -15,8 +16,8 @@ import * as insumos from "./views/insumos.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.40";
-export const APP_FECHA = "21 jul 2026";
+export const APP_VERSION = "v3.41";
+export const APP_FECHA = "22 jul 2026";
 
 const VISTAS = {
   inicio:      { mod: inicio,      ic: "🏠", txt: "Inicio" },
@@ -172,6 +173,7 @@ function abrirMenu() {
       <div class="sub" style="margin:-8px 2px 14px;word-break:break-all">${escaparHtml(usuarioActual?.email || "")}</div>
       <div class="menu-lista">
         ${puedePersonalizar ? `<button class="menu-item" data-a="marca"><span class="mi-ic">🎨</span><span class="mi-tx"><b>Personalizar marca</b><span class="sub">Cambiar logo y nombre del restaurante</span></span></button>` : ""}
+        ${puedePersonalizar ? `<button class="menu-item" data-a="prefs"><span class="mi-ic">⚙️</span><span class="mi-tx"><b>Preferencias</b><span class="sub">Cómo ves los datos de tu restaurante</span></span></button>` : ""}
         <button class="menu-item" data-a="prov"><span class="mi-ic">🏪</span><span class="mi-tx"><b>Unificar proveedores</b><span class="sub">Juntar los que son el mismo</span></span></button>
         <button class="menu-item" data-a="update"><span class="mi-ic">🔄</span><span class="mi-tx"><b>Buscar actualización</b><span class="sub">${badge}${APP_VERSION} · ${APP_FECHA}</span></span></button>
         <button class="menu-item" data-a="salir"><span class="mi-ic">🚪</span><span class="mi-tx"><b>Cerrar sesión</b></span></button>
@@ -186,6 +188,7 @@ function abrirMenu() {
     const a = b.dataset.a;
     cerrar();
     if (a === "marca") marca.abrirPersonalizar();
+    else if (a === "prefs") preferencias.abrirPreferencias();
     else if (a === "prov") proveedores.abrirProveedores();
     else if (a === "update") buscarActualizacion();
     else if (a === "salir") supabase.auth.signOut();
