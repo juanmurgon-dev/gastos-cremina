@@ -3,6 +3,7 @@
 import * as store from "../store.js";
 import { money, fechaBonita } from "../store.js";
 import * as importar from "./importar.js";
+import * as info from "../info.js";
 import { descargarCSV } from "../csv.js";
 
 function kmoney(n) {
@@ -86,7 +87,7 @@ function resumen(cont) {
     <button class="btn sec chico" id="expC" style="margin-bottom:12px">⬇ Exportar cortes CSV</button>
     <div class="card">
       <div class="row-stats">
-        <div class="stat"><div class="n">${kmoney(ventaTotal)}</div><div class="l">Venta histórica</div></div>
+        <div class="stat"><div class="n">${kmoney(ventaTotal)}</div><div class="l">Venta histórica${info.icono("ventaHistorica")}</div></div>
         <div class="stat"><div class="n">${cortes.length}</div><div class="l">Cortes</div></div>
         <div class="stat"><div class="n">${kmoney(ventaTotal / cortes.length)}</div><div class="l">Prom./corte</div></div>
       </div>
@@ -102,12 +103,12 @@ function resumen(cont) {
       <div id="vchart">${chartVenta()}</div>
     </div>
     <div class="card">
-      <h2>Gasto vs Venta (costo %)</h2>
+      <h2>Gasto vs Venta (costo %)${info.icono("costoInsumos")}</h2>
       <p class="sub" style="margin-top:0">Cuánto de tu venta se fue en compras. Menos % = mejor margen.</p>
       ${tablaCosto(conVenta)}
     </div>
     <div class="card">
-      <h2>Cómo te pagan</h2>
+      <h2>Cómo te pagan${info.icono("mezclaPago")}</h2>
       ${mezcla("Efectivo", efectivoT, mezclaTot, "#2ec4b6")}
       ${mezcla("Tarjeta", tarjetaT, mezclaTot, "#ff9f1c")}
       ${mezcla("Transferencia", transfT, mezclaTot, "#3f8a5c")}

@@ -3,6 +3,7 @@
 import * as store from "../store.js";
 import { money, num } from "../store.js";
 import * as dashCompras from "./dash-compras.js";
+import * as info from "../info.js";
 
 // Inicio se adapta al ROL: compras ve su tablero; los demás (owner/gerente/
 // staff/single-tenant) ven el resumen financiero de siempre.
@@ -287,13 +288,13 @@ function renderOwner(el) {
           </div>
           <button class="btn sec chico" id="sig">▶</button>
         </div>
-        <div class="sub" style="text-transform:uppercase;letter-spacing:.09em;font-size:10.5px;margin-top:12px">${heroTit}</div>
+        <div class="sub" style="text-transform:uppercase;letter-spacing:.09em;font-size:10.5px;margin-top:12px">${heroTit}${info.icono("utilidad")}</div>
         <div style="font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1.05;color:${colU}">${sinDatos ? "—" : money(util)}</div>
         <div style="font-weight:700;color:${colU}">${verdicto}${usaProy && !sinDatos ? " (a este ritmo)" : ""}</div>
         <div class="row-stats" style="margin-top:14px">
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:var(--verde-claro)">${kmoney(venta)}</div><div class="l">Venta${parcial ? " (parcial)" : ""}</div></div>
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:${costoCol}">${venta > 0 ? Math.round(costo) + "%" : "—"}</div><div class="l">Costo insumos</div></div>
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${beDia > 0 ? kmoney(beDia) : "—"}</div><div class="l">Vender/día p/ ganar</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:var(--verde-claro)">${kmoney(venta)}</div><div class="l">Venta${parcial ? " (parcial)" : ""}${info.icono("ventaSemana")}</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:${costoCol}">${venta > 0 ? Math.round(costo) + "%" : "—"}</div><div class="l">Costo insumos${info.icono("costoInsumos")}</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${beDia > 0 ? kmoney(beDia) : "—"}</div><div class="l">Vender/día p/ ganar${info.icono("venderDia")}</div></div>
         </div>
         ${sinDatos ? `<div class="sub" style="margin-top:10px">Espera el corte del día para ver cómo vas.</div>`
           : (gfSem === 0 ? `<div class="sub" style="margin-top:8px;font-size:12px">💡 Registra tus gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : "")}
@@ -307,7 +308,7 @@ function renderOwner(el) {
       ${cardVistazo(tp, ins, cd)}
 
       <div class="card">
-        <h2 style="margin-bottom:8px">Meta de compras (semana)</h2>
+        <h2 style="margin-bottom:8px">Meta de compras (semana)${info.icono("metaCompras")}</h2>
         <div class="barra-track" style="height:12px"><span class="barra-fill" style="width:${pct}%;background:${cMeta}"></span></div>
         <div class="sub" style="margin-top:6px">${meta > 0 ? `Llevas ${money(gasto)} de ${money(meta)} · ${Math.round(pct)}% usado` : "Aún sin meta. Defínela abajo o en Gastos → Meta."}</div>
         <div class="fila" style="margin-top:10px;gap:8px">
@@ -318,7 +319,7 @@ function renderOwner(el) {
       </div>
 
       <div class="card">
-        <h2>Tendencia · últimas 6 semanas</h2>
+        <h2>Tendencia · últimas 6 semanas${info.icono("tendencia")}</h2>
         ${ultimas.map((s) => {
           const c = s.venta > 0 ? (s.gasto / s.venta) * 100 : 0;
           return `<div class="barra-row">
