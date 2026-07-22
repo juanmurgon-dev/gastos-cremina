@@ -10,17 +10,19 @@ import * as onboarding from "./onboarding.js";
 import * as inicio from "./views/inicio.js";
 import * as reportes from "./views/reportes.js";
 import * as ventas from "./views/ventas.js";
+import * as margen from "./views/margen.js";
 import * as insumos from "./views/insumos.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.38";
+export const APP_VERSION = "v3.39";
 export const APP_FECHA = "21 jul 2026";
 
 const VISTAS = {
   inicio:      { mod: inicio,      ic: "🏠", txt: "Inicio" },
   insumos:     { mod: insumos,     ic: "📦", txt: "Insumos" },
   ventas:      { mod: ventas,      ic: "💵", txt: "Ventas" },
+  margen:      { mod: margen,      ic: "📈", txt: "Margen" },
   reportes:    { mod: reportes,    ic: "📊", txt: "Gastos" },
   requisicion: { mod: requisicion, ic: "🛒", txt: "Requis." }
 };
@@ -67,8 +69,8 @@ function montarLogin() {
   app.innerHTML = `
     <div class="login">
       <div class="card">
-        <div class="marca-cifra">Pulsify</div>
-        <p class="sub" style="margin-top:2px">Mide el pulso de tu negocio</p>
+        <div class="marca-cifra">Platify</div>
+        <p class="sub" style="margin-top:2px">Del plato a la boca se cae el margen</p>
         <div id="err"></div>
         <form id="f" style="margin-top:16px;text-align:left">
           <label class="campo"><span>Correo</span>
@@ -102,7 +104,7 @@ function montarShell(user) {
   app.innerHTML = `
     <div class="shell">
       <header class="top">
-        <span id="marca" style="cursor:pointer" title="Personalizar tu marca"><span class="wordmark-cifra">Pulsify</span></span>
+        <span id="marca" style="cursor:pointer" title="Personalizar tu marca"><span class="wordmark-cifra">Platify</span></span>
         <button class="hamb" id="menu" aria-label="Ajustes" title="Ajustes">☰</button>
       </header>
       <main class="vista" id="vista"></main>

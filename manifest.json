@@ -1,7 +1,7 @@
 {
-  "name": "Pulsify",
-  "short_name": "Pulsify",
-  "description": "Mide el pulso de tu negocio: márgenes, punto de equilibrio y análisis en tiempo real.",
+  "name": "Platify",
+  "short_name": "Platify",
+  "description": "Del plato a la boca se cae el margen: márgenes, punto de equilibrio y análisis en tiempo real.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

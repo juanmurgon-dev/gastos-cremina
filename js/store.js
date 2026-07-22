@@ -24,6 +24,7 @@ export const state = {
   variantes: [],
   gastosFijos: [],
   requisiciones: [],
+  costosPlatillo: [],   // costo directo por platillo (para el margen)
   perfil: { nombre: "", email: "", cargado: false },
   config: { presupuestoSemanal: 35000, presupuestoPorArea: {} },
   orgId: null,          // id del restaurante (multi-tenant); null = single-tenant
@@ -112,6 +113,34 @@ async function cargarGastosFijos() {
   if (!error && data) { state.gastosFijos = data; notify(); }
 }
 
+async function cargarCostosPlatillo() {
+  // La tabla puede no existir aún (si no corren costos-platillo.sql).
+  const { data, error } = await supabase.from("costos_platillo").select("*");
+  if (!error && data) { state.costosPlatillo = data; notify(); }
+}
+
+// Map producto → costo por porción, para cruzar con las ventas.
+export function mapaCostos() {
+  const m = new Map();
+  for (const c of state.costosPlatillo || []) m.set(c.producto, num(c.costo));
+  return m;
+}
+
+// Guarda (o actualiza) el costo de un platillo.
+export async function guardarCostoPlatillo(producto, costo) {
+  const row = { producto, costo: num(costo), actualizado: new Date().toISOString() };
+  const { error } = await supabase.from("costos_platillo").upsert(row);
+  if (error) throw error;
+  await cargarCostosPlatillo();
+}
+
+// Borra el costo de un platillo (vuelve a quedar "sin costo").
+export async function borrarCostoPlatillo(producto) {
+  const { error } = await supabase.from("costos_platillo").delete().eq("producto", producto);
+  if (error) throw error;
+  await cargarCostosPlatillo();
+}
+
 async function cargarRequisiciones() {
   // La tabla puede no existir aún (si no corren requisiciones.sql).
   const { data, error } = await supabase.from("requisiciones").select("*").order("creado_en", { ascending: false });
@@ -143,7 +172,8 @@ export async function borrarRequisicion(id) {
 // El usuario está autenticado, así que RLS le devuelve solo sus datos.
 export async function exportarRespaldo() {
   const tablas = ["tickets", "cortes", "gastos_fijos", "productos_venta",
-    "modificadores_venta", "combos_venta", "variantes_venta", "requisiciones", "config", "perfiles"];
+    "modificadores_venta", "combos_venta", "variantes_venta", "requisiciones",
+    "costos_platillo", "config", "perfiles"];
   const out = { app: "Cifra", exportado: new Date().toISOString(), tablas: {} };
   for (const t of tablas) {
     const { data, error } = await supabase.from(t).select("*");
@@ -211,7 +241,7 @@ export async function guardarPerfil(nombre) {
 
 // Vuelve a leer ventas/cortes/productos (tras una importación).
 export async function recargarVentas() {
-  await Promise.all([cargarCortes(), cargarProductos()]);
+  await Promise.all([cargarCortes(), cargarProductos(), cargarCostosPlatillo()]);
 }
 
 let arrancado = false;
@@ -220,7 +250,7 @@ export async function init() {
   arrancado = true;
   // allSettled: aunque una consulta falle, la app SIEMPRE deja de estar "cargando".
   await cargarMiOrg();  // primero: define single vs multi-tenant y el orgId
-  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones()]);
+  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones(), cargarCostosPlatillo()]);
   state.listo = true;
   notify();
   // Fija la base de la meta UNA sola vez, para que las semanas viejas queden

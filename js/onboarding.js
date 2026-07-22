@@ -1,5 +1,5 @@
 // Onboarding para clientes nuevos (multi-tenant): da la bienvenida, crea su
-// espacio y calibra su "pulso" (meta de costo, venta y fijos) para que Pulsify
+// espacio y calibra su "pulso" (meta de costo, venta y fijos) para que Platify
 // muestre metas y punto de equilibrio desde el primer día.
 import * as store from "./store.js";
 
@@ -34,7 +34,7 @@ export function abrir() {
       ${paso === 1 ? pasoNegocio() : paso === 2 ? pasoPersona() : pasoPulso()}
       <div class="fila" style="margin-top:18px;gap:8px">
         ${paso > 1 ? `<button class="btn sec" id="atras" style="flex:1">Atrás</button>` : ""}
-        <button class="btn" id="next" style="flex:2">${paso < total ? "Siguiente" : "💓 Empezar a medir mi pulso"}</button>
+        <button class="btn" id="next" style="flex:2">${paso < total ? "Siguiente" : "📈 Empezar a medir mi pulso"}</button>
       </div>
       <div id="oerr"></div>
     </div>`;
@@ -48,7 +48,7 @@ export function abrir() {
 
   function pasoNegocio() {
     return `
-      <h2 style="margin-bottom:4px">💓 Bienvenido a Pulsify</h2>
+      <h2 style="margin-bottom:4px">📈 Bienvenido a Platify</h2>
       <p class="sub" style="margin-top:0">Cuéntanos de tu negocio para medir su pulso. Solo tú y tu equipo verán sus datos.</p>
       <label class="campo" style="margin-top:8px"><span>¿Cómo se llama tu negocio?</span>
         <input id="f_nombre" value="${esc(d.nombre)}" placeholder="Ej. Cremina Café" /></label>
@@ -69,7 +69,7 @@ export function abrir() {
   function pasoPulso() {
     return `
       <h2 style="margin-bottom:4px">Calibra tu pulso</h2>
-      <p class="sub" style="margin-top:0">Con esto Pulsify te da tu meta y punto de equilibrio desde el día 1. Son aproximados; puedes ajustarlos después.</p>
+      <p class="sub" style="margin-top:0">Con esto Platify te da tu meta y punto de equilibrio desde el día 1. Son aproximados; puedes ajustarlos después.</p>
       <label class="campo" style="margin-top:8px"><span>Meta de costo de insumos (% de la venta)</span>
         <input id="f_costo" type="number" inputmode="decimal" value="${esc(d.costoMeta)}" /></label>
       <label class="campo"><span>Venta promedio por semana (aprox, MXN)</span>
@@ -109,7 +109,7 @@ export function abrir() {
       location.reload();   // recarga limpia ya con el espacio nuevo
     } catch (e) {
       bg.querySelector("#oerr").innerHTML = `<div class="error-box" style="margin-top:10px">No pude crear tu espacio: ${esc((e && e.message) || e)}</div>`;
-      btn.disabled = false; btn.textContent = "💓 Empezar a medir mi pulso";
+      btn.disabled = false; btn.textContent = "📈 Empezar a medir mi pulso";
     }
   }
 }
