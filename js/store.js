@@ -194,6 +194,11 @@ export function factorConversion(desde, hacia) {
   if (!a || !b || a[0] !== b[0]) return 1;
   return a[1] / b[1];
 }
+// ¿Se puede convertir entre estas dos unidades?
+export function unidadesCompatibles(u1, u2) {
+  const a = _uBase[normU(u1)], b = _uBase[normU(u2)];
+  return !!(a && b && a[0] === b[0]);
+}
 // Unidad de receta sugerida según cómo compras (kg→g, L→ml).
 export function sugerirUnidadReceta(unidadCompra) {
   const u = normU(unidadCompra);
