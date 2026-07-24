@@ -655,14 +655,51 @@ export function emparejarProveedorDir(nombre) {
   return best ? { proveedor: best, exacto: false } : null;
 }
 
-// Se llama al guardar/editar un ticket: clasifica su proveedor contra el
-// directorio. Si hay ficha existente (o la más parecida) devuelve SU nombre
-// canónico; si es nuevo, crea la ficha (editable después) y lo deja como venía.
+// TODOS los proveedores CONOCIDOS: los del directorio + los que ya aparecen en
+// tus tickets (ya canonizados por los alias de "unificar"), sin repetir.
+// Devuelve [{ key, nombre }]. Es la base para emparejar bien y no duplicar.
+export function proveedoresTodos() {
+  const map = new Map();   // clave normalizada → nombre a usar
+  for (const p of proveedoresDir()) {
+    const k = normProv(p.nombre);
+    if (k && !map.has(k)) map.set(k, p.nombre);
+  }
+  for (const t of state.tickets) {
+    const raw = (t.proveedor || "").trim();
+    if (!raw) continue;
+    const canon = canonProv(raw);              // respeta las unificaciones
+    const k = normProv(canon);
+    if (k && !map.has(k)) map.set(k, canon);
+  }
+  return [...map.entries()].map(([key, nombre]) => ({ key, nombre }));
+}
+
+// El proveedor conocido más parecido a un nombre escrito (tolera errores de
+// dedo). Busca contra TODOS los conocidos (directorio + tickets). { nombre, exacto } o null.
+export function mejorMatchProveedor(nombre) {
+  const raw = (nombre || "").trim();
+  const key = normProv(raw);
+  if (!key) return null;
+  const lista = proveedoresTodos();
+  const ex = lista.find((p) => p.key === key);
+  if (ex) return { nombre: ex.nombre, exacto: true };
+  let best = null, bestD = Infinity;
+  for (const p of lista) {
+    const d = lev(key, p.key);
+    const tol = Math.max(1, Math.floor(Math.min(key.length, p.key.length) * 0.34));
+    if (d <= tol && d < bestD) { best = p; bestD = d; }
+  }
+  return best ? { nombre: best.nombre, exacto: false } : null;
+}
+
+// Se llama al guardar/editar un ticket: si el proveedor escrito se parece a uno
+// que YA conoces (directorio o tickets, aunque tenga un error de dedo), usa ese
+// nombre para no duplicar. Si es realmente nuevo, crea su ficha en el directorio.
 export async function clasificarProveedorTicket(nombre) {
   const raw = (nombre || "").trim();
   if (!raw) return raw;
-  const m = emparejarProveedorDir(raw);
-  if (m) return m.proveedor.nombre;
+  const m = mejorMatchProveedor(raw);
+  if (m) return m.nombre;
   try { await guardarProveedorDir({ nombre: raw }); } catch (e) { /* no bloquea el ticket */ }
   return raw;
 }
@@ -723,7 +760,7 @@ export function agruparProveedores() {
       if (usado.has(j)) continue;
       const k2 = normProv(nombres[j].nombre);
       const sim = kBase && k2 ? 1 - lev(kBase, k2) / Math.max(kBase.length, k2.length) : 0;
-      if (k2 === kBase || sim >= 0.8) { grupo.push(nombres[j]); usado.add(j); }
+      if (k2 === kBase || sim >= 0.72) { grupo.push(nombres[j]); usado.add(j); }
     }
     if (grupo.length > 1) grupos.push(grupo);
   }

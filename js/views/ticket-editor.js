@@ -1,6 +1,6 @@
 // Editor de un ticket (proveedor, fecha y líneas). Se reutiliza al
 // capturar un ticket nuevo y al corregir uno existente.
-import { AREAS, TIPOS, UNIDADES, num, money, proveedoresConocidos, sugerirProveedor, proveedoresDir, emparejarProveedorDir, normProv } from "../store.js";
+import { AREAS, TIPOS, UNIDADES, num, money, proveedoresConocidos, sugerirProveedor, proveedoresDir, emparejarProveedorDir, mejorMatchProveedor, normProv } from "../store.js";
 
 function opciones(lista, sel) {
   return lista.map((o) => `<option value="${o}"${o === sel ? " selected" : ""}>${o}</option>`).join("");
@@ -83,18 +83,12 @@ export function crearEditor(contenedor, ticket = {}) {
   function revisarProv() {
     const val = provInput.value.trim();
     if (!val) { provSug.innerHTML = ""; return; }
-    // 1) ¿coincide con una ficha del directorio, aunque escrita distinto?
-    const m = emparejarProveedorDir(val);
-    if (m) {
-      if (normProv(m.proveedor.nombre) === normProv(val)) { provSug.innerHTML = ""; return; }
-      pill(m.proveedor.nombre, "Se clasificará como");
-      return;
-    }
-    // 2) parecido en el historial de tickets
-    const s = sugerirProveedor(val);
-    if (!s) { provSug.innerHTML = ""; return; }
-    pill(s.nombre, "¿Quisiste decir");
+    // Empareja contra TODOS los proveedores conocidos (directorio + tickets).
+    const m = mejorMatchProveedor(val);
+    if (!m || normProv(m.nombre) === normProv(val)) { provSug.innerHTML = ""; return; }
+    pill(m.nombre, m.exacto ? "Se clasificará como" : "¿Quisiste decir");
   }
+  provInput.addEventListener("input", revisarProv);   // en vivo, mientras escribes
   provInput.addEventListener("change", revisarProv);
   provInput.addEventListener("blur", revisarProv);
 

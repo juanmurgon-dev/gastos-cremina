@@ -351,8 +351,14 @@ export function render(el) {
       row.querySelector("[data-f='prov']").addEventListener("change", (ev) => {
         const v = ev.target.value;
         if (v === "__otro__") {
-          const nom = (prompt("Nombre del proveedor:", it.proveedor || "") || "").trim();
-          if (nom) it.proveedor = nom;
+          let nom = (prompt("Nombre del proveedor:", it.proveedor || "") || "").trim();
+          if (nom) {
+            const m = store.mejorMatchProveedor(nom);   // ¿se parece a uno que ya tienes?
+            if (m && m.exacto) nom = m.nombre;
+            else if (m && store.normProv(m.nombre) !== store.normProv(nom) &&
+                     confirm(`Se parece a "${m.nombre}", que ya tienes. ¿Usar ese?`)) nom = m.nombre;
+            it.proveedor = nom;
+          }
           pintarItems(); guardar(); return;
         }
         it.proveedor = v.trim();
@@ -382,11 +388,17 @@ export function render(el) {
 
   function filaItem(it) {
     const idx = editing.items.indexOf(it);
-    const provs = provsDe(it.nombre);
-    const provCampo = provs.length
+    const provs = provsDe(it.nombre);                          // proveedores de ESTE insumo (con precio)
+    const conPrecio = new Set(provs.map((p) => p.proveedor));
+    const otros = store.proveedoresTodos()                     // el resto de proveedores conocidos
+      .map((p) => p.nombre)
+      .filter((n) => !conPrecio.has(n))
+      .sort((a, b) => a.localeCompare(b, "es"));
+    const provCampo = (provs.length || otros.length)
       ? `<select data-f="prov" style="flex:1 1 100px;min-width:0">
           ${provs.map((p) => `<option value="${esc(p.proveedor)}"${p.proveedor === it.proveedor ? " selected" : ""}>${esc(p.proveedor)} · ${money(p.precio)}</option>`).join("")}
-          ${it.proveedor && !provs.some((p) => p.proveedor === it.proveedor) ? `<option value="${esc(it.proveedor)}" selected>${esc(it.proveedor)}</option>` : ""}
+          ${otros.length ? `<optgroup label="Otros proveedores">${otros.map((n) => `<option value="${esc(n)}"${n === it.proveedor ? " selected" : ""}>${esc(n)}</option>`).join("")}</optgroup>` : ""}
+          ${it.proveedor && !conPrecio.has(it.proveedor) && !otros.includes(it.proveedor) ? `<option value="${esc(it.proveedor)}" selected>${esc(it.proveedor)}</option>` : ""}
           <option value="__otro__">✏️ Otro proveedor…</option>
         </select>`
       : `<input data-f="prov" value="${esc(it.proveedor)}" placeholder="Proveedor" style="flex:1 1 100px;min-width:0" />`;
