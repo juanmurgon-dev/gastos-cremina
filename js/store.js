@@ -184,6 +184,7 @@ const _uBase = {
   g: ["g", 1], gr: ["g", 1], grs: ["g", 1], gramo: ["g", 1], gramos: ["g", 1],
   kg: ["g", 1000], kgs: ["g", 1000], kilo: ["g", 1000], kilos: ["g", 1000], mg: ["g", 0.001],
   ml: ["ml", 1], cc: ["ml", 1], l: ["ml", 1000], lt: ["ml", 1000], lts: ["ml", 1000], litro: ["ml", 1000], litros: ["ml", 1000],
+  oz: ["ml", 29.57], onza: ["ml", 29.57], onzas: ["ml", 29.57], cda: ["ml", 15], cucharada: ["ml", 15], cucharadas: ["ml", 15], cdta: ["ml", 5], cucharadita: ["ml", 5],
   pza: ["pza", 1], pz: ["pza", 1], pzas: ["pza", 1], pieza: ["pza", 1], piezas: ["pza", 1], u: ["pza", 1], un: ["pza", 1], unidad: ["pza", 1],
 };
 const normU = (u) => String(u || "").trim().toLowerCase().replace(/[.\s]+$/, "");
