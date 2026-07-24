@@ -12,6 +12,8 @@ import * as info from "../info.js";
 const ES_CORTESIA = /pan de cortes[íi]a/i;
 // La leche/temperatura no es el grupo principal (para no confundir el desglose).
 const ES_SECUNDARIO = /leche|fr[íi]o|caliente|shot|cold foam|temperatura/i;
+const ES_SABOR_NOMBRE = /sabor|saboriz|jarabe|syrup|flavor|esencia/i;
+const ES_SABOR_OPCION = /vainilla|avellana|caramelo|cremina|chocolate|mo[ck]a|canela|amaretto|hazelnut|vanilla|caramel|coco|fresa|matcha|chai|lavanda|menta|calabaza|pumpkin|maple|pistache|cajeta/i;
 
 function escapar(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -32,7 +34,8 @@ function elegirGrupo(grupos) {
   const pool = Object.keys(grupos).filter((n) => !ES_SECUNDARIO.test(n));
   const base = pool.length ? pool : Object.keys(grupos);
   let cand = base.filter((n) => n.toLowerCase().startsWith("tipo"));
-  if (!cand.length) cand = base.filter((n) => n.toLowerCase().startsWith("sabor"));
+  if (!cand.length) cand = base.filter((n) => ES_SABOR_NOMBRE.test(n));
+  if (!cand.length) cand = base.filter((n) => grupos[n].some((r) => ES_SABOR_OPCION.test(r.opcion || "")));
   if (!cand.length) cand = base;
   return cand.sort((a, b) => unidades(b) - unidades(a))[0];
 }

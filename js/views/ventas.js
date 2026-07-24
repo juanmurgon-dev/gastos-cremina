@@ -333,16 +333,22 @@ function barCostRow(nombre, venta, pct, color) {
     <span class="val" style="color:${color};font-weight:700">${venta > 0 ? Math.round(pct) + "%" : "—"}</span></div>`;
 }
 
-// Grupo "principal" de un platillo: Tipo… → Sabor → (evita Leche/temperatura).
-// La leche se analiza aparte, así que no debe ser el grupo mostrado del café.
+// Grupo "principal" de un platillo: Tipo… → Sabor (por nombre) → Sabor (por sus
+// opciones) → el más vendido. La leche/temperatura se analiza aparte, así que no
+// debe ser el grupo mostrado del café.
 const ES_SECUNDARIO = /leche|fr[íi]o|caliente|shot|cold foam|temperatura/i;
+// Nombres típicos del grupo de sabor de una bebida (además de "Sabor").
+const ES_SABOR_NOMBRE = /sabor|saboriz|jarabe|syrup|flavor|esencia/i;
+// Opciones que delatan que un grupo ES el de sabores (aunque se llame raro).
+const ES_SABOR_OPCION = /vainilla|avellana|caramelo|cremina|chocolate|mo[ck]a|canela|amaretto|hazelnut|vanilla|caramel|coco|fresa|matcha|chai|lavanda|menta|calabaza|pumpkin|maple|pistache|cajeta/i;
 function elegirGrupo(grupos) {
   const unidades = (g) => grupos[g].reduce((a, r) => a + store.num(r.unidades), 0);
   // Quita leche/temperatura PRIMERO (para no confundir "Tipo de leche" con el tipo de bebida).
   const pool = Object.keys(grupos).filter((n) => !ES_SECUNDARIO.test(n));
   const base = pool.length ? pool : Object.keys(grupos);
   let cand = base.filter((n) => n.toLowerCase().startsWith("tipo"));
-  if (!cand.length) cand = base.filter((n) => n.toLowerCase().startsWith("sabor"));
+  if (!cand.length) cand = base.filter((n) => ES_SABOR_NOMBRE.test(n));
+  if (!cand.length) cand = base.filter((n) => grupos[n].some((r) => ES_SABOR_OPCION.test(r.opcion || "")));
   if (!cand.length) cand = base;
   return cand.sort((a, b) => unidades(b) - unidades(a))[0];
 }
