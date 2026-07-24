@@ -600,6 +600,53 @@ export async function deshacerAliasProveedor(claves) {
   for (const k of claves) delete al[k];
   await guardarConfig({ proveedorAlias: al });
 }
+
+// Une el proveedor `origen` dentro de `destino`: los tickets del origen pasan a
+// nombre del destino (vía alias), se rellenan los datos de contacto que le
+// falten al destino con los del origen, y se borra la ficha del origen. Al
+// final queda UN SOLO proveedor. Ambos son fichas del directorio.
+export async function fusionarProveedores(origen, destino) {
+  if (!origen || !destino || origen.id === destino.id) return;
+  const kOrigen = normProv(origen.nombre);
+  const kDestino = normProv(destino.nombre);
+  const nombreDest = (destino.nombre || "").trim();
+
+  // 1) Alias: la clave del origen —y cualquier alias que ya apuntara al origen
+  //    (fusiones previas)— ahora apunta al nombre del destino.
+  const al = { ...((state.config && state.config.proveedorAlias) || {}) };
+  if (kOrigen) al[kOrigen] = nombreDest;
+  for (const k of Object.keys(al)) {
+    if (normProv(al[k]) === kOrigen) al[k] = nombreDest;
+  }
+  if (kDestino) delete al[kDestino];   // el destino no necesita alias hacia sí mismo
+
+  // 2) Directorio: rellena datos faltantes del destino con los del origen y
+  //    quita la ficha del origen (queda una sola).
+  const dir = proveedoresDir().slice();
+  const iDest = dir.findIndex((x) => x.id === destino.id);
+  if (iDest >= 0) {
+    dir[iDest] = {
+      ...dir[iDest],
+      telefono: dir[iDest].telefono || origen.telefono || "",
+      correo: dir[iDest].correo || origen.correo || "",
+      direccion: dir[iDest].direccion || origen.direccion || "",
+    };
+  }
+  const dir2 = dir.filter((x) => x.id !== origen.id);
+
+  await guardarConfig({ proveedorAlias: al, proveedoresDir: dir2 });
+}
+
+// Todos los tickets de un proveedor (por nombre canónico, respetando las
+// unificaciones), del más reciente al más viejo.
+export function ticketsDeProveedor(nombre) {
+  const k = normProv(canonProv(nombre));
+  if (!k) return [];
+  return state.tickets
+    .filter((t) => t.proveedor && normProv(canonProv(t.proveedor)) === k)
+    .slice()
+    .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0));
+}
 // ── Directorio de proveedores (con datos de contacto) ───────
 // Se guarda en config.proveedoresDir (JSON), igual que los alias. Cada ficha:
 // { id, nombre, telefono, correo, direccion }.

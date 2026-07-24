@@ -89,6 +89,21 @@ export function render(el, ctx) {
     </div>`;
   }
 
+  // Resumen de tickets del proveedor: cuántos, cuánto y la lista.
+  function bloqueTickets(p) {
+    const ts = store.ticketsDeProveedor(p.nombre);
+    const total = ts.reduce((a, t) => a + store.gastoTicket(t), 0);
+    if (!ts.length) return `<div class="sub" style="margin:8px 2px 2px">🧾 Sin tickets todavía de este proveedor.</div>`;
+    const filas = ts.slice(0, 80).map((t) => {
+      const nl = (t.lineas || []).length;
+      return `<div class="barra-row" style="gap:8px;border-bottom:1px solid var(--linea);padding:7px 10px;margin:0">
+        <span style="flex:1;min-width:0">🧾 ${esc(t.fecha || "sin fecha")}${nl ? ` · <span class="sub">${nl} línea(s)</span>` : ""}</span>
+        <span style="font-variant-numeric:tabular-nums;font-weight:600">${esc(store.money(store.gastoTicket(t)))}</span></div>`;
+    }).join("");
+    return `<div class="sub" style="margin:10px 2px 6px">🧾 <b>${ts.length}</b> ticket(s) · <b>${esc(store.money(total))}</b> en compras</div>
+      <div style="max-height:34vh;overflow:auto;border:1px solid var(--linea);border-radius:12px">${filas}${ts.length > 80 ? `<div class="sub" style="padding:7px 10px">…y ${ts.length - 80} más</div>` : ""}</div>`;
+  }
+
   // ── Alta / edición de una ficha ──
   function abrirFicha(p) {
     const editando = !!(p && p.id);
@@ -105,8 +120,10 @@ export function render(el, ctx) {
           <input id="fCorreo" type="email" inputmode="email" value="${esc(p?.correo || "")}" placeholder="ventas@proveedor.com" /></label>
         <label class="campo"><span>Dirección</span>
           <input id="fDir" value="${esc(p?.direccion || "")}" placeholder="Calle, número, ciudad" /></label>
+        ${editando ? bloqueTickets(p) : ""}
         <div id="fMsg"></div>
         <button class="btn" id="fGuardar" style="margin-top:12px">${editando ? "Guardar cambios" : "Agregar"}</button>
+        ${editando ? `<button class="btn sec" id="fUnir" style="margin-top:8px">🔀 Unir con otro proveedor</button>` : ""}
         ${editando ? `<button class="btn sec" id="fBorrar" style="margin-top:8px;color:var(--rojo)">Borrar proveedor</button>` : ""}
         <button class="btn sec" id="fCerrar" style="margin-top:8px">Cancelar</button>
       </div>`;
@@ -131,12 +148,90 @@ export function render(el, ctx) {
       catch (e) { btn.disabled = false; btn.textContent = editando ? "Guardar cambios" : "Agregar"; msg.innerHTML = `<div class="error-box" style="margin-top:8px">No pude guardar: ${esc((e && e.message) || e)}</div>`; }
     });
 
+    const unir = bg.querySelector("#fUnir");
+    if (unir) unir.addEventListener("click", () => abrirUnir(p));
+
     const del = bg.querySelector("#fBorrar");
     if (del) del.addEventListener("click", async () => {
       if (!confirm(`¿Borrar a "${p.nombre}" del directorio? (No toca tus tickets.)`)) return;
       try { await store.borrarProveedorDir(p.id); cerrar(); }
       catch (e) { alert("No pude borrar: " + ((e && e.message) || e)); }
     });
+  }
+
+  // ── Unir el proveedor `origen` con otro del directorio ──
+  // Se elige el otro proveedor y con qué nombre quedarse; al final queda uno.
+  function abrirUnir(origen) {
+    const otros = store.proveedoresDir()
+      .filter((p) => p.id !== origen.id)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+    const bg = document.createElement("div");
+    bg.className = "modal-bg";
+    bg.innerHTML = `
+      <div class="modal">
+        <h2>Unir «${esc(origen.nombre)}» con…</h2>
+        <p class="sub" style="margin:-6px 0 10px">Elige el proveedor que en realidad es el mismo. Sus tickets se juntan y queda <b>uno solo</b>.</p>
+        ${otros.length
+          ? `<input id="uBuscar" placeholder="Buscar proveedor…" style="margin-bottom:8px" />
+             <div id="uLista" style="max-height:44vh;overflow:auto;border:1px solid var(--linea);border-radius:12px"></div>`
+          : `<div class="vacio">No hay otro proveedor con el cuál unir. Agrega o sube más primero.</div>`}
+        <div id="uMsg"></div>
+        <button class="btn sec" id="uCancel" style="margin-top:12px">Cancelar</button>
+      </div>`;
+    document.body.appendChild(bg);
+    const cerrar = () => bg.remove();
+    bg.addEventListener("click", (e) => { if (e.target === bg) cerrar(); });
+    bg.querySelector("#uCancel").addEventListener("click", cerrar);
+
+    if (!otros.length) return;
+
+    const lista = bg.querySelector("#uLista");
+    const buscar = bg.querySelector("#uBuscar");
+    function pintarLista() {
+      const q = (buscar.value || "").trim().toLowerCase();
+      const vis = q ? otros.filter((p) => p.nombre.toLowerCase().includes(q)) : otros;
+      lista.innerHTML = vis.length
+        ? vis.map((p) => `<button type="button" class="barra-row" data-uid="${esc(p.id)}"
+            style="width:100%;gap:8px;border:none;border-bottom:1px solid var(--linea);padding:10px;margin:0;background:none;text-align:left;cursor:pointer">
+            <span style="flex:1;min-width:0">🏪 <b>${esc(p.nombre)}</b>${p.telefono ? ` · <span class="sub">${esc(p.telefono)}</span>` : ""}</span>
+            <span class="sub">unir ›</span></button>`).join("")
+        : `<div class="sub" style="padding:10px">Sin resultados.</div>`;
+      lista.querySelectorAll("[data-uid]").forEach((b) =>
+        b.addEventListener("click", () => elegirNombre(otros.find((p) => p.id === b.dataset.uid))));
+    }
+    buscar.addEventListener("input", pintarLista);
+    pintarLista();
+
+    // Paso 2: ¿con cuál nombre nos quedamos?
+    function elegirNombre(otro) {
+      bg.querySelector("h2").textContent = "¿Con cuál nombre te quedas?";
+      const cuerpo = bg.querySelector(".modal");
+      cuerpo.innerHTML = `
+        <h2>¿Con cuál nombre te quedas?</h2>
+        <p class="sub" style="margin:-6px 0 12px">Vas a unir estos dos en un solo proveedor. El otro nombre desaparece y sus tickets quedan con el que elijas.</p>
+        <button class="btn" id="uKeepOrigen" style="margin-bottom:8px">Quedarme con «${esc(origen.nombre)}»</button>
+        <button class="btn" id="uKeepOtro" style="margin-bottom:8px">Quedarme con «${esc(otro.nombre)}»</button>
+        <div id="uMsg2"></div>
+        <button class="btn sec" id="uCancel2" style="margin-top:8px">Cancelar</button>`;
+      cuerpo.querySelector("#uCancel2").addEventListener("click", cerrar);
+
+      async function fusionar(destino, origenF, btn) {
+        const msg = cuerpo.querySelector("#uMsg2");
+        cuerpo.querySelectorAll("button").forEach((b) => (b.disabled = true));
+        btn.textContent = "Uniendo…";
+        try {
+          await store.fusionarProveedores(origenF, destino);
+          msg.innerHTML = `<div class="ok-box" style="margin-top:10px">✅ Listo. Quedó <b>${esc(destino.nombre)}</b>.</div>`;
+          setTimeout(() => { cerrar(); document.querySelectorAll(".modal-bg").forEach((m) => m.remove()); }, 900);
+        } catch (e) {
+          cuerpo.querySelectorAll("button").forEach((b) => (b.disabled = false));
+          msg.innerHTML = `<div class="error-box" style="margin-top:10px">No pude unir: ${esc((e && e.message) || e)}</div>`;
+        }
+      }
+      cuerpo.querySelector("#uKeepOrigen").addEventListener("click", (e) => fusionar(origen, otro, e.currentTarget));
+      cuerpo.querySelector("#uKeepOtro").addEventListener("click", (e) => fusionar(otro, origen, e.currentTarget));
+    }
   }
 
   // ── Subir CSV ──

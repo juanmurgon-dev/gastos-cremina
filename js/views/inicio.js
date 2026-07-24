@@ -317,6 +317,16 @@ function renderOwner(el) {
       ${cardVistazo(tp, ins, cd)}
 
       <div class="card">
+        <h2 style="margin-bottom:8px">Gasto de la semana</h2>
+        <div style="font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.05">${money(gasto)}</div>
+        <div class="sub" style="margin-top:2px">Todo lo que compraste esta semana${parcial ? " (hasta hoy)" : ""}: variable + operativo.</div>
+        <div class="row-stats" style="margin-top:12px">
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${kmoney(gastoVar)}</div><div class="l">Variable (insumos)</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${kmoney(gasto - gastoVar)}</div><div class="l">Operativo</div></div>
+        </div>
+      </div>
+
+      <div class="card">
         <h2 style="margin-bottom:8px">Meta de compras (semana)${info.icono("metaCompras")}</h2>
         <div class="barra-track" style="height:12px"><span class="barra-fill" style="width:${pct}%;background:${cMeta}"></span></div>
         <div class="sub" style="margin-top:6px">${meta > 0 ? `Llevas ${money(gastoVar)} de ${money(meta)} · ${Math.round(pct)}% usado` : "Aún sin meta. Defínela abajo o en Gastos → Meta."}</div>
