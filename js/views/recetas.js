@@ -99,6 +99,36 @@ function descargarPlantilla() {
   );
 }
 
+// Exporta TODAS las recetas en formato de tabla: una fila por platillo, con sus
+// insumos y subrecetas en columnas, y el costo por porción al final.
+function descargarTablaRecetas() {
+  const r2 = (n) => Math.round((num(n) || 0) * 100) / 100;
+  const conReceta = platillos().filter((p) => store.recetasDe(p.producto).length);
+  if (!conReceta.length) { alert("Aún no hay recetas para exportar. Captura o importa recetas primero."); return; }
+  let maxIns = 0, maxSub = 0;
+  const datos = conReceta.map((p) => {
+    const ins = [], sub = [];
+    for (const rr of store.recetasDe(p.producto)) {
+      const cell = `${rr.insumo} ${r2(rr.cantidad)}${rr.unidad || ""}`.trim();
+      if (store.tieneReceta(rr.insumo)) sub.push(cell); else ins.push(cell);
+    }
+    maxIns = Math.max(maxIns, ins.length); maxSub = Math.max(maxSub, sub.length);
+    const costo = store.costoDeReceta(p.producto) / (store.porcionesDe(p.producto) || 1);
+    return { producto: p.producto, ins, sub, costo };
+  });
+  const enc = ["Producto",
+    ...Array.from({ length: maxIns }, (_, i) => `Insumo ${i + 1}`),
+    ...Array.from({ length: maxSub }, (_, i) => `Subreceta ${i + 1}`),
+    "Costo por porción"];
+  const filas = datos.map((d) => [
+    d.producto,
+    ...Array.from({ length: maxIns }, (_, i) => d.ins[i] || ""),
+    ...Array.from({ length: maxSub }, (_, i) => d.sub[i] || ""),
+    r2(d.costo).toFixed(2),
+  ]);
+  descargarCSV("recetas-tabla-platify", enc, filas);
+}
+
 export function render(el) {
   let sub = "platillos";   // platillos | preparaciones
   let editando = null;     // { nombre, esPrep }
@@ -136,9 +166,10 @@ export function render(el) {
         <div class="card">
           <h2 style="margin-bottom:2px">Fichas técnicas</h2>
           <p class="sub" style="margin-top:0">Con receta: <b>${conReceta}</b> de ${arr.length}. Captura la receta y el costo/margen salen solos de tus compras.</p>
-          <div class="fila" style="gap:8px;margin:8px 0 4px">
+          <div class="fila" style="gap:8px;margin:8px 0 4px;flex-wrap:wrap">
             <button class="btn sec chico" id="impcsv" style="flex:1">⬆ Importar CSV</button>
-            <button class="btn sec chico" id="plantilla" style="flex:1">⬇ Descargar formato</button>
+            <button class="btn sec chico" id="plantilla" style="flex:1">⬇ Formato vacío</button>
+            <button class="btn sec chico" id="exptabla" style="flex:1 1 100%">⬇ Descargar recetas (tabla)</button>
           </div>
           <input type="file" id="fcsv" accept=".csv,text/csv" style="display:none" />
           <input id="bq" placeholder="Buscar platillo…" style="margin:6px 0 12px" value="${esc(st.q)}" />
@@ -168,6 +199,7 @@ export function render(el) {
       const bq = cont.querySelector("#bq");
       bq.addEventListener("input", () => { st.q = bq.value; const s = bq.selectionStart; draw(); const nb = cont.querySelector("#bq"); nb.focus(); nb.setSelectionRange(s, s); });
       cont.querySelector("#plantilla").addEventListener("click", descargarPlantilla);
+      cont.querySelector("#exptabla").addEventListener("click", descargarTablaRecetas);
       const fcsv = cont.querySelector("#fcsv");
       cont.querySelector("#impcsv").addEventListener("click", () => fcsv.click());
       fcsv.addEventListener("change", async () => {
