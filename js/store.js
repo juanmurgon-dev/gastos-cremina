@@ -25,6 +25,8 @@ export const state = {
   gastosFijos: [],
   requisiciones: [],
   costosPlatillo: [],   // costo directo por platillo (para el margen)
+  recetas: [],          // recetas: platillo/preparación → insumos + cantidad
+  recetasFicha: [],     // ficha técnica: categoría, tiempo de prep, procedimiento
   perfil: { nombre: "", email: "", cargado: false },
   config: { presupuestoSemanal: 35000, presupuestoPorArea: {} },
   orgId: null,          // id del restaurante (multi-tenant); null = single-tenant
@@ -141,6 +143,205 @@ export async function borrarCostoPlatillo(producto) {
   await cargarCostosPlatillo();
 }
 
+// ─── RECETAS + COSTEO (cruza recetas × precios de compra) ──────────────
+async function cargarRecetas() {
+  // La tabla puede no existir aún (si no corrieron recetas-inventario.sql).
+  const { data, error } = await supabase.from("recetas").select("*");
+  if (!error && data) { state.recetas = data; notify(); }
+}
+async function cargarRecetasFicha() {
+  const { data, error } = await supabase.from("recetas_ficha").select("*");
+  if (!error && data) { state.recetasFicha = data; notify(); }
+}
+
+// Datos de ficha (categoría, tiempo, pasos, foto) de una receta.
+export function fichaDe(producto) {
+  const f = (state.recetasFicha || []).find((x) => x.producto === producto);
+  return f || { producto, categoria: "", tiempo: 0, procedimiento: "", pasos: [], foto: "" };
+}
+export async function guardarFicha(producto, f) {
+  const pasos = Array.isArray(f && f.pasos)
+    ? f.pasos.slice(0, 40).map((p) => ({ descripcion: String(p.descripcion || "").slice(0, 500), tiempo: num(p.tiempo) || 0 }))
+    : [];
+  const row = {
+    producto,
+    categoria: String((f && f.categoria) || "").slice(0, 60),
+    tiempo: pasos.length ? pasos.reduce((a, p) => a + (num(p.tiempo) || 0), 0) : (num(f && f.tiempo) || 0),
+    procedimiento: pasos.map((p) => p.descripcion).join("\n").slice(0, 4000), // compat
+    pasos,
+    foto: String((f && f.foto) || "").slice(0, 800000),
+    actualizado: new Date().toISOString(),
+  };
+  const { error } = await supabase.from("recetas_ficha").upsert(row);
+  if (error) throw error;
+  await cargarRecetasFicha();
+}
+
+const round2 = (n) => Math.round((num(n) || 0) * 100) / 100;
+
+// Conversión de unidades para costear como tu hoja: cantidad en g/ml, precio por kg/L.
+const _uBase = {
+  g: ["g", 1], gr: ["g", 1], grs: ["g", 1], gramo: ["g", 1], gramos: ["g", 1],
+  kg: ["g", 1000], kgs: ["g", 1000], kilo: ["g", 1000], kilos: ["g", 1000], mg: ["g", 0.001],
+  ml: ["ml", 1], cc: ["ml", 1], l: ["ml", 1000], lt: ["ml", 1000], lts: ["ml", 1000], litro: ["ml", 1000], litros: ["ml", 1000],
+  pza: ["pza", 1], pz: ["pza", 1], pzas: ["pza", 1], pieza: ["pza", 1], piezas: ["pza", 1], u: ["pza", 1], un: ["pza", 1], unidad: ["pza", 1],
+};
+const normU = (u) => String(u || "").trim().toLowerCase().replace(/[.\s]+$/, "");
+// Factor para pasar de 'desde' a 'hacia' (misma familia). Si no se puede, 1 (asume misma unidad).
+export function factorConversion(desde, hacia) {
+  const a = _uBase[normU(desde)], b = _uBase[normU(hacia)];
+  if (!a || !b || a[0] !== b[0]) return 1;
+  return a[1] / b[1];
+}
+// Unidad de receta sugerida según cómo compras (kg→g, L→ml).
+export function sugerirUnidadReceta(unidadCompra) {
+  const u = normU(unidadCompra);
+  if (u === "kg" || u === "kgs" || u === "kilo" || u === "kilos") return "g";
+  if (u === "l" || u === "lt" || u === "lts" || u === "litro" || u === "litros") return "ml";
+  return unidadCompra || "";
+}
+
+// Precio (última compra) de un insumo por nombre.
+export function precioInsumo(nombre) {
+  const key = String(nombre || "").trim().toLowerCase();
+  const hit = preciosPorInsumo().find((i) => i.nombre.toLowerCase() === key);
+  return hit ? num(hit.precioActual) : 0;
+}
+
+// Renglones de la receta de un platillo o preparación.
+export function recetasDe(producto) {
+  return (state.recetas || []).filter((r) => r.producto === producto);
+}
+
+// ¿'nombre' es una preparación base (sub-receta)?
+export function esPreparacion(nombre) {
+  return (state.recetas || []).some((r) => r.producto === nombre && r.es_preparacion);
+}
+function rendimientoDe(nombre) {
+  const f = (state.recetas || []).find((r) => r.producto === nombre && r.es_preparacion);
+  return f && num(f.rendimiento) > 0 ? num(f.rendimiento) : 1;
+}
+// Unidad en la que rinde una preparación (para mostrar "$/L").
+export function unidadPreparacion(nombre) {
+  const f = (state.recetas || []).find((r) => r.producto === nombre && r.es_preparacion);
+  return f ? (f.rinde_unidad || "") : "";
+}
+
+// Costo por unidad de un insumo, resolviendo preparaciones (recursivo, anti-ciclos).
+export function costoInsumo(nombre, seen) {
+  seen = seen || new Set();
+  if (esPreparacion(nombre)) {
+    if (seen.has(nombre)) return 0;
+    seen.add(nombre);
+    return costoDeReceta(nombre, seen) / rendimientoDe(nombre);
+  }
+  return precioInsumo(nombre);
+}
+
+// Unidad de compra de un insumo (o la unidad en que rinde, si es preparación).
+export function unidadInsumo(nombre) {
+  if (esPreparacion(nombre)) return unidadPreparacion(nombre);
+  const key = String(nombre || "").trim().toLowerCase();
+  const hit = preciosPorInsumo().find((i) => i.nombre.toLowerCase() === key);
+  return hit ? (hit.unidad || "") : "";
+}
+
+// Costo de un renglón: cantidad × (ajuste por merma) × conversión de unidad × costo por unidad de compra.
+// Ej.: 80 g de queso a $176/kg → 80 × (g→kg = 0.001) × 176 = 14.08. La merma sube el costo
+// (si usas 100 g de algo con 20% de merma, compras 125 g → cuesta más).
+// Se costea la CANTIDAD BRUTA (lo que sacas del almacén, que es lo que pagas).
+// La merma NO baja el costo: sirve para saber cuánto queda útil (cantidad neta).
+export function costoLinea(insumo, cantidad, unidad, merma, seen) {
+  return num(cantidad) * factorConversion(unidad, unidadInsumo(insumo)) * costoInsumo(insumo, seen);
+}
+// Cantidad neta (aprovechable) después de la merma.
+export function cantidadNeta(cantidad, merma) {
+  const m = Math.min(99, Math.max(0, num(merma) || 0));
+  return num(cantidad) * (1 - m / 100);
+}
+
+// Costo total de la receta (precios de compra actuales + conversión de unidades).
+export function costoDeReceta(producto, seen) {
+  let total = 0;
+  for (const r of recetasDe(producto)) total += costoLinea(r.insumo, r.cantidad, r.unidad, r.merma, seen);
+  return total;
+}
+
+// Porciones que rinde la receta de un platillo (para costo por porción).
+export function porcionesDe(producto) {
+  const f = (state.recetas || []).find((r) => r.producto === producto);
+  return f && num(f.porciones) > 0 ? num(f.porciones) : 1;
+}
+
+// Guarda la receta completa (reemplaza sus renglones) y recalcula su costo.
+export async function guardarReceta(producto, items, opts) {
+  opts = opts || {};
+  await supabase.from("recetas").delete().eq("producto", producto);
+  const porciones = num(opts.porciones) > 0 ? num(opts.porciones) : 1;
+  const filas = (items || []).filter((i) => i.insumo && num(i.cantidad) > 0).map((i) => ({
+    producto,
+    insumo: i.insumo,
+    cantidad: num(i.cantidad),
+    unidad: i.unidad || "",
+    merma: num(i.merma) || 0,
+    porciones,
+    es_preparacion: !!opts.es_preparacion,
+    rendimiento: opts.es_preparacion ? (num(opts.rendimiento) || 1) : 1,
+    rinde_unidad: opts.es_preparacion ? (opts.rinde_unidad || "") : "",
+  }));
+  if (filas.length) {
+    const { error } = await supabase.from("recetas").insert(filas);
+    if (error) throw error;
+  }
+  await cargarRecetas();
+  if (opts.ficha) { try { await guardarFicha(producto, opts.ficha); } catch (e) { console.warn("ficha:", e); } }
+  if (opts.es_preparacion) await recalcularTodos();          // afecta a los platillos que la usan
+  else await guardarCostoPlatillo(producto, round2(costoDeReceta(producto)));
+}
+
+export async function borrarReceta(producto) {
+  const { error } = await supabase.from("recetas").delete().eq("producto", producto);
+  if (error) throw error;
+  await cargarRecetas();
+}
+
+// Recalcula costos_platillo de todos los platillos con receta usando los precios
+// de compra actuales; solo escribe los que cambiaron. Así el margen se actualiza
+// solo cuando cambian tus compras, sin recapturar nada.
+export async function recalcularTodos() {
+  const actuales = mapaCostos();
+  const platillos = [...new Set((state.recetas || []).filter((r) => !r.es_preparacion).map((r) => r.producto))];
+  let cambios = 0;
+  for (const p of platillos) {
+    const nuevo = round2(costoDeReceta(p));
+    if (round2(actuales.get(p)) !== nuevo) {
+      await supabase.from("costos_platillo").upsert({ producto: p, costo: nuevo, actualizado: new Date().toISOString() });
+      cambios++;
+    }
+  }
+  if (cambios) await cargarCostosPlatillo();
+}
+
+// Importa varias recetas de golpe (de un CSV). Reemplaza las que ya existan.
+// grupos = [{producto, es_preparacion, rendimiento, rinde_unidad, items:[{insumo,cantidad,unidad}]}]
+export async function importarRecetas(grupos) {
+  const ordenados = [...(grupos || [])].sort((a, b) => (b.es_preparacion ? 1 : 0) - (a.es_preparacion ? 1 : 0)); // preparaciones primero
+  for (const g of ordenados) {
+    if (!g.producto) continue;
+    await supabase.from("recetas").delete().eq("producto", g.producto);
+    const porc = num(g.porciones) > 0 ? num(g.porciones) : 1;
+    const filas = (g.items || []).filter((i) => i.insumo && num(i.cantidad) > 0).map((i) => ({
+      producto: g.producto, insumo: i.insumo, cantidad: num(i.cantidad), unidad: i.unidad || "", merma: num(i.merma) || 0, porciones: porc,
+      es_preparacion: !!g.es_preparacion, rendimiento: g.es_preparacion ? (num(g.rendimiento) || 1) : 1,
+      rinde_unidad: g.es_preparacion ? (g.rinde_unidad || "") : "",
+    }));
+    if (filas.length) { const { error } = await supabase.from("recetas").insert(filas); if (error) throw error; }
+  }
+  await cargarRecetas();
+  await recalcularTodos();
+  return ordenados.length;
+}
+
 async function cargarRequisiciones() {
   // La tabla puede no existir aún (si no corren requisiciones.sql).
   const { data, error } = await supabase.from("requisiciones").select("*").order("creado_en", { ascending: false });
@@ -250,7 +451,8 @@ export async function init() {
   arrancado = true;
   // allSettled: aunque una consulta falle, la app SIEMPRE deja de estar "cargando".
   await cargarMiOrg();  // primero: define single vs multi-tenant y el orgId
-  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones(), cargarCostosPlatillo()]);
+  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones(), cargarCostosPlatillo(), cargarRecetas(), cargarRecetasFicha()]);
+  try { await recalcularTodos(); } catch (e) { /* recetas o precios aún no disponibles */ }
   state.listo = true;
   notify();
   // Fija la base de la meta UNA sola vez, para que las semanas viejas queden

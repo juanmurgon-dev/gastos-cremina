@@ -14,16 +14,18 @@ import * as reportes from "./views/reportes.js";
 import * as ventas from "./views/ventas.js";
 import * as margen from "./views/margen.js";
 import * as insumos from "./views/insumos.js";
+import * as recetas from "./views/recetas.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.51";
+export const APP_VERSION = "v3.52";
 export const APP_FECHA = "24 jul 2026";
 
 const VISTAS = {
   inicio:      { mod: inicio,      ic: "🏠", txt: "Inicio" },
   insumos:     { mod: insumos,     ic: "📦", txt: "Insumos" },
   ventas:      { mod: ventas,      ic: "💵", txt: "Ventas" },
+  recetas:     { mod: recetas,     ic: "📖", txt: "Recetas" },
   margen:      { mod: margen,      ic: "📈", txt: "Margen" },
   reportes:    { mod: reportes,    ic: "📊", txt: "Gastos" },
   requisicion: { mod: requisicion, ic: "🛒", txt: "Requis." }
@@ -32,7 +34,7 @@ const VISTAS = {
 // Pestañas visibles por rol. Los que NO están aquí (owner, admin, gerente y
 // desconocido) ven TODAS. En single-tenant (miRol=null) también ven todas.
 const TABS_ROL = {
-  chef:    ["inicio", "insumos", "requisicion"],
+  chef:    ["inicio", "insumos", "recetas", "requisicion"],
   compras: ["inicio", "requisicion", "insumos"],
   staff:   ["inicio", "insumos"],
 };
