@@ -36,6 +36,17 @@ function labelRango(desde, hasta) {
     : `${a.getDate()} ${MES[a.getMonth()]} – ${b.getDate()} ${MES[b.getMonth()]}`;
 }
 
+// Semana (lunes–domingo) que contiene una fecha ISO. Así TODO se agrupa por
+// semana en los reportes, aunque el archivo traiga un solo día de datos.
+function semanaDe(iso) {
+  const d = new Date(iso + "T00:00");
+  const dow = (d.getDay() + 6) % 7;                 // 0 = lunes
+  const lun = new Date(d); lun.setDate(d.getDate() - dow);
+  const dom = new Date(lun); dom.setDate(lun.getDate() + 6);
+  const f = (x) => `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
+  return { desde: f(lun), hasta: f(dom) };
+}
+
 // ── Parsers (lógica validada contra los archivos reales) ──
 function parseCorte(rows) {
   const lab = (r) => (rows[r] && rows[r][0] != null) ? String(rows[r][0]).trim() : "";
@@ -111,16 +122,19 @@ async function importarCorte(c) {
 
 async function importarProducto(p) {
   if (!p.desde) throw new Error("no pude leer las fechas del reporte");
-  const periodo = labelRango(p.desde, p.hasta);
-  await supabase.from("productos_venta").delete().eq("desde", p.desde);
-  await supabase.from("modificadores_venta").delete().eq("desde", p.desde);
-  await supabase.from("combos_venta").delete().eq("desde", p.desde);
-  const prows = p.prods.map((x) => ({ periodo, desde: p.desde, hasta: p.hasta, ...x }));
+  // Todo se guarda por SEMANA (lunes–domingo), aunque el reporte traiga 1 día.
+  const wk = semanaDe(p.desde);
+  const desde = wk.desde, hasta = wk.hasta;
+  const periodo = labelRango(desde, hasta);
+  await supabase.from("productos_venta").delete().eq("desde", desde);
+  await supabase.from("modificadores_venta").delete().eq("desde", desde);
+  await supabase.from("combos_venta").delete().eq("desde", desde);
+  const prows = p.prods.map((x) => ({ periodo, desde, hasta, ...x }));
   const mrows = Object.entries(p.mods).map(([modificador, cantidad]) =>
-    ({ periodo, desde: p.desde, hasta: p.hasta, modificador, cantidad }));
+    ({ periodo, desde, hasta, modificador, cantidad }));
   const crows = Object.entries(p.combos).map(([k, cantidad]) => {
     const [producto, modificador] = k.split("\u0001");
-    return { periodo, desde: p.desde, hasta: p.hasta, producto, modificador, cantidad };
+    return { periodo, desde, hasta, producto, modificador, cantidad };
   });
   const e1 = await supabase.from("productos_venta").insert(prows);
   if (e1.error) throw new Error(e1.error.message);
@@ -132,7 +146,7 @@ async function importarProducto(p) {
     const e3 = await supabase.from("combos_venta").insert(crows);
     if (e3.error) throw new Error(e3.error.message);
   }
-  return { periodo, prod: prows.length, mods: mrows.length, combos: crows.length };
+  return { periodo, desde, hasta, prod: prows.length, mods: mrows.length, combos: crows.length };
 }
 
 // Venta por producto y variante (archivo "Grupos modificadores" de Parrot).
@@ -182,16 +196,18 @@ function fileToBase64(file) {
 
 async function importarProductosPDF(r) {
   if (!r.desde) throw new Error("el PDF no trae las fechas del periodo");
-  const periodo = r.periodo || labelRango(r.desde, r.hasta);
-  await supabase.from("productos_venta").delete().eq("desde", r.desde);
+  const wk = semanaDe(r.desde);
+  const desde = wk.desde, hasta = wk.hasta;
+  const periodo = labelRango(desde, hasta);
+  await supabase.from("productos_venta").delete().eq("desde", desde);
   const rows = (r.items || []).map((x) => ({
-    periodo, desde: r.desde, hasta: r.hasta,
+    periodo, desde, hasta,
     producto: String(x.producto || ""), categoria: String(x.categoria || ""),
     cantidad: N(x.cantidad), venta: N(x.venta),
   }));
   const { error } = await supabase.from("productos_venta").insert(rows);
   if (error) throw new Error(error.message);
-  return { periodo, prod: rows.length };
+  return { periodo, desde, hasta, prod: rows.length };
 }
 
 async function procesarPDF(f, semanaBackup) {
@@ -221,7 +237,7 @@ async function procesarPDF(f, semanaBackup) {
   }
   if (data.tipo === "variantes") {
     const semana = data.desde
-      ? { desde: data.desde, hasta: data.hasta, periodo: data.periodo || labelRango(data.desde, data.hasta) }
+      ? (() => { const wk = semanaDe(data.desde); return { desde: wk.desde, hasta: wk.hasta, periodo: labelRango(wk.desde, wk.hasta) }; })()
       : semanaBackup;
     const vrows = (data.items || []).map((v) => ({
       producto: String(v.producto || ""), grupo: String(v.grupo || ""),
@@ -315,7 +331,7 @@ export function montar(el) {
         } else if (it.tipo === "producto") {
           const p = parseProducto(it.wb, XLSX);
           const r = await importarProducto(p);
-          semanaRef = { desde: p.desde, hasta: p.hasta, periodo: r.periodo };
+          semanaRef = { desde: r.desde, hasta: r.hasta, periodo: r.periodo };
           logs.push(`✅ Productos ${r.periodo} · ${r.prod} productos, ${r.combos} combos`);
         } else if (it.tipo === "variante") {
           const r = await importarVariantes(parseVariantes(it.wb, XLSX), semanaRef || semanaMasReciente());
