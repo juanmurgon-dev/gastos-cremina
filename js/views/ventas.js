@@ -422,12 +422,13 @@ function tablaCosto(semanas) {
       <span style="flex:1;text-align:right">Gasto</span>
       <span style="width:56px;text-align:right">Costo</span></div>
     ${semanas.map((s) => {
-      const pct = s.venta > 0 ? (s.gasto / s.venta) * 100 : 0;
+      const gv = s.gastoVar ?? s.gasto; // costo de insumos, sin operativo
+      const pct = s.venta > 0 ? (gv / s.venta) * 100 : 0;
       const col = pct === 0 ? "var(--gris)" : pct <= 35 ? "var(--verde)" : pct <= 45 ? "var(--amarillo)" : "var(--rojo)";
       return `<div class="barra-row">
         <span class="etq" style="width:96px;font-size:12px">${s.etiqueta}</span>
         <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums">${kmoney(s.venta)}</span>
-        <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums">${kmoney(s.gasto)}</span>
+        <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums">${kmoney(gv)}</span>
         <span style="width:56px;text-align:right;font-weight:700;color:${col}">${s.venta > 0 ? Math.round(pct) + "%" : "—"}</span></div>`;
     }).join("")}`;
 }

@@ -197,7 +197,8 @@ function renderOwner(el) {
     const meta = store.metaDeSemana(wk.desde);
 
     const venta = wk.venta, gasto = wk.gasto;
-    const costo = venta > 0 ? (gasto / venta) * 100 : 0;
+    const gastoVar = wk.gastoVar ?? gasto; // solo "costo de venta" (sin operativo/IVA)
+    const costo = venta > 0 ? (gastoVar / venta) * 100 : 0;
 
     // ¿Semana en curso y a medias? Cuántos días llevamos.
     let diasT = 7, parcial = false;
@@ -213,7 +214,7 @@ function renderOwner(el) {
       const pl = new Date(wk.lunes); pl.setDate(pl.getDate() - 7);
       prev = store.semanaParcial(pl, diasT);
     }
-    const costoPrev = prev && prev.venta > 0 ? (prev.gasto / prev.venta) * 100 : 0;
+    const costoPrev = prev && prev.venta > 0 ? ((prev.gastoVar ?? prev.gasto) / prev.venta) * 100 : 0;
 
     // Proyección al cierre: con el ritmo REAL de la semana pasada (no lineal).
     let proy = null;
@@ -224,7 +225,7 @@ function renderOwner(el) {
     }
 
     // Meta
-    const pct = meta > 0 ? Math.min(100, 100 * gasto / meta) : 0;
+    const pct = meta > 0 ? Math.min(100, 100 * gastoVar / meta) : 0;
     const cMeta = pct >= 100 ? "var(--rojo)" : pct >= 85 ? "var(--amarillo)" : "var(--verde)";
 
     const ultimas = semanas.slice(0, 6).slice().reverse(); // 6 semanas, viejo→nuevo
@@ -256,7 +257,7 @@ function renderOwner(el) {
 
     // ── Para actuar: máximo 3 cosas, lo crítico primero ──
     const acc = [];
-    if (meta > 0 && gasto > meta) acc.push(`🔴 Te pasaste de tu meta de compras por <b>${money(gasto - meta)}</b>. Frena pedidos que no sean urgentes.`);
+    if (meta > 0 && gastoVar > meta) acc.push(`🔴 Te pasaste de tu meta de compras por <b>${money(gastoVar - meta)}</b>. Frena pedidos que no sean urgentes.`);
     const pred = store.prediccionCompras();
     if (pred.pendientes.length) {
       const nombres = pred.pendientes.slice(0, 3).map((x) => esc(x.nombre)).join(", ");
@@ -318,7 +319,7 @@ function renderOwner(el) {
       <div class="card">
         <h2 style="margin-bottom:8px">Meta de compras (semana)${info.icono("metaCompras")}</h2>
         <div class="barra-track" style="height:12px"><span class="barra-fill" style="width:${pct}%;background:${cMeta}"></span></div>
-        <div class="sub" style="margin-top:6px">${meta > 0 ? `Llevas ${money(gasto)} de ${money(meta)} · ${Math.round(pct)}% usado` : "Aún sin meta. Defínela abajo o en Gastos → Meta."}</div>
+        <div class="sub" style="margin-top:6px">${meta > 0 ? `Llevas ${money(gastoVar)} de ${money(meta)} · ${Math.round(pct)}% usado` : "Aún sin meta. Defínela abajo o en Gastos → Meta."}</div>
         <div class="fila" style="margin-top:10px;gap:8px">
           <input id="meta" type="number" step="any" inputmode="decimal" value="${meta || ""}" placeholder="Meta semanal (MXN)" style="flex:1" />
           <button class="btn sec" id="guardar" style="flex:none;width:auto">Guardar</button>
@@ -329,7 +330,7 @@ function renderOwner(el) {
       <div class="card">
         <h2>Tendencia · últimas 6 semanas${info.icono("tendencia")}</h2>
         ${ultimas.map((s) => {
-          const c = s.venta > 0 ? (s.gasto / s.venta) * 100 : 0;
+          const c = s.venta > 0 ? ((s.gastoVar ?? s.gasto) / s.venta) * 100 : 0;
           return `<div class="barra-row">
             <span class="etq" style="width:88px;font-size:12px">${s.etiqueta}</span>
             <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * s.venta / maxV)}%;background:var(--verde-claro);opacity:${opac(s.venta, maxV)}"></span></span>

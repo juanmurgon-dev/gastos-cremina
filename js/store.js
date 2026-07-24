@@ -426,10 +426,41 @@ export function totalTicket(t) {
 }
 
 // Gasto en insumos del ticket: suma sus líneas SIN el IVA (para los análisis).
+// Desglosa un ticket en costo de venta (cv) vs operativo (op), y reparte el IVA
+// del ticket entre ambos según su proporción. Así el IVA que corresponde a los
+// insumos de "costo de venta" (ivaCV) SÍ se cuenta como parte de ese insumo,
+// y el IVA de lo operativo (ivaOp) queda del lado operativo.
+function desgloseTicket(t) {
+  const ls = t.lineas || [];
+  let cv = 0, op = 0, iva = 0;
+  for (const l of ls) {
+    const m = num(l.monto);
+    if (ES_IVA.test(l.descripcion || "")) { iva += m; continue; }
+    if (l.tipo === "costo de venta") cv += m; else op += m;
+  }
+  const base = cv + op;
+  const ivaCV = base > 0 ? iva * (cv / base) : 0;
+  return { cv, op, iva, ivaCV, ivaOp: iva - ivaCV };
+}
+
+// Gasto TOTAL del ticket (para utilidad): insumos + operativo + el IVA de los
+// insumos. El IVA de lo operativo no se cuenta (así lo pidió el usuario).
 export function gastoTicket(t) {
   const ls = t.lineas || [];
   if (!ls.length) return num(t.total);
-  return ls.reduce((a, l) => a + (ES_IVA.test(l.descripcion || "") ? 0 : num(l.monto)), 0);
+  const d = desgloseTicket(t);
+  return d.cv + d.op + d.ivaCV;
+}
+
+// Gasto VARIABLE del ticket: solo lo de "costo de venta" (insumos que entran al
+// platillo) MÁS el IVA que le corresponde a esos insumos. Excluye lo "operativo"
+// (limpieza, servicios, gastos generales) y su IVA. Es el gasto que se compara
+// contra la META y con la venta (costo %).
+export function gastoVariable(t) {
+  const ls = t.lineas || [];
+  if (!ls.length) return num(t.total);
+  const d = desgloseTicket(t);
+  return d.cv + d.ivaCV;
 }
 
 // Todas las líneas (con fecha del ticket) dentro de [desde, hasta] ISO inclusive
@@ -495,8 +526,10 @@ export function ventasSemanas(n) {
     dom.setDate(lunes.getDate() + 6);
     const desde = toISO(lunes), hasta = toISO(dom);
     const venta = cortesEnRango(desde, hasta).reduce((a, c) => a + num(c.ventas_total), 0);
-    const gasto = ticketsEnRango(desde, hasta).reduce((a, t) => a + gastoTicket(t), 0);
-    out.push({ lunes, desde, hasta, etiqueta: etiquetaSemana(lunes), venta, gasto });
+    const ts = ticketsEnRango(desde, hasta);
+    const gasto = ts.reduce((a, t) => a + gastoTicket(t), 0);        // total (para utilidad)
+    const gastoVar = ts.reduce((a, t) => a + gastoVariable(t), 0);   // solo costo de venta (meta/costo %)
+    out.push({ lunes, desde, hasta, etiqueta: etiquetaSemana(lunes), venta, gasto, gastoVar });
   }
   return out;
 }
@@ -520,8 +553,10 @@ export function semanaParcial(lunes, dias) {
   const fin = new Date(l); fin.setDate(l.getDate() + Math.max(0, dias - 1));
   const desde = toISO(l), hasta = toISO(fin);
   const venta = cortesEnRango(desde, hasta).reduce((a, c) => a + num(c.ventas_total), 0);
-  const gasto = ticketsEnRango(desde, hasta).reduce((a, t) => a + gastoTicket(t), 0);
-  return { venta, gasto, dias };
+  const ts = ticketsEnRango(desde, hasta);
+  const gasto = ts.reduce((a, t) => a + gastoTicket(t), 0);
+  const gastoVar = ts.reduce((a, t) => a + gastoVariable(t), 0);
+  return { venta, gasto, gastoVar, dias };
 }
 
 // Historial de precios por insumo (agrupa por descripción normalizada)
@@ -876,7 +911,7 @@ export function prediccionCompras() {
   const { insumos } = ritmoCompras();
   const desde = toISO(lunesDe(new Date()));
   const meta = metaDeSemana(desde);
-  const gastoSemana = ticketsEnRango(desde, hoyISO()).reduce((a, t) => a + gastoTicket(t), 0);
+  const gastoSemana = ticketsEnRango(desde, hoyISO()).reduce((a, t) => a + gastoVariable(t), 0);
 
   const pendientes = [];
   for (const i of insumos) {
