@@ -505,6 +505,37 @@ export async function actualizarTicket(id, datos) {
   await cargarTickets();
 }
 
+// Corrige el NOMBRE y/o UNIDAD de un insumo en TODOS sus tickets (arregla el costeo).
+// Devuelve cuántos tickets se tocaron.
+export async function renombrarInsumo(viejo, nuevoNombre, nuevaUnidad) {
+  const vk = String(viejo || "").trim().toLowerCase();
+  const nombre = String(nuevoNombre || "").trim();
+  const unidad = nuevaUnidad == null ? "" : String(nuevaUnidad).trim();
+  let cambiados = 0;
+  for (const t of state.tickets) {
+    let toco = false;
+    const lineas = (t.lineas || []).map((l) => {
+      if ((l.descripcion || "").trim().toLowerCase() === vk) {
+        toco = true;
+        const nl = { ...l };
+        if (nombre) nl.descripcion = nombre;
+        if (unidad) nl.unidad = unidad;
+        return nl;
+      }
+      return l;
+    });
+    if (toco) {
+      const { error } = await supabase.from("tickets").update({
+        lineas: lineas.map(limpiarLinea), editado_por: miNombre(), editado_en: new Date().toISOString(),
+      }).eq("id", t.id);
+      if (error) throw error;
+      cambiados++;
+    }
+  }
+  await cargarTickets();
+  return cambiados;
+}
+
 export async function borrarTicket(id) {
   const { error } = await supabase.from("tickets").delete().eq("id", id);
   if (error) throw error;

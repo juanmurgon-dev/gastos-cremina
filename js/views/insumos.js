@@ -171,12 +171,30 @@ function renderPrecios(el) {
               <span class="val">${money(r.precio)}${r.unidad ? "/" + r.unidad : ""}</span>
             </div>`).join("")}
         </div>
-        <button class="btn sec" data-cerrar style="margin-top:14px">Cerrar</button>
+        <div class="titulo-seccion" style="margin-top:16px">✏️ Corregir insumo</div>
+        <div class="fila" style="gap:8px">
+          <input id="edN" value="${escapar(item.nombre)}" placeholder="Nombre" style="flex:2" />
+          <input id="edU" value="${escapar(item.unidad || "")}" placeholder="Unidad" style="flex:1" />
+        </div>
+        <div class="sub" style="font-size:11px;margin-top:4px">Cambia el nombre o la unidad (L, kg, g, ml, pza…). Se corrigen todos los tickets de este insumo y las recetas se recalculan solas.</div>
+        <button class="btn" id="edSave" style="margin-top:8px">💾 Guardar cambios</button>
+        <button class="btn sec" data-cerrar style="margin-top:8px">Cerrar</button>
       </div>`;
     document.body.appendChild(bg);
     const cerrar = () => bg.remove();
     bg.addEventListener("click", (e) => { if (e.target === bg) cerrar(); });
     bg.querySelector("[data-cerrar]").addEventListener("click", cerrar);
+    bg.querySelector("#edSave").addEventListener("click", async () => {
+      const nn = bg.querySelector("#edN").value.trim();
+      const nu = bg.querySelector("#edU").value.trim();
+      if (!nn) { alert("El nombre no puede quedar vacío."); return; }
+      const b = bg.querySelector("#edSave"); b.disabled = true; b.textContent = "Guardando…";
+      try {
+        const n = await store.renombrarInsumo(item.nombre, nn, nu);
+        cerrar(); pintar();
+        alert(`Listo: se corrigieron ${n} ticket(s). Las recetas se recalculan solas.`);
+      } catch (e) { b.disabled = false; b.textContent = "💾 Guardar cambios"; alert("Error: " + ((e && e.message) || e)); }
+    });
   }
 
   return off;
