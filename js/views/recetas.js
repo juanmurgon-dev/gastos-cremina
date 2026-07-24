@@ -62,6 +62,10 @@ function preparaciones() {
 
 // Agrupa las filas de un CSV en recetas. Una fila por ingrediente; se agrupan por 'platillo'.
 function gruposDesdeCSV(objs) {
+  if (!objs.length) return [];
+  // Formato ANCHO: una fila por platillo, con columnas "insumo 1", "cantidad 1", "unidad 1", "subreceta 1"…
+  if (Object.keys(objs[0]).some((c) => /^insumo\s*\d/.test(c) || /^subreceta\s*\d/.test(c))) return gruposDesdeAncho(objs);
+  // Formato LARGO: una fila por ingrediente (columnas platillo, insumo, cantidad, unidad…)
   const n2 = (x) => { const n = parseFloat(String(x).replace(/[^0-9.\-]/g, "")); return isNaN(n) ? 0 : n; };
   const esSi = (v) => /^(s[ií]|1|true|x|yes)$/i.test(String(v || "").trim());
   const map = new Map();
@@ -81,20 +85,34 @@ function gruposDesdeCSV(objs) {
   return [...map.values()];
 }
 
+// Formato ANCHO: una fila por platillo. Insumos en tríos (insumo/cantidad/unidad) y subrecetas en pares (subreceta/cantidad).
+function gruposDesdeAncho(objs) {
+  const n2 = (x) => { const n = parseFloat(String(x).replace(/[^0-9.\-]/g, "")); return isNaN(n) ? 0 : n; };
+  const g1 = (o, ...ks) => { for (const k of ks) if (o[k] != null && String(o[k]).trim() !== "") return String(o[k]).trim(); return ""; };
+  const grupos = [];
+  for (const o of objs) {
+    const producto = g1(o, "producto", "platillo", "nombre", "receta");
+    if (!producto) continue;
+    const grupo = { producto, es_preparacion: false, rendimiento: 1, rinde_unidad: "", porciones: n2(o.porciones) || 1, items: [] };
+    for (let i = 1; i <= 30; i++) {
+      const ins = g1(o, `insumo ${i}`, `insumo${i}`);
+      if (ins) grupo.items.push({ insumo: ins, cantidad: n2(g1(o, `cantidad ${i}`, `cant ${i}`, `cantidad${i}`)), unidad: g1(o, `unidad ${i}`, `unidad${i}`) });
+      const sub = g1(o, `subreceta ${i}`, `subreceta${i}`);
+      if (sub) grupo.items.push({ insumo: sub, cantidad: n2(g1(o, `cantidad sub ${i}`, `cant sub ${i}`)) || 1, unidad: "porción" });
+    }
+    if (grupo.items.length) grupos.push(grupo);
+  }
+  return grupos;
+}
+
 // Descarga un CSV con el formato correcto y ejemplos, para armar las recetas ahí.
 function descargarPlantilla() {
+  // Formato ANCHO: una fila por platillo. Cada insumo con su cantidad y unidad; subrecetas al final.
   descargarCSV("plantilla-recetas-platify",
-    ["platillo", "insumo", "cantidad", "unidad", "merma", "porciones", "es_preparacion", "rendimiento", "rinde_unidad"],
+    ["producto", "porciones", "insumo 1", "cantidad 1", "unidad 1", "insumo 2", "cantidad 2", "unidad 2", "insumo 3", "cantidad 3", "unidad 3", "subreceta 1", "cantidad sub 1"],
     [
-      ["Omelette de Carnes", "huevo", "120", "g", "", "1", "", "", ""],
-      ["Omelette de Carnes", "chorizo", "20", "g", "", "1", "", "", ""],
-      ["Omelette de Carnes", "jamon", "20", "g", "", "1", "", "", ""],
-      ["Omelette de Carnes", "frijol", "100", "g", "", "1", "", "", ""],
-      ["Omelette de Carnes", "queso monterrey", "80", "g", "", "1", "", "", ""],
-      ["Omelette de Carnes", "papa campesina", "100", "g", "10", "1", "", "", ""],
-      ["Omelette de Carnes", "brote de rabano", "2", "g", "", "1", "", "", ""],
-      ["Salsa verde", "tomate verde", "1000", "g", "", "", "si", "2", "L"],
-      ["Salsa verde", "chile serrano", "100", "g", "", "", "si", "2", "L"],
+      ["Latte", "1", "leche", "12", "oz", "", "", "", "", "", "", "espresso", "1"],
+      ["Omelette de Carnes", "1", "huevo", "120", "g", "queso monterrey", "80", "g", "chorizo", "20", "g", "", ""],
     ]
   );
 }
@@ -108,24 +126,21 @@ function descargarTablaRecetas() {
   let maxIns = 0, maxSub = 0;
   const datos = conReceta.map((p) => {
     const ins = [], sub = [];
-    for (const rr of store.recetasDe(p.producto)) {
-      const cell = `${rr.insumo} ${r2(rr.cantidad)}${rr.unidad || ""}`.trim();
-      if (store.tieneReceta(rr.insumo)) sub.push(cell); else ins.push(cell);
-    }
+    for (const rr of store.recetasDe(p.producto)) { (store.tieneReceta(rr.insumo) ? sub : ins).push(rr); }
     maxIns = Math.max(maxIns, ins.length); maxSub = Math.max(maxSub, sub.length);
-    const costo = store.costoDeReceta(p.producto) / (store.porcionesDe(p.producto) || 1);
-    return { producto: p.producto, ins, sub, costo };
+    return { p, ins, sub };
   });
-  const enc = ["Producto",
-    ...Array.from({ length: maxIns }, (_, i) => `Insumo ${i + 1}`),
-    ...Array.from({ length: maxSub }, (_, i) => `Subreceta ${i + 1}`),
-    "Costo por porción"];
-  const filas = datos.map((d) => [
-    d.producto,
-    ...Array.from({ length: maxIns }, (_, i) => d.ins[i] || ""),
-    ...Array.from({ length: maxSub }, (_, i) => d.sub[i] || ""),
-    r2(d.costo).toFixed(2),
-  ]);
+  const enc = ["producto", "porciones"];
+  for (let i = 1; i <= maxIns; i++) enc.push(`insumo ${i}`, `cantidad ${i}`, `unidad ${i}`);
+  for (let i = 1; i <= maxSub; i++) enc.push(`subreceta ${i}`, `cantidad sub ${i}`);
+  enc.push("costo por porción");
+  const filas = datos.map(({ p, ins, sub }) => {
+    const row = [p.producto, store.porcionesDe(p.producto)];
+    for (let i = 0; i < maxIns; i++) { const r = ins[i]; row.push(r ? r.insumo : "", r ? r2(r.cantidad) : "", r ? (r.unidad || "") : ""); }
+    for (let i = 0; i < maxSub; i++) { const r = sub[i]; row.push(r ? r.insumo : "", r ? r2(r.cantidad) : ""); }
+    row.push(r2(store.costoDeReceta(p.producto) / (store.porcionesDe(p.producto) || 1)).toFixed(2));
+    return row;
+  });
   descargarCSV("recetas-tabla-platify", enc, filas);
 }
 
