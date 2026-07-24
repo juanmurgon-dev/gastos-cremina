@@ -345,7 +345,7 @@ export function render(el) {
             </div>
             <div class="fila" style="justify-content:space-between;align-items:center;margin-top:8px">
               <span class="sub" style="font-size:11.5px">
-                ${precioU ? money(precioU) + (uCompra ? "/" + esc(uCompra) : "") : `<span style="color:var(--rojo)">sin precio de compra</span>`}${num(it.merma) > 0 ? ` · neta ${redondo(neta)} ${esc(uLinea)}` : ""}${it.modo === "subreceta" ? " 🧪" : ""}${precioU && uLinea && it.modo !== "subreceta" && !store.unidadesCompatibles(uLinea, uCompra) ? ` <b style="color:var(--rojo)">⚠️ unidad de compra: ${esc(uCompra || "sin unidad")} — no convierte con ${esc(uLinea)}</b>` : ""}
+                ${precioU ? money(precioU) + (uCompra ? "/" + esc(uCompra) : "") : `<span style="color:var(--rojo)">${it.insumo ? (it.modo === "subreceta" ? "esta subreceta cuesta $0 — cuéstala primero" : "sin precio de compra") : ""}</span>`}${num(it.merma) > 0 ? ` · neta ${redondo(neta)} ${esc(uLinea)}` : ""}${it.modo === "subreceta" ? " 🧪" : ""}${precioU && uLinea && it.modo !== "subreceta" && !store.unidadesCompatibles(uLinea, uCompra) ? ` <b style="color:var(--rojo)">⚠️ unidad de compra: ${esc(uCompra || "sin unidad")} — no convierte con ${esc(uLinea)}</b>` : ""}
               </span>
               <b style="font-size:15px">${linea ? money(linea) : "—"}</b>
             </div>
@@ -355,7 +355,7 @@ export function render(el) {
       rows.querySelectorAll("[data-i]").forEach((fila) => {
         const i = +fila.dataset.i;
         const rin = fila.querySelector(".rin"), rc = fila.querySelector(".rc"), ru = fila.querySelector(".ru"), rm = fila.querySelector(".rm");
-        rin.addEventListener("change", () => { items[i].insumo = rin.value; items[i].unidad = unidadDe(rin.value); draw(); });
+        rin.addEventListener("change", () => { items[i].insumo = rin.value; items[i].unidad = unidadDe(rin.value); if (it.modo === "subreceta" && !num(items[i].cantidad)) items[i].cantidad = 1; draw(); });
         rin.addEventListener("blur", () => { if (items[i].insumo !== rin.value) { items[i].insumo = rin.value; items[i].unidad = unidadDe(rin.value); draw(); } });
         rc.addEventListener("input", () => { items[i].cantidad = rc.value; });
         rc.addEventListener("blur", draw);
@@ -370,7 +370,7 @@ export function render(el) {
       cont.querySelector("#volver").addEventListener("click", () => { editando = null; pintar(); });
       cont.querySelector("#add").addEventListener("click", () => { items.push({ insumo: "", cantidad: "", unidad: "", merma: "", modo: "insumo" }); draw(); });
       const ap = cont.querySelector("#addprep");
-      if (ap) ap.addEventListener("click", () => { items.push({ insumo: "", cantidad: "", unidad: "", merma: "", modo: "subreceta" }); draw(); });
+      if (ap) ap.addEventListener("click", () => { items.push({ insumo: "", cantidad: 1, unidad: "", merma: "", modo: "subreceta" }); draw(); });
       // Foto
       const fotoInput = cont.querySelector("#foto");
       if (fotoInput) fotoInput.addEventListener("change", async (e) => {
