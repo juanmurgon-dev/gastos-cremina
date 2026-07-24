@@ -43,6 +43,12 @@ function platillos() {
     if (!m.has(nom)) m.set(nom, { producto: nom, categoria: p.categoria || "", venta: 0, cantidad: 0 });
     const o = m.get(nom); o.venta += num(p.venta); o.cantidad += num(p.cantidad);
   }
+  // También los platillos que ya tienen receta aunque no estén en las ventas (importados o creados a mano).
+  for (const r of store.state.recetas || []) {
+    if (r.es_preparacion) continue;
+    const nom = (r.producto || "").trim();
+    if (nom && !m.has(nom)) m.set(nom, { producto: nom, categoria: "", venta: 0, cantidad: 0 });
+  }
   return [...m.values()].map((o) => ({ ...o, precio: o.cantidad > 0 ? o.venta / o.cantidad : 0 }))
     .sort((a, b) => b.venta - a.venta);
 }
@@ -212,7 +218,7 @@ export function render(el) {
     const plat = !esPrep ? platillos().find((p) => p.producto === nombre) : null;
     const fichaAct = nombre ? store.fichaDe(nombre) : { categoria: "", tiempo: 0, procedimiento: "", pasos: [], foto: "" };
 
-    let items = existentes.map((r) => ({ insumo: r.insumo, cantidad: r.cantidad, unidad: r.unidad || "", merma: r.merma || "", modo: store.esPreparacion(r.insumo) ? "subreceta" : "insumo" }));
+    let items = existentes.map((r) => ({ insumo: r.insumo, cantidad: r.cantidad, unidad: r.unidad || "", merma: r.merma || "", modo: store.tieneReceta(r.insumo) ? "subreceta" : "insumo" }));
     if (!items.length) items = [{ insumo: "", cantidad: "", unidad: "", merma: "", modo: "insumo" }];
     let nom = nombre || "";
     let rendimiento = filaPrep ? filaPrep.rendimiento : 1;
@@ -230,7 +236,12 @@ export function render(el) {
     const precioVenta = plat ? plat.precio : 0;
     const insumosLista = store.preciosPorInsumo();
     const datalist = `<datalist id="dl-insumos">${insumosLista.map((i) => `<option value="${esc(i.nombre)}">`).join("")}</datalist>`;
-    const prepsDisp = () => preparaciones().filter((p) => p !== nom);
+    // Componentes que se pueden agregar como subreceta: preparaciones + platillos que ya tienen receta.
+    const prepsDisp = () => {
+      const set = new Set(preparaciones());
+      for (const r of store.state.recetas || []) if (!r.es_preparacion && r.producto) set.add(r.producto);
+      return [...set].filter((p) => p && p !== nombre && p !== nom).sort();
+    };
     const unidadDe = (insumo) => store.sugerirUnidadReceta(store.unidadInsumo(insumo));
 
     function draw() {
@@ -319,7 +330,7 @@ export function render(el) {
         const precioU = store.costoInsumo(it.insumo);
         const neta = store.cantidadNeta(it.cantidad, it.merma);
         const campo = it.modo === "subreceta"
-          ? `<select class="rin" style="flex:1;min-width:0"><option value="">— elige subreceta —</option>${prepsDisp().map((p) => `<option value="${esc(p)}"${p === it.insumo ? " selected" : ""}>${esc(p)}</option>`).join("")}</select>`
+          ? `<select class="rin" style="flex:1;min-width:0"><option value="">— elige subreceta o platillo —</option>${prepsDisp().map((p) => `<option value="${esc(p)}"${p === it.insumo ? " selected" : ""}>${esc(p)}</option>`).join("")}</select>`
           : `<input class="rin" list="dl-insumos" placeholder="Nombre del insumo" value="${esc(it.insumo)}" style="flex:1;min-width:0" />`;
         return `
           <div data-i="${i}" style="border:1px solid var(--linea);border-radius:12px;padding:12px;margin-top:10px;background:#fff">

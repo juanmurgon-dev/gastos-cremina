@@ -234,19 +234,26 @@ export function unidadPreparacion(nombre) {
 }
 
 // Costo por unidad de un insumo, resolviendo preparaciones (recursivo, anti-ciclos).
+// ¿Este nombre tiene su propia receta? (preparación o platillo) → usable como componente/subreceta.
+export function tieneReceta(nombre) {
+  return recetasDe(nombre).length > 0;
+}
 export function costoInsumo(nombre, seen) {
   seen = seen || new Set();
-  if (esPreparacion(nombre)) {
-    if (seen.has(nombre)) return 0;
+  const prep = esPreparacion(nombre);
+  if (prep || tieneReceta(nombre)) {          // preparación O platillo con receta → costo de SU receta
+    if (seen.has(nombre)) return 0;           // corta ciclos (Latte → Latte de Vainilla → Latte…)
     seen.add(nombre);
-    return costoDeReceta(nombre, seen) / rendimientoDe(nombre);
+    const divisor = prep ? rendimientoDe(nombre) : porcionesDe(nombre);
+    return costoDeReceta(nombre, seen) / (divisor || 1);   // costo por porción/unidad
   }
-  return precioInsumo(nombre);
+  return precioInsumo(nombre);                 // insumo comprado
 }
 
 // Unidad de compra de un insumo (o la unidad en que rinde, si es preparación).
 export function unidadInsumo(nombre) {
   if (esPreparacion(nombre)) return unidadPreparacion(nombre);
+  if (tieneReceta(nombre)) return "porción";   // platillo usado como componente → por porción
   const key = String(nombre || "").trim().toLowerCase();
   const hit = preciosPorInsumo().find((i) => i.nombre.toLowerCase() === key);
   return hit ? (hit.unidad || "") : "";
@@ -319,7 +326,7 @@ export async function recalcularTodos() {
   const platillos = [...new Set((state.recetas || []).filter((r) => !r.es_preparacion).map((r) => r.producto))];
   let cambios = 0;
   for (const p of platillos) {
-    const nuevo = round2(costoDeReceta(p));
+    const nuevo = round2(costoDeReceta(p) / (porcionesDe(p) || 1)); // costo POR PORCIÓN
     if (round2(actuales.get(p)) !== nuevo) {
       await supabase.from("costos_platillo").upsert({ producto: p, costo: nuevo, actualizado: new Date().toISOString() });
       cambios++;
