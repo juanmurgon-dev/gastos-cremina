@@ -167,8 +167,22 @@ function parseVariantes(wb, XLSX) {
   }));
 }
 
+// Categorías de menú: si el archivo agrupa por estas (en vez de por grupo
+// modificador real), es el REPORTE en PDF/Word, no el "Grupos modificadores"
+// de Parrot. Rechazarlo evita borrar el desglose bueno por variante.
+const CATEGORIAS_REPORTE = new Set(["desayunos", "comida", "entradas", "postres",
+  "barra de café", "barra de cafe", "bebidas", "mimosas", "extras", "otros"]);
+
 async function importarVariantes(vrows, semana) {
   if (!semana) throw new Error("sube también el 'Reporte de artículos' de esa semana (para saber la fecha)");
+  // Candado: no dejes que el reporte por categoría (o placeholders "Sin variante")
+  // sobrescriba el desglose real por variante.
+  const grupos = [...new Set((vrows || []).map((v) => (v.grupo || "").trim().toLowerCase()).filter(Boolean))];
+  const cats = grupos.filter((g) => CATEGORIAS_REPORTE.has(g)).length;
+  const hayPlaceholder = (vrows || []).some((v) => (v.opcion || "").trim().toLowerCase() === "sin variante");
+  if ((grupos.length && cats / grupos.length >= 0.5) || hayPlaceholder) {
+    throw new Error("Ese archivo parece el REPORTE (agrupado por categoría), no el 'Grupos modificadores' de Parrot. Sube el Excel de grupos modificadores para el desglose por variante. (No se tocó lo que ya tenías.)");
+  }
   await supabase.from("variantes_venta").delete().eq("desde", semana.desde);
   const rows = vrows.map((v) => ({ periodo: semana.periodo, desde: semana.desde, hasta: semana.hasta, ...v }));
   const { error } = await supabase.from("variantes_venta").insert(rows);
