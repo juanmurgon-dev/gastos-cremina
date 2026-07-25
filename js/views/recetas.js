@@ -49,8 +49,16 @@ function platillos() {
     const nom = (r.producto || "").trim();
     if (nom && !m.has(nom)) m.set(nom, { producto: nom, categoria: "", venta: 0, cantidad: 0 });
   }
-  return [...m.values()].map((o) => ({ ...o, precio: o.cantidad > 0 ? o.venta / o.cantidad : 0 }))
-    .sort((a, b) => b.venta - a.venta);
+  return [...m.values()].map((o) => {
+    const fcat = (store.fichaDe(o.producto) || {}).categoria;   // la categoría de la ficha tiene prioridad
+    return { ...o, categoria: fcat || o.categoria || "", precio: o.cantidad > 0 ? o.venta / o.cantidad : 0 };
+  }).sort((a, b) => b.venta - a.venta);
+}
+// Categorías distintas de los platillos (para el filtro).
+function categoriasPlatillos() {
+  const set = new Set();
+  for (const p of platillos()) if (p.categoria) set.add(p.categoria);
+  return [...set].sort((a, b) => a.localeCompare(b, "es"));
 }
 
 // Preparaciones base existentes (recetas con es_preparacion).
@@ -171,11 +179,11 @@ export function render(el) {
 
   // ───────────── Lista de platillos ─────────────
   function listaPlatillos(cont) {
-    const st = { q: "" };
+    const st = { q: "", cat: "todas" };
     function draw() {
       const costos = store.mapaCostos();
       const q = st.q.trim().toLowerCase();
-      const arr = platillos().filter((p) => !q || p.producto.toLowerCase().includes(q));
+      const arr = platillos().filter((p) => (!q || p.producto.toLowerCase().includes(q)) && (st.cat === "todas" || (p.categoria || "") === st.cat));
       const conReceta = arr.filter((p) => store.recetasDe(p.producto).length).length;
       cont.innerHTML = `
         <div class="card">
@@ -187,7 +195,11 @@ export function render(el) {
             <button class="btn sec chico" id="exptabla" style="flex:1 1 100%">⬇ Descargar recetas (tabla)</button>
           </div>
           <input type="file" id="fcsv" accept=".csv,text/csv" style="display:none" />
-          <input id="bq" placeholder="Buscar platillo…" style="margin:6px 0 12px" value="${esc(st.q)}" />
+          <input id="bq" placeholder="Buscar platillo…" style="margin:6px 0 8px" value="${esc(st.q)}" />
+          <select id="fcat" style="width:100%;margin-bottom:12px">
+            <option value="todas"${st.cat === "todas" ? " selected" : ""}>Todas las categorías</option>
+            ${categoriasPlatillos().map((c) => `<option value="${esc(c)}"${st.cat === c ? " selected" : ""}>${esc(c)}</option>`).join("")}
+          </select>
           <div id="lista"></div>
         </div>`;
       const lista = cont.querySelector("#lista");
@@ -213,6 +225,8 @@ export function render(el) {
 
       const bq = cont.querySelector("#bq");
       bq.addEventListener("input", () => { st.q = bq.value; const s = bq.selectionStart; draw(); const nb = cont.querySelector("#bq"); nb.focus(); nb.setSelectionRange(s, s); });
+      const fcat = cont.querySelector("#fcat");
+      fcat.addEventListener("change", () => { st.cat = fcat.value; draw(); });
       cont.querySelector("#plantilla").addEventListener("click", descargarPlantilla);
       cont.querySelector("#exptabla").addEventListener("click", descargarTablaRecetas);
       const fcsv = cont.querySelector("#fcsv");
