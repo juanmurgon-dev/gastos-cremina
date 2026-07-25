@@ -28,6 +28,17 @@ function kmoney(n) {
   if (a >= 1000) return "$" + (n / 1000).toFixed(1) + "k";
   return "$" + Math.round(n);
 }
+
+const DIAS_S = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const MES_S = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+function fechaCorta(iso) {
+  const d = new Date(iso + "T00:00");
+  return `${DIAS_S[d.getDay()]} ${d.getDate()} ${MES_S[d.getMonth()]}`;
+}
+function esAyer(iso) {
+  const h = new Date(); h.setHours(0, 0, 0, 0); h.setDate(h.getDate() - 1);
+  return iso === `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, "0")}-${String(h.getDate()).padStart(2, "0")}`;
+}
 function opac(v, max) { return (0.4 + 0.6 * (v / (max || 1))).toFixed(2); }
 function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
@@ -150,17 +161,33 @@ function grid2(tiles) {
   return `<div style="display:grid;grid-template-columns:${cols};gap:10px">${tiles.join("")}</div>`;
 }
 
-// "De un vistazo": lo que sube/baja de venta y tu insumo clave.
-function cardVistazo(tp, ins, cd) {
+// "De un vistazo": pulso DIARIO (venta de ayer) + lo que sube/baja de venta en
+// la semana y tu insumo clave.
+function cardVistazo(tp, ins, cd, pulso) {
   const tiles = [];
+  // ── Pulso diario: venta del último día con corte (lo único que sí es diario) ──
+  if (pulso) {
+    const lbl = esAyer(pulso.fecha) ? "Venta de ayer" : `Venta · ${fechaCorta(pulso.fecha)}`;
+    const diaSem = DIAS_S[new Date(pulso.fecha + "T00:00").getDay()];
+    let sub2, col2;
+    if (pulso.tienePrev && pulso.prevVenta > 0) {
+      const chg = (pulso.venta - pulso.prevVenta) / pulso.prevVenta;
+      col2 = chg >= 0 ? "var(--verde)" : "var(--rojo)";
+      sub2 = `${chg >= 0 ? "▲" : "▼"} ${Math.round(Math.abs(chg) * 100)}% vs ${diaSem} pasado (${kmoney(pulso.prevVenta)})`;
+    } else {
+      sub2 = `${fechaCorta(pulso.fecha)} · sin comparación`;
+      col2 = "var(--tinta)";
+    }
+    tiles.push(tile("📅", lbl, money(pulso.venta), sub2, col2));
+  }
   if (cd && cd.subidas.length) {
     const s = cd.subidas[0];
-    tiles.push(tile("🚀", "Subiendo (ojo del bueno)", esc(s.nombre),
+    tiles.push(tile("🚀", "Subiendo · semana", esc(s.nombre),
       `▲ ${Math.round(s.rise * 100)}% · ${Math.round(s.prev)}→${Math.round(s.cur)} vendidos`, "var(--verde)"));
   }
   if (cd && cd.caidas.length) {
     const c = cd.caidas[0];
-    tiles.push(tile("📉", "Está cayendo", esc(c.nombre),
+    tiles.push(tile("📉", "Cayendo · semana", esc(c.nombre),
       `▼ ${Math.round(Math.abs(c.drop) * 100)}% · ${Math.round(c.prev)}→${Math.round(c.cur)} vendidos`, "var(--rojo)"));
   }
   if (ins && ins.masSubio) tiles.push(tile("📈", "Insumo que más subió", esc(ins.masSubio.nombre),
@@ -254,6 +281,7 @@ function renderOwner(el) {
     const tp = topProductos();
     const ins = insumosDestacados();
     const cd = movimientosProductos();
+    const pulso = store.pulsoDiario();
 
     // ── Para actuar: máximo 3 cosas, lo crítico primero ──
     const acc = [];
@@ -314,7 +342,7 @@ function renderOwner(el) {
         ${accTop.map((a) => `<div style="font-size:13.5px;padding:8px 0;border-bottom:1px solid var(--linea);line-height:1.45">${a}</div>`).join("")}
       </div>
 
-      ${cardVistazo(tp, ins, cd)}
+      ${cardVistazo(tp, ins, cd, pulso)}
 
       <div class="card">
         <h2 style="margin-bottom:8px">Gasto de la semana</h2>

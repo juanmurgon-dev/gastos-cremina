@@ -761,6 +761,29 @@ export function cortesEnRango(desdeISO, hastaISO) {
     c.fecha && (!desdeISO || c.fecha >= desdeISO) && (!hastaISO || c.fecha <= hastaISO));
 }
 
+// Pulso del ÚLTIMO día con corte: venta de ese día y comparación con el mismo
+// día de la semana pasada. Es lo único que sí tenemos por día (los cortes de
+// caja); el detalle por producto solo llega por semana desde Parrot.
+export function pulsoDiario() {
+  const porDia = new Map();
+  for (const c of state.cortes || []) {
+    if (!c.fecha) continue;
+    porDia.set(c.fecha, (porDia.get(c.fecha) || 0) + num(c.ventas_total));
+  }
+  if (!porDia.size) return null;
+  const fechas = [...porDia.keys()].sort();          // viejo → nuevo
+  const fecha = fechas[fechas.length - 1];           // último día con corte
+  const d = parseISO(fecha); d.setDate(d.getDate() - 7);
+  const prevISO = toISO(d);
+  return {
+    fecha,
+    venta: porDia.get(fecha) || 0,
+    prevISO,
+    prevVenta: porDia.get(prevISO) || 0,
+    tienePrev: porDia.has(prevISO),
+  };
+}
+
 // Últimas N semanas con venta y gasto (para comparar y sacar costo %)
 export function ventasSemanas(n) {
   const hoyLunes = lunesDe(new Date());
