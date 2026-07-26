@@ -88,11 +88,15 @@ Cilantro 15"></textarea>
   // ── Modo texto ──
   el.querySelector("#btn-texto").addEventListener("click", () => paso("texto"));
   el.querySelector("#txt-cancelar").addEventListener("click", () => paso("inicio"));
-  el.querySelector("#txt-analizar").addEventListener("click", async () => {
+  el.querySelector("#txt-analizar").addEventListener("click", () => {
     const texto = el.querySelector("#txt").value.trim();
     if (!texto) return;
-    fotoBlob = null; fotoBase64 = null;
-    await analizar({ texto });
+    fotoBlob = null; fotoBase64 = null; fotoDataUrl = null;
+    // Manual = 100% local (parser propio). NO llama a Claude, así funciona
+    // aunque la API esté sin cupo o sin internet. La IA queda solo para fotos.
+    const local = parsearTicketLocal(texto);
+    local.aviso = "";
+    mostrarRevision([local.lineas.length ? local : { ...local, lineas: [{}] }], "manual");
   });
 
   // ── Analizar foto: Tesseract primero (gratis); Claude solo si hace falta ──
@@ -112,20 +116,25 @@ Cilantro 15"></textarea>
       ocr = null; // Tesseract no cargó (p. ej. sin internet) → vamos con IA
     }
 
-    // ¿Tesseract leyó bien? Si no, que Claude lea la imagen.
-    if (!ocr || ocr.confidence < 55 || ocr.text.length < 25) {
-      setCarg("No se leyó claro; usando IA…");
-      return analizar({ imagenBase64: fotoBase64, mediaType: "image/jpeg" });
+    const texto = ocr && ocr.text ? ocr.text.trim() : "";
+
+    // Cascada de MENOR a MAYOR costo. La confianza de Tesseract es poco fiable,
+    // así que NO decidimos por ella: decidimos por si hay texto y si el parser
+    // local logra estructurarlo.
+    if (texto.length >= 25) {
+      // 1) GRATIS: Tesseract + parser local, cero API.
+      const local = parsearTicketLocal(texto);
+      if (local.lineas.length >= 1) {
+        return mostrarRevision([local], "tesseract");
+      }
+      // 2) BARATO: hay texto pero no se estructuró → Claude con TEXTO (sin imagen).
+      setCarg("Estructurando con IA (texto)…");
+      return analizar({ texto, ocr: true });
     }
 
-    const local = parsearTicketLocal(ocr.text);
-    if (local.lineas.length >= 1) {
-      return mostrarRevision([local], "tesseract");
-    }
-
-    // Leyó texto pero no pude estructurarlo → Claude con el TEXTO (más barato).
-    setCarg("Estructurando con IA…");
-    return analizar({ texto: ocr.text, ocr: true });
+    // 3) ÚLTIMO RECURSO (más caro): Tesseract no sacó casi nada → Claude lee la IMAGEN.
+    setCarg("No se leyó claro; usando IA (imagen)…");
+    return analizar({ imagenBase64: fotoBase64, mediaType: "image/jpeg" });
   }
 
   async function analizar(payload) {
@@ -163,6 +172,8 @@ Cilantro 15"></textarea>
 
     if (!tickets.length) {
       msg.innerHTML = `<div class="aviso-box">No detecté ningún gasto. Corrígelo a mano o toca "Mejorar con IA".</div>`;
+    } else if (fuente === "manual") {
+      msg.innerHTML = `<div class="ok-box">Escrito a mano (sin internet ni IA). Revisa proveedor, fecha y montos, y guarda.</div>`;
     } else if (fuente === "tesseract") {
       msg.innerHTML = `<div class="ok-box">Leí ${tickets.length} ticket(s) <b>gratis</b> con Tesseract. Revisa montos y área; si algo salió mal, toca "Mejorar con IA".</div>`;
     } else {
