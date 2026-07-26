@@ -7,7 +7,7 @@ import { supabase } from "./supabase-init.js";
 // ── Catálogos (mismos que el bot) ───────────────────────────
 export const AREAS = ["cocina", "barra", "piso", "limpieza", "otro"];
 export const TIPOS = ["costo de venta", "operativo"];
-export const UNIDADES = ["kg", "pz", "L", "caja", "paq", "manojo", "lt", "gr", "otro"];
+export const UNIDADES = ["kg", "pz", "L", "caja", "paq", "manojo", "lt", "gal", "gr", "otro"];
 
 export const COLOR_AREA = {
   cocina: "#2ec4b6", barra: "#ff9f1c", piso: "#ffbf69",
@@ -184,6 +184,7 @@ const _uBase = {
   g: ["g", 1], gr: ["g", 1], grs: ["g", 1], gramo: ["g", 1], gramos: ["g", 1],
   kg: ["g", 1000], kgs: ["g", 1000], kilo: ["g", 1000], kilos: ["g", 1000], mg: ["g", 0.001],
   ml: ["ml", 1], cc: ["ml", 1], l: ["ml", 1000], lt: ["ml", 1000], lts: ["ml", 1000], litro: ["ml", 1000], litros: ["ml", 1000],
+  gal: ["ml", 3785], galon: ["ml", 3785], "galón": ["ml", 3785], galones: ["ml", 3785],
   oz: ["ml", 29.57], onza: ["ml", 29.57], onzas: ["ml", 29.57], cda: ["ml", 15], cucharada: ["ml", 15], cucharadas: ["ml", 15], cdta: ["ml", 5], cucharadita: ["ml", 5],
   pza: ["pza", 1], pz: ["pza", 1], pzas: ["pza", 1], pieza: ["pza", 1], piezas: ["pza", 1], u: ["pza", 1], un: ["pza", 1], unidad: ["pza", 1],
 };
