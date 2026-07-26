@@ -1086,6 +1086,46 @@ function lev(a, b) {
   }
   return prev[n];
 }
+
+// ── Búsqueda de insumos (fuzzy: sin acentos, tolera errores de dedo) ────
+export function normIns(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+}
+// Insumos existentes parecidos a la consulta, rankeados (mejor primero).
+export function buscarInsumos(query, limit = 8) {
+  const lista = preciosPorInsumo();
+  const q = normIns(query);
+  if (!q) return lista.slice(0, limit);
+  const out = [];
+  for (const i of lista) {
+    const n = normIns(i.nombre);
+    let score = -1;
+    if (n === q) score = 100;
+    else if (n.startsWith(q) || q.startsWith(n)) score = 80;
+    else if (n.includes(q) || (n.length >= 3 && q.includes(n))) score = 65;
+    else if (n.split(" ").some((w) => w.startsWith(q))) score = 55;
+    else {
+      const d = lev(q, n);
+      if (d <= Math.max(2, Math.floor(q.length * 0.4))) score = 45 - d;
+      else {
+        const wd = Math.min(...n.split(" ").map((w) => lev(q, w)));
+        if (wd <= Math.max(1, Math.floor(q.length * 0.34))) score = 35 - wd;
+      }
+    }
+    if (score >= 0) out.push({ ...i, score });
+  }
+  out.sort((a, b) => b.score - a.score || a.nombre.length - b.nombre.length);
+  return out.slice(0, limit);
+}
+// El insumo existente más cercano a un nombre escrito (para no duplicar al agregar).
+// Solo unifica si el parecido es fuerte; si no, devuelve el nombre tal cual (insumo nuevo).
+export function emparejarInsumo(nombre) {
+  const raw = (nombre || "").trim();
+  if (!raw) return raw;
+  const hit = buscarInsumos(raw, 1)[0];
+  return (hit && hit.score >= 65) ? hit.nombre : raw;
+}
+
 // Proveedores existentes (ya canonizados) con cuántos tickets tiene cada uno.
 export function proveedoresConocidos() {
   const m = new Map();

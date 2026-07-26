@@ -209,10 +209,7 @@ export function render(el) {
     const nomEl = $("#rqNom"), sugEl = $("#rqSug");
     const cerrarSug = () => { sugEl.style.display = "none"; sugEl.innerHTML = ""; };
     function abrirSug() {
-      const q = nomEl.value.trim().toLowerCase();
-      let items = insumos;
-      if (q) items = insumos.filter((i) => i.nombre.toLowerCase().includes(q));
-      items = items.slice(0, 8);
+      const items = store.buscarInsumos(nomEl.value, 8);
       if (!items.length) { cerrarSug(); return; }
       sugEl.innerHTML = items.map((i) => `
         <div class="ac-item" data-n="${esc(i.nombre)}" style="padding:11px 13px;cursor:pointer;border-bottom:1px solid var(--linea);font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:center">
@@ -233,7 +230,7 @@ export function render(el) {
     nomEl.addEventListener("focus", abrirSug);
     nomEl.addEventListener("blur", () => setTimeout(cerrarSug, 150));
     $("#rqAdd").addEventListener("click", () => {
-      const nombre = $("#rqNom").value.trim();
+      const nombre = store.emparejarInsumo($("#rqNom").value.trim());
       const cantidad = num($("#rqCant").value);
       if (!nombre || !cantidad) return;
       const hit = byName.get(nombre.toLowerCase());
@@ -251,6 +248,7 @@ export function render(el) {
 
   // Crea un item de requisición completando precio/proveedor del historial.
   function itemDesde(nombre, cantidad, unidad) {
+    nombre = store.emparejarInsumo(nombre || "");
     const hit = byName.get((nombre || "").toLowerCase());
     const precio = hit ? num(hit.precioActual) : 0;
     const proveedor = hit && hit.registros[0] ? (hit.registros[0].proveedor || "") : "";
