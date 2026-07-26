@@ -14,6 +14,9 @@ import { COLOR_AREA, money, num, toISO, lunesDe, etiquetaSemana, AREAS } from ".
 const CREC_DEFAULT = 5;    // % de crecimiento sobre la semana pasada
 const FOOD_DEFAULT = 26;   // % food cost (costo de venta / venta)
 
+// Dinero sin centavos, para los stat tiles (así caben 3 en móvil).
+const money0 = (n) => num(n).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
+
 // Venta de una semana: cortes de caja (fuente diaria); respaldo = productos_venta.
 function ventaSemana(desde, hasta) {
   const porCortes = store.cortesEnRango(desde, hasta).reduce((a, c) => a + num(c.ventas_total), 0);
@@ -101,12 +104,12 @@ export function render(el) {
       ${alerta}
       <div class="card">
         <div class="sub" style="margin-top:0">
-          Semana pasada: <b>${money(ventaPrev)}</b> · Proyección +${crec}%: <b>${money(proyeccion)}</b>
-          → Meta food cost ${food}%: <b>${money(meta)}</b>${manual ? " (fijada a mano)" : " (sugerida)"}
+          Semana pasada <b>${money(ventaPrev)}</b> · proyección +${crec}% <b>${money(proyeccion)}</b> · meta = ${food}% de la proyección ${manual ? "(fijada a mano)" : "(sugerida)"}
         </div>
         <div class="row-stats" style="margin:14px 0">
-          <div class="stat"><div class="n">${money(insumos)}</div><div class="l">Insumos (costo de venta)</div></div>
-          <div class="stat"><div class="n" style="color:${rest < 0 ? "var(--rojo)" : "var(--verde)"}">${money(rest)}</div><div class="l">${rest < 0 ? "Excedido" : "Disponible"}</div></div>
+          <div class="stat"><div class="n" style="font-size:19px">${money0(meta)}</div><div class="l">Meta</div></div>
+          <div class="stat"><div class="n" style="font-size:19px">${money0(insumos)}</div><div class="l">Insumos</div></div>
+          <div class="stat"><div class="n" style="font-size:19px;color:${rest < 0 ? "var(--rojo)" : "var(--verde)"}">${money0(rest)}</div><div class="l">${rest < 0 ? "Excedido" : "Disponible"}</div></div>
         </div>
         <div class="barra-track" style="height:14px"><span class="barra-fill" style="width:${pct}%;background:${color}"></span></div>
         <div class="sub" style="margin-top:6px">
@@ -119,9 +122,9 @@ export function render(el) {
       <div class="card">
         <h2>Ajustes de la meta</h2>
         <div class="fila" style="gap:10px">
-          <label class="campo" style="flex:1"><span>Crecimiento % (vs semana pasada)</span>
+          <label class="campo" style="flex:1"><span>Crecimiento %</span>
             <input id="crec" type="number" step="any" inputmode="decimal" value="${crec}" /></label>
-          <label class="campo" style="flex:1"><span>Food cost % (meta / venta)</span>
+          <label class="campo" style="flex:1"><span>Food cost %</span>
             <input id="food" type="number" step="any" inputmode="decimal" value="${food}" /></label>
         </div>
         <button class="btn sec" id="guardar-pct">Guardar % (aplica a todas las semanas)</button>
