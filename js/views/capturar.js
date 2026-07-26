@@ -208,12 +208,21 @@ Cilantro 15"></textarea>
         if (eUp) throw eUp;
         fotoUrl = supabase.storage.from("tickets").getPublicUrl(nombre).data.publicUrl;
       }
+      const guardados = [];
       for (const ed of editores) {
         const t = ed.getValue();
         if (!t.lineas.length) continue;
-        await store.guardarTicket({ ...t, fotoUrl, creadoPor: store.miNombre() });
+        const typed = (t.proveedor || "").trim();
+        const final = await store.guardarTicket({ ...t, fotoUrl, creadoPor: store.miNombre() });
+        guardados.push({ typed, final: (final || "").trim() });
       }
-      el.querySelector("#msg").innerHTML = `<div class="ok-box">✅ Guardado. ¡Listo!</div>`;
+      const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+      const provs = [...new Set(guardados.map((g) => g.final).filter(Boolean))];
+      const unif = guardados.filter((g) => g.typed && g.final && g.typed !== g.final);
+      let extra = "";
+      if (provs.length) extra += ` Proveedor: <b>${provs.map(esc).join(", ")}</b>.`;
+      if (unif.length) extra += `<br><span style="color:var(--sea-txt)">🔗 Unifiqué "${esc(unif[0].typed)}" → "${esc(unif[0].final)}".</span>`;
+      el.querySelector("#msg").innerHTML = `<div class="ok-box">✅ Guardado.${extra}</div>`;
       setTimeout(reset, 900);
     } catch (err) {
       alert("No pude guardar: " + ((err && err.message) || err));

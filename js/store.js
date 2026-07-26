@@ -496,6 +496,7 @@ export async function guardarTicket(t) {
   });
   if (error) throw error;
   await cargarTickets();
+  return proveedor;
 }
 
 export async function actualizarTicket(id, datos) {
@@ -833,11 +834,12 @@ export function semanaParcial(lunes, dias) {
 // ── Proveedores: unificar nombres que son el mismo ──────────
 // Palabras que no distinguen un proveedor (conectores y sufijos de razón social).
 const STOP_PROV = new Set(["de", "del", "la", "el", "los", "las", "y", "e",
-  "s", "a", "c", "v", "r", "l", "rl", "cv", "sa", "sc", "srl", "sapi", "sab", "sadecv"]);
+  "s", "a", "c", "v", "r", "l", "rl", "cv", "sa", "sc", "srl", "sapi", "sab", "sadecv",
+  "sucursal", "suc", "sucursales", "matriz", "no", "num", "numero", "mexico", "mex", "mx"]);
 // Clave normalizada: minúsculas, sin acentos, sin conectores ni "S de RL / SA de CV".
 export function normProv(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w && !STOP_PROV.has(w)).join(" ").trim();
+    .replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w && !STOP_PROV.has(w) && !/^\d+$/.test(w)).join(" ").trim();
 }
 // Nombre canónico de un proveedor según el mapa de alias guardado en config.
 export function canonProv(nombre) {
@@ -1041,7 +1043,20 @@ export function mejorMatchProveedor(nombre) {
     const tol = Math.max(1, Math.floor(Math.min(key.length, p.key.length) * 0.34));
     if (d <= tol && d < bestD) { best = p; bestD = d; }
   }
-  return best ? { nombre: best.nombre, exacto: false } : null;
+  if (best) return { nombre: best.nombre, exacto: false };
+  // Fallback por CONTENCIÓN: si TODOS los tokens de un proveedor conocido están
+  // dentro del nombre escrito (ej. "costco mayoreo tijuana" contiene "costco"),
+  // unifica al más específico. Exige un token distintivo (>=4) para no unir por genéricos.
+  const keyToks = new Set(key.split(" ").filter(Boolean));
+  let cont = null, contLen = 0;
+  for (const p of lista) {
+    const pToks = p.key.split(" ").filter(Boolean);
+    if (!pToks.length) continue;
+    if (pToks.every((t) => keyToks.has(t)) && pToks.some((t) => t.length >= 4) && p.key.length > contLen) {
+      cont = p; contLen = p.key.length;
+    }
+  }
+  return cont ? { nombre: cont.nombre, exacto: false } : null;
 }
 
 // Se llama al guardar/editar un ticket: si el proveedor escrito se parece a uno
