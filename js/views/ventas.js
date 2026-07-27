@@ -161,7 +161,6 @@ function productos(cont) {
 
   function pintarPeriodo() {
     const pc = cont.querySelector("#pc");
-    const usaVar = store.usaVariantes();   // ¿este restaurante desglosa por grupo modificador?
     // Pan de Cortesía es cortesía, no venta → se excluye de los análisis.
     const prods = prodAll.filter((p) => p.periodo === periodo && !ES_CORTESIA.test(p.producto || "") && !ES_CORTESIA.test(p.categoria || ""));
     const vars = varAll.filter((v) => v.periodo === periodo && !ES_CORTESIA.test(v.producto || "") && !ES_CORTESIA.test(v.opcion || ""));
@@ -223,28 +222,28 @@ function productos(cont) {
     for (const v of varsAgg) if (/^leche$/i.test(v.grupo || "")) leche[v.opcion] = (leche[v.opcion] || 0) + store.num(v.unidades);
     const lecheEnt = Object.entries(leche).sort((a, b) => b[1] - a[1]);
 
+    const hayVar = varsAgg.length > 0;      // ¿hay reporte de variantes cargado este periodo?
+    const m = leerMostrar(hayVar);          // qué desgloses quiere ver el usuario (casillas)
+    if (!hayVar) { m.variante = false; m.grupo = false; }   // sin datos, no se pueden mostrar
     let q = "", cat = "todas";
+
     pc.innerHTML = `
       <button class="btn sec chico" id="expP" style="margin-bottom:12px">⬇ Exportar CSV (${escapar(periodo)})</button>
       ${Object.keys(porCat).length ? `<div class="card"><h2>Venta por categoría</h2>${barrasCat(porCat)}</div>` : ""}
-      ${(usaVar && lecheEnt.length) ? `<div class="card"><h2>Leche más pedida</h2>
+      ${(hayVar && lecheEnt.length) ? `<div class="card"><h2>Leche más pedida</h2>
         <p class="sub" style="margin-top:-4px">Total de bebidas por tipo de leche</p>${barrasLeche(lecheEnt)}</div>` : ""}
       <div class="card">
-        <h2>${usaVar ? "Venta por platillo y variante" : "Venta por platillo"}</h2>
-        ${!usaVar
-          ? listaArticulos(prodsAgg)
-          : (varsAgg.length
-            ? `<input id="bq" placeholder="Buscar platillo…" style="margin-bottom:10px" />
-               <select id="fcat" style="margin-bottom:12px">
-                 <option value="todas">Todos los grupos de comida</option>
-                 ${categorias.map((c) => `<option value="${escapar(c)}">${escapar(c)}</option>`).join("")}
-               </select>
-               <div id="plist"></div>`
-            : `<div class="aviso-box">Sube el <b>reporte de grupos de modificadores</b> de esta semana en <b>Importar</b> para ver el desglose por variante.</div>`)}
+        <h2>Venta por platillo</h2>
+        <p class="sub" style="margin:-4px 0 10px">Marca qué desglose quieres ver:</p>
+        <div id="mostrarChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
+        <div id="prodBody"></div>
       </div>`;
 
+    const chipsEl = pc.querySelector("#mostrarChips");
+    const prodBody = pc.querySelector("#prodBody");
+
     pc.querySelector("#expP").addEventListener("click", () => {
-      if (usaVar && varsAgg.length) {
+      if (hayVar && (m.variante || m.grupo)) {
         const filas = varsAgg.map((v) => [v.producto, v.grupo, v.opcion, store.num(v.unidades), store.num(v.venta)]);
         descargarCSV("productos-variantes-" + periodo, ["Producto", "Grupo", "Variante", "Unidades", "Venta"], filas);
       } else {
@@ -253,19 +252,72 @@ function productos(cont) {
       }
     });
 
-    if (usaVar && varsAgg.length) {
-      const bq = pc.querySelector("#bq"), fc = pc.querySelector("#fcat");
-      bq.addEventListener("input", () => { q = bq.value.trim().toLowerCase(); pintarList(); });
-      fc.addEventListener("change", () => { cat = fc.value; pintarList(); });
-      pintarList();
+    function chipHTML(id, label, disabled) {
+      const on = m[id];
+      const bg = on ? "rgba(255,159,28,.14)" : "transparent";
+      const bd = on ? "var(--naranja)" : "var(--linea)";
+      return `<label title="${disabled ? "Sube el reporte de variantes para activar" : ""}"
+        style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
+        padding:7px 12px;border:1px solid ${bd};border-radius:999px;background:${bg};
+        cursor:${disabled ? "not-allowed" : "pointer"};opacity:${disabled ? .4 : 1};user-select:none">
+        <input type="checkbox" data-m="${id}" ${on ? "checked" : ""} ${disabled ? "disabled" : ""}
+          style="accent-color:var(--naranja);width:16px;height:16px;margin:0"/> ${label}</label>`;
+    }
+    function dibujarChips() {
+      chipsEl.innerHTML =
+        chipHTML("articulo", "Artículo", false) +
+        chipHTML("variante", "Variante", !hayVar) +
+        chipHTML("grupo", "Grupo modificador", !hayVar);
+      chipsEl.querySelectorAll("input[data-m]").forEach((inp) => {
+        inp.addEventListener("change", () => {
+          m[inp.dataset.m] = inp.checked;
+          guardarMostrar(m);
+          dibujarChips();
+          pintarProd();
+        });
+      });
+    }
+
+    function pintarProd() {
+      const parts = [];
+      if (m.articulo) {
+        parts.push(`<div class="sub" style="font-weight:700;margin:2px 0 8px">Por artículo</div>${listaArticulos(prods)}`);
+      }
+      if (m.variante && hayVar) {
+        parts.push(`<div class="sub" style="font-weight:700;margin:18px 0 8px">Por variante (sabor)</div>
+          <input id="bq" placeholder="Buscar platillo…" value="${escapar(q)}" style="margin-bottom:10px" />
+          <select id="fcat" style="margin-bottom:12px">
+            <option value="todas">Todos los grupos de comida</option>
+            ${categorias.map((c) => `<option value="${escapar(c)}"${cat === c ? " selected" : ""}>${escapar(c)}</option>`).join("")}
+          </select>
+          <div id="plist"></div>`);
+      }
+      if (m.grupo && hayVar) {
+        parts.push(`<div class="sub" style="font-weight:700;margin:18px 0 8px">Por grupo modificador</div>${bloqueGrupos(varsAgg)}`);
+      }
+      if (!parts.length) parts.push(`<div class="aviso-box">Marca al menos una casilla de arriba para ver el desglose.</div>`);
+      prodBody.innerHTML = parts.join("");
+
+      if (m.variante && hayVar) {
+        const bq = prodBody.querySelector("#bq"), fc = prodBody.querySelector("#fcat");
+        bq.addEventListener("input", () => { q = bq.value; pintarList(); });
+        fc.addEventListener("change", () => { cat = fc.value; pintarList(); });
+        pintarList();
+      }
     }
 
     function pintarList() {
+      const plist = prodBody.querySelector("#plist");
+      if (!plist) return;
       let lista = platillos;
       if (cat !== "todas") lista = lista.filter((x) => prodCatGlobal.get(x.prod) && prodCatGlobal.get(x.prod).has(cat));
-      if (q) lista = lista.filter((x) => x.prod.toLowerCase().includes(q));
-      pc.querySelector("#plist").innerHTML = lista.map(cardPlatillo).join("") || `<div class="sub">Sin resultados.</div>`;
+      const qq = q.trim().toLowerCase();
+      if (qq) lista = lista.filter((x) => x.prod.toLowerCase().includes(qq));
+      plist.innerHTML = lista.map(cardPlatillo).join("") || `<div class="sub">Sin resultados.</div>`;
     }
+
+    dibujarChips();
+    pintarProd();
   }
 }
 
@@ -395,6 +447,49 @@ function cardPlatillo(x) {
     <div class="sub" style="margin:2px 0 7px">${escapar(x.grupo)}</div>
     ${filas}
   </div>`;
+}
+
+// Preferencia de casillas "qué mostrar" en Productos (persiste por dispositivo).
+const MOSTRAR_KEY = "platify.ventas.mostrar";
+function leerMostrar(hayVar) {
+  try {
+    const s = JSON.parse(localStorage.getItem(MOSTRAR_KEY));
+    if (s && typeof s === "object") return { articulo: !!s.articulo, variante: !!s.variante, grupo: !!s.grupo };
+  } catch {}
+  // Por defecto: si hay variantes, muestra el desglose por sabor; si no, solo artículo.
+  return { articulo: !hayVar, variante: hayVar, grupo: false };
+}
+function guardarMostrar(m) {
+  try { localStorage.setItem(MOSTRAR_KEY, JSON.stringify(m)); } catch {}
+}
+
+// Desglose global por GRUPO modificador (Sabor, Tipo de leche, …): suma las
+// opciones de todos los platillos, para ver qué modificadores se piden más.
+function bloqueGrupos(vars) {
+  const g = new Map();
+  for (const v of vars) {
+    const gn = (v.grupo || "—").trim() || "—";
+    if (!g.has(gn)) g.set(gn, new Map());
+    const om = g.get(gn);
+    const o = om.get(v.opcion) || { opcion: v.opcion, unidades: 0, venta: 0 };
+    o.unidades += store.num(v.unidades); o.venta += store.num(v.venta);
+    om.set(v.opcion, o);
+  }
+  const grupos = [...g.entries()].map(([nombre, om]) => {
+    const rows = [...om.values()].sort((a, b) => b.unidades - a.unidades);
+    return { nombre, rows, tot: rows.reduce((a, r) => a + r.unidades, 0) };
+  }).sort((a, b) => b.tot - a.tot);
+  if (!grupos.length) return `<div class="sub">Sin datos.</div>`;
+  return grupos.map((gr) => {
+    const max = Math.max(1, ...gr.rows.map((r) => r.unidades));
+    return `<div style="margin-bottom:16px">
+      <div style="font-weight:700;margin-bottom:6px">${escapar(gr.nombre)}</div>
+      ${gr.rows.map((r) => `<div class="barra-row">
+        <span class="etq" style="width:130px">${escapar(r.opcion)}</span>
+        <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * r.unidades / max)}%;background:var(--naranja);opacity:${opac(r.unidades, max)}"></span></span>
+        <span class="val" style="width:130px">${Math.round(r.unidades)} · ${money(r.venta)}</span></div>`).join("")}
+    </div>`;
+  }).join("");
 }
 
 // Venta por platillo sin desglose de variantes (modo "solo artículo").
