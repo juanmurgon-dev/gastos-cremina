@@ -181,7 +181,24 @@ async function importarVariantes(vrows, semana) {
   const cats = grupos.filter((g) => CATEGORIAS_REPORTE.has(g)).length;
   const hayPlaceholder = (vrows || []).some((v) => (v.opcion || "").trim().toLowerCase() === "sin variante");
   if ((grupos.length && cats / grupos.length >= 0.5) || hayPlaceholder) {
-    throw new Error("Ese archivo parece el REPORTE (agrupado por categoría), no el 'Grupos modificadores' de Parrot. Sube el Excel de grupos modificadores para el desglose por variante. (No se tocó lo que ya tenías.)");
+    // Es el REPORTE agrupado por categoría, no el de variantes. En vez de
+    // rechazarlo, lo cargamos como VENTA POR PRODUCTO: así el reporte semanal
+    // SÍ entra, y NO se toca el desglose por variante que ya tuvieras.
+    const porProd = new Map();
+    for (const v of (vrows || [])) {
+      const nombre = (v.producto || "").trim();
+      if (!nombre) continue;
+      const o = porProd.get(nombre) || { producto: nombre, categoria: (v.grupo || "").trim(), cantidad: 0, venta: 0 };
+      o.cantidad += N(v.unidades);
+      o.venta += N(v.venta);
+      porProd.set(nombre, o);
+    }
+    const prows = [...porProd.values()].map((p) => ({ periodo: semana.periodo, desde: semana.desde, hasta: semana.hasta, ...p }));
+    if (!prows.length) throw new Error("No reconocí productos en ese reporte.");
+    await supabase.from("productos_venta").delete().eq("desde", semana.desde);
+    const { error: ep } = await supabase.from("productos_venta").insert(prows);
+    if (ep) throw new Error(ep.message);
+    return { comoProductos: true, periodo: semana.periodo, filas: prows.length };
   }
   await supabase.from("variantes_venta").delete().eq("desde", semana.desde);
   const rows = vrows.map((v) => ({ periodo: semana.periodo, desde: semana.desde, hasta: semana.hasta, ...v }));
@@ -258,6 +275,7 @@ async function procesarPDF(f, semanaBackup) {
       opcion: String(v.opcion || ""), unidades: N(v.unidades), venta: N(v.venta),
     }));
     const out = await importarVariantes(vrows, semana);
+    if (out.comoProductos) return [`✅ (PDF) Venta por producto ${out.periodo} · ${out.filas} productos (reporte por categoría — no toqué el desglose por variante)`];
     return [`✅ (PDF) Variantes ${out.periodo} · ${out.filas} líneas platillo/variante`];
   }
   return [`⚠️ ${f.name}: no reconocí el reporte del PDF.`];
@@ -349,7 +367,9 @@ export function montar(el) {
           logs.push(`✅ Productos ${r.periodo} · ${r.prod} productos, ${r.combos} combos`);
         } else if (it.tipo === "variante") {
           const r = await importarVariantes(parseVariantes(it.wb, XLSX), semanaRef || semanaMasReciente());
-          logs.push(`✅ Variantes ${r.periodo} · ${r.filas} líneas platillo/variante`);
+          logs.push(r.comoProductos
+            ? `✅ Venta por producto ${r.periodo} · ${r.filas} productos (reporte por categoría — no toqué el desglose por variante)`
+            : `✅ Variantes ${r.periodo} · ${r.filas} líneas platillo/variante`);
         } else if (it.tipo === "pdf") {
           logs.push(...await procesarPDF(it.f, semanaRef || semanaMasReciente()));
         } else {
