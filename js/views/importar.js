@@ -188,12 +188,45 @@ async function cargarVariantes(rows, wk, fechaDia) {
 
 async function importarVariantes(vrows, semana, fechaDia) {
   if (!semana) throw new Error("sube también el 'Reporte de artículos' de esa semana (para saber la fecha)");
-  const esCategoria = (v) => CATEGORIAS_REPORTE.has((v.grupo || "").trim().toLowerCase());
-  const esPlaceholder = (v) => { const o = (v.opcion || "").trim().toLowerCase(); return !o || o === "sin variante"; };
-  // Filas con detalle REAL por variante (sabores): grupo no es categoría de menú y sí hay opción.
-  const reales = (vrows || []).filter((v) => (v.producto || "").trim() && !esCategoria(v) && !esPlaceholder(v));
+  const clean = (s) => (s || "").trim().toLowerCase();
+  const esCategoria = (v) => CATEGORIAS_REPORTE.has(clean(v.grupo));
+  const esSabor = (v) => /^sabor(es)?$/i.test((v.grupo || "").trim());     // tabla "<producto> — sabores vendidos"
+  const esSinVar = (v) => /sin\s*variante/i.test((v.grupo || "").trim());  // fila plana "Sin variante"
 
-  if (!reales.length) {
+  // ── Sabores de bebidas (ej. Latte): las unidades vienen en su tabla de sabores,
+  //    pero la VENTA sólo aparece en la fila 'Sin variante' del producto. La repartimos
+  //    proporcional a las unidades de cada sabor para conservar el desglose. ──
+  const sabores = (vrows || []).filter((v) => esSabor(v) && (v.producto || "").trim() && (v.opcion || "").trim());
+  const prodConSabor = new Set(sabores.map((v) => clean(v.producto)));
+  const ventaProd = new Map();   // producto -> venta total (de su fila 'Sin variante')
+  for (const v of (vrows || [])) if (esSinVar(v)) ventaProd.set(clean(v.producto), N(v.venta));
+  const uniSabor = new Map();    // producto -> total de unidades sumando sus sabores
+  for (const v of sabores) uniSabor.set(clean(v.producto), (uniSabor.get(clean(v.producto)) || 0) + N(v.unidades));
+  const saboresRows = sabores.map((v) => {
+    const k = clean(v.producto), totV = ventaProd.get(k) || 0, totU = uniSabor.get(k) || 0;
+    return {
+      producto: v.producto, grupo: "Sabor", opcion: v.opcion, unidades: N(v.unidades),
+      venta: (totV > 0 && totU > 0) ? Math.round(totV * N(v.unidades) / totU) : N(v.venta),
+    };
+  });
+
+  // ── Variantes "normales" (Chilaquiles, Chai, …) y filas 'Sin variante' de productos SIN
+  //    sabor. Se excluyen: categorías de menú, las filas de sabores (ya tratadas) y la fila
+  //    plana de los productos que YA se desglosaron por sabor (para no duplicar el Latte). ──
+  const reales = (vrows || []).filter((v) =>
+    (v.producto || "").trim() && !esCategoria(v) && !esSabor(v)
+    && !(esSinVar(v) && prodConSabor.has(clean(v.producto))));
+
+  const normales = reales.map((v) => {
+    let opcion = (v.opcion || "").trim();
+    // Fila 'Sin variante': muestra el nombre del producto como etiqueta (no "sin variante").
+    if (esSinVar(v) && (!opcion || clean(opcion) === "sin variante")) opcion = v.producto;
+    return { producto: v.producto, grupo: esSinVar(v) ? "" : v.grupo, opcion, unidades: N(v.unidades), venta: N(v.venta) };
+  });
+
+  const todas = [...normales, ...saboresRows].filter((r) => (r.opcion || "").trim());
+
+  if (!todas.length) {
     // No hay variantes reales → es el reporte por categoría → cárgalo como VENTA POR PRODUCTO.
     const porProd = new Map();
     for (const v of (vrows || [])) {
@@ -210,9 +243,7 @@ async function importarVariantes(vrows, semana, fechaDia) {
     return { comoProductos: true, periodo: out.periodo, filas: out.filas, dia: fechaDia };
   }
 
-  // Sí hay sabores → carga las variantes conservando el desglose, acumulando por día.
-  const rows = reales.map((v) => ({ producto: v.producto, grupo: v.grupo, opcion: v.opcion, unidades: N(v.unidades), venta: N(v.venta) }));
-  const out = await cargarVariantes(rows, semana, fechaDia);
+  const out = await cargarVariantes(todas, semana, fechaDia);
   return { periodo: out.periodo, filas: out.filas, dia: fechaDia };
 }
 
