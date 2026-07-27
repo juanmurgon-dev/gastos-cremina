@@ -173,7 +173,7 @@ function parseVariantes(wb, XLSX) {
 const CATEGORIAS_REPORTE = new Set(["desayunos", "comida", "entradas", "postres",
   "barra de café", "barra de cafe", "bebidas", "mimosas", "extras", "otros"]);
 
-async function importarVariantes(vrows, semana) {
+async function importarVariantes(vrows, semana, fechaDia) {
   if (!semana) throw new Error("sube también el 'Reporte de artículos' de esa semana (para saber la fecha)");
   // Candado: no dejes que el reporte por categoría (o placeholders "Sin variante")
   // sobrescriba el desglose real por variante.
@@ -193,12 +193,10 @@ async function importarVariantes(vrows, semana) {
       o.venta += N(v.venta);
       porProd.set(nombre, o);
     }
-    const prows = [...porProd.values()].map((p) => ({ periodo: semana.periodo, desde: semana.desde, hasta: semana.hasta, ...p }));
+    const prows = [...porProd.values()];
     if (!prows.length) throw new Error("No reconocí productos en ese reporte.");
-    await supabase.from("productos_venta").delete().eq("desde", semana.desde);
-    const { error: ep } = await supabase.from("productos_venta").insert(prows);
-    if (ep) throw new Error(ep.message);
-    return { comoProductos: true, periodo: semana.periodo, filas: prows.length };
+    const out = await cargarProductos(prows, semana, fechaDia);
+    return { comoProductos: true, periodo: out.periodo, filas: out.filas, dia: fechaDia };
   }
   await supabase.from("variantes_venta").delete().eq("desde", semana.desde);
   const rows = vrows.map((v) => ({ periodo: semana.periodo, desde: semana.desde, hasta: semana.hasta, ...v }));
@@ -225,20 +223,32 @@ function fileToBase64(file) {
   });
 }
 
+// Carga productos en productos_venta. Si es un reporte de UN DÍA (fechaDia), ACUMULA:
+// reemplaza solo ese día dentro de la semana (idempotente) y limpia el agregado
+// semanal viejo. Si es semanal (fechaDia null), reemplaza la semana completa.
+async function cargarProductos(prows, wk, fechaDia) {
+  const { desde, hasta, periodo } = wk;
+  const rows = prows.map((p) => ({ periodo, desde, hasta, fecha: fechaDia || null, ...p }));
+  let del = supabase.from("productos_venta").delete().eq("desde", desde);
+  if (fechaDia) del = del.or(`fecha.eq.${fechaDia},fecha.is.null`);
+  const { error: ed } = await del;
+  if (ed) throw new Error(ed.message);
+  const { error: ei } = await supabase.from("productos_venta").insert(rows);
+  if (ei) throw new Error(ei.message);
+  return { periodo, filas: rows.length };
+}
+
 async function importarProductosPDF(r) {
   if (!r.desde) throw new Error("el PDF no trae las fechas del periodo");
-  const wk = semanaDe(r.desde);
-  const desde = wk.desde, hasta = wk.hasta;
-  const periodo = labelRango(desde, hasta);
-  await supabase.from("productos_venta").delete().eq("desde", desde);
-  const rows = (r.items || []).map((x) => ({
-    periodo, desde, hasta,
+  const w = semanaDe(r.desde);
+  const wk = { desde: w.desde, hasta: w.hasta, periodo: labelRango(w.desde, w.hasta) };
+  const fechaDia = (!r.hasta || r.hasta === r.desde) ? r.desde : null;   // reporte de UN día
+  const prows = (r.items || []).map((x) => ({
     producto: String(x.producto || ""), categoria: String(x.categoria || ""),
     cantidad: N(x.cantidad), venta: N(x.venta),
   }));
-  const { error } = await supabase.from("productos_venta").insert(rows);
-  if (error) throw new Error(error.message);
-  return { periodo, desde, hasta, prod: rows.length };
+  const out = await cargarProductos(prows, wk, fechaDia);
+  return { periodo: out.periodo, prod: out.filas, dia: fechaDia };
 }
 
 async function procesarPDF(f, semanaBackup) {
@@ -264,18 +274,23 @@ async function procesarPDF(f, semanaBackup) {
   }
   if (data.tipo === "productos") {
     const out = await importarProductosPDF(data);
-    return [`✅ (PDF) Productos ${out.periodo} · ${out.prod} productos`];
+    return [out.dia
+      ? `✅ (PDF) Día ${out.dia} · ${out.prod} productos (sumado a la semana ${out.periodo})`
+      : `✅ (PDF) Productos ${out.periodo} · ${out.prod} productos`];
   }
   if (data.tipo === "variantes") {
     const semana = data.desde
       ? (() => { const wk = semanaDe(data.desde); return { desde: wk.desde, hasta: wk.hasta, periodo: labelRango(wk.desde, wk.hasta) }; })()
       : semanaBackup;
+    const fechaDia = (data.desde && (!data.hasta || data.hasta === data.desde)) ? data.desde : null;
     const vrows = (data.items || []).map((v) => ({
       producto: String(v.producto || ""), grupo: String(v.grupo || ""),
       opcion: String(v.opcion || ""), unidades: N(v.unidades), venta: N(v.venta),
     }));
-    const out = await importarVariantes(vrows, semana);
-    if (out.comoProductos) return [`✅ (PDF) Venta por producto ${out.periodo} · ${out.filas} productos (reporte por categoría — no toqué el desglose por variante)`];
+    const out = await importarVariantes(vrows, semana, fechaDia);
+    if (out.comoProductos) return [out.dia
+      ? `✅ (PDF) Día ${out.dia} · ${out.filas} productos (sumado a la semana ${out.periodo})`
+      : `✅ (PDF) Venta por producto ${out.periodo} · ${out.filas} productos (reporte por categoría)`];
     return [`✅ (PDF) Variantes ${out.periodo} · ${out.filas} líneas platillo/variante`];
   }
   return [`⚠️ ${f.name}: no reconocí el reporte del PDF.`];

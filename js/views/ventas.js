@@ -166,6 +166,20 @@ function productos(cont) {
     const prods = prodAll.filter((p) => p.periodo === periodo && !ES_CORTESIA.test(p.producto || "") && !ES_CORTESIA.test(p.categoria || ""));
     const vars = varAll.filter((v) => v.periodo === periodo && !ES_CORTESIA.test(v.producto || "") && !ES_CORTESIA.test(v.opcion || ""));
 
+    // Acumulado por producto: suma los días de la semana en una sola fila.
+    const prodsAgg = (() => {
+      const m = new Map();
+      for (const p of prods) {
+        const k = p.producto || "";
+        const o = m.get(k) || { producto: p.producto, categoria: p.categoria || "", cantidad: 0, venta: 0 };
+        o.cantidad += store.num(p.cantidad);
+        o.venta += store.num(p.venta);
+        if (!o.categoria && p.categoria) o.categoria = p.categoria;
+        m.set(k, o);
+      }
+      return [...m.values()];
+    })();
+
     const porCat = {};
     for (const p of prods) porCat[p.categoria || "Otros"] = (porCat[p.categoria || "Otros"] || 0) + store.num(p.venta);
 
@@ -205,7 +219,7 @@ function productos(cont) {
       <div class="card">
         <h2>${usaVar ? "Venta por platillo y variante" : "Venta por platillo"}</h2>
         ${!usaVar
-          ? listaArticulos(prods)
+          ? listaArticulos(prodsAgg)
           : (vars.length
             ? `<input id="bq" placeholder="Buscar platillo…" style="margin-bottom:10px" />
                <select id="fcat" style="margin-bottom:12px">
@@ -221,7 +235,7 @@ function productos(cont) {
         const filas = vars.map((v) => [v.producto, v.grupo, v.opcion, store.num(v.unidades), store.num(v.venta)]);
         descargarCSV("productos-variantes-" + periodo, ["Producto", "Grupo", "Variante", "Unidades", "Venta"], filas);
       } else {
-        const filas = prods.map((p) => [p.producto, p.categoria, store.num(p.cantidad), store.num(p.venta)]);
+        const filas = prodsAgg.map((p) => [p.producto, p.categoria, store.num(p.cantidad), store.num(p.venta)]);
         descargarCSV("productos-" + periodo, ["Producto", "Categoría", "Cantidad", "Venta"], filas);
       }
     });
