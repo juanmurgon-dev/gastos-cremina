@@ -180,6 +180,19 @@ function productos(cont) {
       return [...m.values()];
     })();
 
+    // Acumulado por variante: suma los días en una fila por producto+grupo+opción.
+    const varsAgg = (() => {
+      const m = new Map();
+      for (const v of vars) {
+        const k = (v.producto || "") + "" + (v.grupo || "") + "" + (v.opcion || "");
+        const o = m.get(k) || { producto: v.producto, grupo: v.grupo, opcion: v.opcion, unidades: 0, venta: 0 };
+        o.unidades += store.num(v.unidades);
+        o.venta += store.num(v.venta);
+        m.set(k, o);
+      }
+      return [...m.values()];
+    })();
+
     const porCat = {};
     for (const p of prods) porCat[p.categoria || "Otros"] = (porCat[p.categoria || "Otros"] || 0) + store.num(p.venta);
 
@@ -188,7 +201,7 @@ function productos(cont) {
 
     // agrupar variantes por platillo → grupo
     const porProd = new Map();
-    for (const v of vars) {
+    for (const v of varsAgg) {
       if (!porProd.has(v.producto)) porProd.set(v.producto, {});
       const g = porProd.get(v.producto);
       (g[v.grupo] = g[v.grupo] || []).push(v);
@@ -207,7 +220,7 @@ function productos(cont) {
 
     // Leche como su propia categoría (avena / deslactosada / entera), sumada de todas las bebidas
     const leche = {};
-    for (const v of vars) if (/^leche$/i.test(v.grupo || "")) leche[v.opcion] = (leche[v.opcion] || 0) + store.num(v.unidades);
+    for (const v of varsAgg) if (/^leche$/i.test(v.grupo || "")) leche[v.opcion] = (leche[v.opcion] || 0) + store.num(v.unidades);
     const lecheEnt = Object.entries(leche).sort((a, b) => b[1] - a[1]);
 
     let q = "", cat = "todas";
@@ -220,7 +233,7 @@ function productos(cont) {
         <h2>${usaVar ? "Venta por platillo y variante" : "Venta por platillo"}</h2>
         ${!usaVar
           ? listaArticulos(prodsAgg)
-          : (vars.length
+          : (varsAgg.length
             ? `<input id="bq" placeholder="Buscar platillo…" style="margin-bottom:10px" />
                <select id="fcat" style="margin-bottom:12px">
                  <option value="todas">Todos los grupos de comida</option>
@@ -231,8 +244,8 @@ function productos(cont) {
       </div>`;
 
     pc.querySelector("#expP").addEventListener("click", () => {
-      if (usaVar && vars.length) {
-        const filas = vars.map((v) => [v.producto, v.grupo, v.opcion, store.num(v.unidades), store.num(v.venta)]);
+      if (usaVar && varsAgg.length) {
+        const filas = varsAgg.map((v) => [v.producto, v.grupo, v.opcion, store.num(v.unidades), store.num(v.venta)]);
         descargarCSV("productos-variantes-" + periodo, ["Producto", "Grupo", "Variante", "Unidades", "Venta"], filas);
       } else {
         const filas = prodsAgg.map((p) => [p.producto, p.categoria, store.num(p.cantidad), store.num(p.venta)]);
@@ -240,7 +253,7 @@ function productos(cont) {
       }
     });
 
-    if (usaVar && vars.length) {
+    if (usaVar && varsAgg.length) {
       const bq = pc.querySelector("#bq"), fc = pc.querySelector("#fcat");
       bq.addEventListener("input", () => { q = bq.value.trim().toLowerCase(); pintarList(); });
       fc.addEventListener("change", () => { cat = fc.value; pintarList(); });

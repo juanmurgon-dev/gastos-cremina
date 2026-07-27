@@ -173,17 +173,28 @@ function parseVariantes(wb, XLSX) {
 const CATEGORIAS_REPORTE = new Set(["desayunos", "comida", "entradas", "postres",
   "barra de café", "barra de cafe", "bebidas", "mimosas", "extras", "otros"]);
 
+// Carga variantes en variantes_venta, acumulando por día (igual que productos).
+async function cargarVariantes(rows, wk, fechaDia) {
+  const { desde, hasta, periodo } = wk;
+  const out = rows.map((v) => ({ periodo, desde, hasta, fecha: fechaDia || null, ...v }));
+  let del = supabase.from("variantes_venta").delete().eq("desde", desde);
+  if (fechaDia) del = del.or(`fecha.eq.${fechaDia},fecha.is.null`);
+  const { error: ed } = await del;
+  if (ed) throw new Error(ed.message);
+  const { error: ei } = await supabase.from("variantes_venta").insert(out);
+  if (ei) throw new Error(ei.message);
+  return { periodo, filas: out.length };
+}
+
 async function importarVariantes(vrows, semana, fechaDia) {
   if (!semana) throw new Error("sube también el 'Reporte de artículos' de esa semana (para saber la fecha)");
-  // Candado: no dejes que el reporte por categoría (o placeholders "Sin variante")
-  // sobrescriba el desglose real por variante.
-  const grupos = [...new Set((vrows || []).map((v) => (v.grupo || "").trim().toLowerCase()).filter(Boolean))];
-  const cats = grupos.filter((g) => CATEGORIAS_REPORTE.has(g)).length;
-  const hayPlaceholder = (vrows || []).some((v) => (v.opcion || "").trim().toLowerCase() === "sin variante");
-  if ((grupos.length && cats / grupos.length >= 0.5) || hayPlaceholder) {
-    // Es el REPORTE agrupado por categoría, no el de variantes. En vez de
-    // rechazarlo, lo cargamos como VENTA POR PRODUCTO: así el reporte semanal
-    // SÍ entra, y NO se toca el desglose por variante que ya tuvieras.
+  const esCategoria = (v) => CATEGORIAS_REPORTE.has((v.grupo || "").trim().toLowerCase());
+  const esPlaceholder = (v) => { const o = (v.opcion || "").trim().toLowerCase(); return !o || o === "sin variante"; };
+  // Filas con detalle REAL por variante (sabores): grupo no es categoría de menú y sí hay opción.
+  const reales = (vrows || []).filter((v) => (v.producto || "").trim() && !esCategoria(v) && !esPlaceholder(v));
+
+  if (!reales.length) {
+    // No hay variantes reales → es el reporte por categoría → cárgalo como VENTA POR PRODUCTO.
     const porProd = new Map();
     for (const v of (vrows || [])) {
       const nombre = (v.producto || "").trim();
@@ -198,11 +209,11 @@ async function importarVariantes(vrows, semana, fechaDia) {
     const out = await cargarProductos(prows, semana, fechaDia);
     return { comoProductos: true, periodo: out.periodo, filas: out.filas, dia: fechaDia };
   }
-  await supabase.from("variantes_venta").delete().eq("desde", semana.desde);
-  const rows = vrows.map((v) => ({ periodo: semana.periodo, desde: semana.desde, hasta: semana.hasta, ...v }));
-  const { error } = await supabase.from("variantes_venta").insert(rows);
-  if (error) throw new Error(error.message);
-  return { periodo: semana.periodo, filas: rows.length };
+
+  // Sí hay sabores → carga las variantes conservando el desglose, acumulando por día.
+  const rows = reales.map((v) => ({ producto: v.producto, grupo: v.grupo, opcion: v.opcion, unidades: N(v.unidades), venta: N(v.venta) }));
+  const out = await cargarVariantes(rows, semana, fechaDia);
+  return { periodo: out.periodo, filas: out.filas, dia: fechaDia };
 }
 
 // Semana más reciente ya cargada (respaldo si suben el grupos sin el reporte de artículos).
@@ -291,7 +302,9 @@ async function procesarPDF(f, semanaBackup) {
     if (out.comoProductos) return [out.dia
       ? `✅ (PDF) Día ${out.dia} · ${out.filas} productos (sumado a la semana ${out.periodo})`
       : `✅ (PDF) Venta por producto ${out.periodo} · ${out.filas} productos (reporte por categoría)`];
-    return [`✅ (PDF) Variantes ${out.periodo} · ${out.filas} líneas platillo/variante`];
+    return [out.dia
+      ? `✅ (PDF) Día ${out.dia} · ${out.filas} líneas por variante (sumado a la semana ${out.periodo})`
+      : `✅ (PDF) Variantes ${out.periodo} · ${out.filas} líneas platillo/variante`];
   }
   return [`⚠️ ${f.name}: no reconocí el reporte del PDF.`];
 }
