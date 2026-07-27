@@ -8,18 +8,15 @@ import { descargarCSV } from "../csv.js";
 const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const ESTATUS = [
   { k: "pendiente", t: "Pendiente", c: "var(--amarillo)" },
-  { k: "parcial", t: "Parcial", c: "var(--olive)" },
-  { k: "pedido", t: "Pedido", c: "var(--verde)" },
+  { k: "parcial", t: "Parcial", c: "var(--naranja)" },
+  { k: "pedido", t: "Pedido", c: "var(--olive)" },
+  { k: "comprado", t: "Comprado", c: "var(--verde)" },
 ];
 const estatusInfo = (k) => ESTATUS.find((e) => e.k === k) || ESTATUS[0];
-// Estatus general de la requisición, derivado del de cada producto.
-function derivar(items) {
-  const its = items || [];
-  if (!its.length) return "pendiente";
-  if (its.every((x) => x.estatus === "pedido")) return "pedido";
-  if (its.some((x) => x.estatus === "pedido")) return "parcial";
-  return "pendiente";
-}
+// Ciclo del toggle al tocar el chip de un item: Pendiente → Pedido → Comprado → …
+const SIG_ESTATUS = { pendiente: "pedido", pedido: "comprado", comprado: "pendiente" };
+// Estatus general de la requisición, derivado del de cada producto (mismo criterio que store).
+const derivar = (items) => store.estatusRequis(items);
 
 function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function hoyISO() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
@@ -341,7 +338,7 @@ export function render(el) {
     cont.querySelectorAll("[data-i]").forEach((row) => {
       const it = editing.items[Number(row.dataset.i)];
       row.querySelector("[data-f='estat']").addEventListener("click", () => {
-        it.estatus = it.estatus === "pedido" ? "pendiente" : "pedido";
+        it.estatus = SIG_ESTATUS[it.estatus] || "pedido";
         actualizarChip(); pintarItems(); guardar();
       });
       row.querySelector("[data-f='cant']").addEventListener("change", (ev) => { it.cantidad = num(ev.target.value); pintarItems(); guardar(); });

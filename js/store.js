@@ -383,6 +383,73 @@ export async function borrarRequisicion(id) {
   await cargarRequisiciones();
 }
 
+// ───────────── Cruce gasto ↔ requisición ─────────────
+// Estatus general de una requisición, derivado del de cada item (incluye "comprado").
+export function estatusRequis(items) {
+  const its = items || [];
+  if (!its.length) return "pendiente";
+  if (its.every((x) => x.estatus === "comprado")) return "comprado";
+  if (its.some((x) => x.estatus === "comprado")) return "parcial";
+  if (its.every((x) => x.estatus === "pedido")) return "pedido";
+  if (its.some((x) => x.estatus === "pedido")) return "parcial";
+  return "pendiente";
+}
+
+// ¿La descripción de una línea de ticket corresponde al nombre de un item?
+function nombreCoincideReq(a, b) {
+  const na = normIns(a), nb = normIns(b);
+  if (na.length < 3 || nb.length < 3) return false;
+  if (na === nb || na.includes(nb) || nb.includes(na)) return true;
+  // comparten alguna palabra "fuerte" (≥4 letras)
+  const tb = new Set(nb.split(" ").filter((w) => w.length >= 4));
+  return na.split(" ").some((w) => w.length >= 4 && tb.has(w));
+}
+
+// Cruza las líneas de un gasto recién capturado contra los items de requisiciones
+// ABIERTAS (no compradas) y devuelve los candidatos a marcar como "Comprado".
+export function cruzarGastoRequis(lineas) {
+  const ls = (lineas || []).filter((l) => (l.descripcion || "").trim());
+  if (!ls.length) return [];
+  const out = [];
+  for (const r of (state.requisiciones || [])) {
+    if (r.estatus === "comprado") continue;
+    (r.items || []).forEach((it, idx) => {
+      if (it.estatus === "comprado") return;
+      const l = ls.find((x) => nombreCoincideReq(x.descripcion, it.nombre));
+      if (l) out.push({ reqId: r.id, reqTitulo: r.titulo || fechaBonita(r.fecha) || "Requisición", itemIdx: idx, nombre: it.nombre, linea: l.descripcion });
+    });
+  }
+  return out;
+}
+
+// Marca como "Comprado" los items elegidos y actualiza el estatus de cada requisición.
+// selecciones: [{ reqId, itemIdx }] · info: { fecha }
+export async function marcarComprados(selecciones, info = {}) {
+  const byReq = new Map();
+  for (const s of (selecciones || [])) {
+    if (!byReq.has(s.reqId)) byReq.set(s.reqId, new Set());
+    byReq.get(s.reqId).add(s.itemIdx);
+  }
+  for (const [reqId, idxs] of byReq) {
+    const r = (state.requisiciones || []).find((x) => x.id === reqId);
+    if (!r) continue;
+    const items = (r.items || []).map((it, idx) => idxs.has(idx)
+      ? { ...it, estatus: "comprado", compradoEn: info.fecha || hoyISO() }
+      : it);
+    await guardarRequisicion({ ...r, items, estatus: estatusRequis(items), creadoPor: r.creado_por });
+  }
+}
+
+// Total de items aún NO comprados en requisiciones abiertas (para el badge de la pestaña).
+export function itemsPendientesRequis() {
+  let n = 0;
+  for (const r of (state.requisiciones || [])) {
+    if (r.estatus === "comprado") continue;
+    for (const it of (r.items || [])) if (it.estatus !== "comprado") n++;
+  }
+  return n;
+}
+
 // Respaldo: descarga TODO el historial del restaurante en un solo archivo JSON.
 // El usuario está autenticado, así que RLS le devuelve solo sus datos.
 export async function exportarRespaldo() {

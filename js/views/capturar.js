@@ -209,12 +209,16 @@ Cilantro 15"></textarea>
         fotoUrl = supabase.storage.from("tickets").getPublicUrl(nombre).data.publicUrl;
       }
       const guardados = [];
+      const lineasGasto = [];
+      let fechaGasto = "";
       for (const ed of editores) {
         const t = ed.getValue();
         if (!t.lineas.length) continue;
         const typed = (t.proveedor || "").trim();
         const final = await store.guardarTicket({ ...t, fotoUrl, creadoPor: store.miNombre() });
         guardados.push({ typed, final: (final || "").trim() });
+        lineasGasto.push(...t.lineas);
+        if (!fechaGasto && t.fecha) fechaGasto = t.fecha;
       }
       const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
       const provs = [...new Set(guardados.map((g) => g.final).filter(Boolean))];
@@ -223,12 +227,51 @@ Cilantro 15"></textarea>
       if (provs.length) extra += ` Proveedor: <b>${provs.map(esc).join(", ")}</b>.`;
       if (unif.length) extra += `<br><span style="color:var(--sea-txt)">🔗 Unifiqué "${esc(unif[0].typed)}" → "${esc(unif[0].final)}".</span>`;
       el.querySelector("#msg").innerHTML = `<div class="ok-box">✅ Guardado.${extra}</div>`;
-      setTimeout(reset, 900);
+      // ¿El gasto coincide con pendientes de alguna requisición? → sugerir marcarlos comprados.
+      const candidatos = store.cruzarGastoRequis(lineasGasto);
+      if (candidatos.length) confirmarComprados(candidatos, fechaGasto);
+      else setTimeout(reset, 900);
     } catch (err) {
       alert("No pude guardar: " + ((err && err.message) || err));
       btn.disabled = false; btn.textContent = "✅ Guardar";
     }
   });
+
+  // Modal: el gasto coincide con pendientes de una requisición → confirma cuáles marcar comprados.
+  function confirmarComprados(cands, fecha) {
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const bg = document.createElement("div");
+    bg.className = "modal-bg";
+    bg.innerHTML = `
+      <div class="modal">
+        <h2>Cruzar con tu requisición 🛒</h2>
+        <p class="sub" style="margin:-8px 0 12px">Este gasto coincide con estos <b>pendientes</b>. Marca los que ya compraste y pasan a <b>Comprado</b>.</p>
+        <div id="ccList">
+          ${cands.map((c, i) => `
+            <label class="cc-row" style="display:flex;align-items:flex-start;gap:10px;padding:10px 4px;border-bottom:1px solid var(--linea);cursor:pointer">
+              <input type="checkbox" data-i="${i}" checked style="margin-top:3px;width:18px;height:18px;accent-color:var(--verde);flex:none" />
+              <span style="flex:1;min-width:0">
+                <b>${esc(c.nombre)}</b>
+                <span class="sub" style="display:block;font-size:12px">${esc(c.reqTitulo)} · coincide con “${esc(c.linea)}”</span>
+              </span>
+            </label>`).join("")}
+        </div>
+        <button class="btn" id="ccOk" style="margin-top:14px">✅ Marcar comprado</button>
+        <button class="btn sec" id="ccNo" style="margin-top:8px">Ahora no</button>
+      </div>`;
+    document.body.appendChild(bg);
+    const cerrar = () => { bg.remove(); reset(); };
+    bg.addEventListener("click", (e) => { if (e.target === bg) cerrar(); });
+    bg.querySelector("#ccNo").addEventListener("click", cerrar);
+    bg.querySelector("#ccOk").addEventListener("click", async () => {
+      const sel = [...bg.querySelectorAll("input[data-i]:checked")].map((inp) => cands[Number(inp.dataset.i)]);
+      const ok = bg.querySelector("#ccOk"); ok.disabled = true; ok.textContent = "Guardando…";
+      try {
+        if (sel.length) await store.marcarComprados(sel.map((c) => ({ reqId: c.reqId, itemIdx: c.itemIdx })), { fecha });
+      } catch (e) { /* no bloquear la captura por esto */ }
+      cerrar();
+    });
+  }
 
   function reset() {
     fotoBlob = null; fotoBase64 = null; fotoDataUrl = null; editores = [];

@@ -18,8 +18,8 @@ import * as recetas from "./views/recetas.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.77";
-export const APP_FECHA = "26 jul 2026";
+export const APP_VERSION = "v3.78";
+export const APP_FECHA = "27 jul 2026";
 
 const VISTAS = {
   inicio:      { mod: inicio,      ic: "🏠", txt: "Inicio" },
@@ -152,6 +152,7 @@ function montarShell(user) {
     }
     // White-label: logo + nombre del restaurante en el header y en el ícono.
     marca.aplicarMarcaActual();
+    actualizarBadgeRequis();
     if (store.state.listo && store.state.multiTenant && !store.state.orgId && !orgPedida) {
       orgPedida = true;
       onboarding.abrir();
@@ -205,10 +206,21 @@ function pintarTabs() {
   if (!tabs) return;
   tabs.innerHTML = tabsPermitidas().map((k) => {
     const v = VISTAS[k];
-    return `<a href="#/${k}" data-k="${k}"><span class="ic">${v.ic}</span>${v.txt}</a>`;
+    const badge = k === "requisicion" ? `<span class="tab-badge" data-badge="requisicion" hidden></span>` : "";
+    return `<a href="#/${k}" data-k="${k}"><span class="ic">${v.ic}</span>${v.txt}${badge}</a>`;
   }).join("");
   const clave = (location.hash.replace("#/", "") || "inicio");
   tabs.querySelectorAll("a").forEach((a) => a.classList.toggle("activo", a.dataset.k === clave));
+  actualizarBadgeRequis();
+}
+
+// Badge rojo con el número de items pendientes (no comprados) de las requisiciones abiertas.
+function actualizarBadgeRequis() {
+  const b = document.querySelector('.tab-badge[data-badge="requisicion"]');
+  if (!b) return;
+  const n = store.itemsPendientesRequis ? store.itemsPendientesRequis() : 0;
+  if (n > 0) { b.textContent = n > 99 ? "99+" : String(n); b.hidden = false; }
+  else { b.textContent = ""; b.hidden = true; }
 }
 
 function pedirNombre() {
