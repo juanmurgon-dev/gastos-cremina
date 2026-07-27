@@ -330,14 +330,20 @@ export function montar(el) {
     const res = el.querySelector("#res");
     res.innerHTML = `<div class="sub" style="margin-top:12px">Leyendo ${files.length} archivo(s)…</div>`;
 
-    let XLSX;
-    try { XLSX = await import("https://esm.sh/xlsx@0.18.5"); }
-    catch (err) { res.innerHTML = `<div class="error-box">No pude cargar el lector de Excel (revisa tu internet).</div>`; return; }
+    // El lector de Excel solo se carga si hay algún Excel. Un PDF NO lo necesita,
+    // así que un fallo al cargarlo jamás debe bloquear la importación de un PDF.
+    const esPDF = (f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf";
+    let XLSX = null;
+    if (files.some((f) => !esPDF(f))) {
+      try { XLSX = await import("https://esm.sh/xlsx@0.18.5"); }
+      catch (err) { XLSX = null; }   // los PDF sí se procesan; los Excel avisan abajo
+    }
 
     // Clasificar primero, para procesar en orden (productos antes que variantes).
     const items = [];
     for (const f of files) {
-      if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") { items.push({ f, tipo: "pdf" }); continue; }
+      if (esPDF(f)) { items.push({ f, tipo: "pdf" }); continue; }
+      if (!XLSX) { items.push({ f, err: new Error("no pude cargar el lector de Excel (revisa tu internet e intenta de nuevo)") }); continue; }
       try {
         const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
         let tipo = "?";
