@@ -209,7 +209,10 @@ function productos(cont) {
     let platillos = [...porProd.entries()].map(([prod, grupos]) => {
       const gname = elegirGrupo(grupos);
       const rows = (grupos[gname] || []).slice().sort((a, b) => store.num(b.unidades) - store.num(a.unidades));
-      return { prod, grupo: gname, rows, ventaProd: ventaProd[prod] || rows.reduce((a, r) => a + store.num(r.venta), 0) };
+      // El total del platillo = suma de sus líneas mostradas, para que SIEMPRE cuadre
+      // con el desglose (no la venta por producto, que puede traer otros días).
+      const totalGrupo = rows.reduce((a, r) => a + store.num(r.venta), 0);
+      return { prod, grupo: gname, rows, ventaProd: totalGrupo || ventaProd[prod] || 0 };
     });
     platillos.sort((a, b) => b.ventaProd - a.ventaProd);
 
