@@ -18,7 +18,7 @@ import * as recetas from "./views/recetas.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.68";
+export const APP_VERSION = "v3.69";
 export const APP_FECHA = "26 jul 2026";
 
 const VISTAS = {
@@ -75,7 +75,7 @@ function montarLogin() {
   app.innerHTML = `
     <div class="login">
       <div class="card">
-        <div class="marca-cifra">Platify</div>
+        <img src="assets/platify-wordmark.png" alt="Platify" style="height:46px;width:auto;display:block;margin:2px auto 0" />
         <p class="sub" style="margin-top:2px">Del plato a la boca se cae el margen</p>
         <div id="err"></div>
         <form id="f" style="margin-top:16px;text-align:left">
@@ -110,7 +110,7 @@ function montarShell(user) {
   app.innerHTML = `
     <div class="shell">
       <header class="top">
-        <span id="marca" style="cursor:pointer" title="Personalizar tu marca"><span class="wordmark-cifra">Platify</span></span>
+        <span id="marca" style="cursor:pointer" title="Personalizar tu marca"><img src="assets/platify-wordmark.png" alt="Platify" style="height:20px;width:auto;display:block" /></span>
         <button class="hamb" id="menu" aria-label="Ajustes" title="Ajustes">☰</button>
       </header>
       <main class="vista" id="vista"></main>

@@ -22,7 +22,7 @@ function pintarHeader(nombre, logo) {
   const m = document.getElementById("marca");
   if (!m) return;
   if (!nombre && !logo) {
-    m.innerHTML = `<span class="wordmark-cifra">Platify</span>`;
+    m.innerHTML = `<img src="assets/platify-wordmark.png" alt="Platify" style="height:20px;width:auto;display:block" />`;
     return;
   }
   m.innerHTML = `
