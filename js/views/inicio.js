@@ -44,6 +44,11 @@ function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").repla
 
 const ES_CORTESIA = /pan de cortes[íi]a|propina/i;   // cortesía y propina no cuentan como venta
 const CAT_BEBIDA = new Set(["Barra de Café", "Bebidas"]);
+// Nombres que son CATEGORÍAS del reporte, no productos. Si aparecen como "producto"
+// es basura de una importación vieja (la tabla de categorías se coló) → se ignoran.
+const CATEGORIAS_NOMBRE = new Set(["desayunos", "comida", "comidas", "entradas", "postres",
+  "barra de café", "barra de cafe", "bebidas", "bebida", "mimosas", "extras", "otros", "total productos"]);
+const esCategoriaNombre = (n) => CATEGORIAS_NOMBRE.has(String(n || "").trim().toLowerCase());
 
 // Grupo modificador "principal" de un platillo/bebida (Tipo → Sabor; evita leche/temperatura).
 const ES_SECUNDARIO = /leche|fr[íi]o|caliente|shot|cold foam|temperatura/i;
@@ -74,7 +79,7 @@ function topVariante(producto, periodo) {
 // Más vendidos (platillo y bebida) del periodo más reciente con datos.
 function topProductos() {
   const prod = (store.state.productos || []).filter((p) =>
-    !ES_CORTESIA.test(p.producto || "") && !ES_CORTESIA.test(p.categoria || ""));
+    !ES_CORTESIA.test(p.producto || "") && !ES_CORTESIA.test(p.categoria || "") && !esCategoriaNombre(p.producto));
   if (!prod.length) return null;
   const pmap = new Map();
   for (const p of prod) if (!pmap.has(p.periodo)) pmap.set(p.periodo, p.desde);
@@ -103,7 +108,7 @@ function topProductos() {
 const MIN_VENTA = 15;   // arriba de 15 vendidos por semana = producto que sí importa
 function movimientosProductos() {
   const prod = (store.state.productos || []).filter((p) =>
-    !ES_CORTESIA.test(p.producto || "") && !ES_CORTESIA.test(p.categoria || ""));
+    !ES_CORTESIA.test(p.producto || "") && !ES_CORTESIA.test(p.categoria || "") && !esCategoriaNombre(p.producto));
   if (!prod.length) return null;
   const pmap = new Map();
   for (const p of prod) if (!pmap.has(p.periodo)) pmap.set(p.periodo, p.desde);

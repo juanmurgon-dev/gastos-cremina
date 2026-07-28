@@ -18,7 +18,7 @@ import * as recetas from "./views/recetas.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.82";
+export const APP_VERSION = "v3.83";
 export const APP_FECHA = "27 jul 2026";
 
 const VISTAS = {
