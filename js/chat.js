@@ -31,16 +31,16 @@ function inyectarEstilos() {
       border:none;background:var(--verde,#0e3a39);color:#fff;font-size:24px;cursor:pointer;
       box-shadow:0 6px 20px rgba(0,0,0,.28);display:grid;place-items:center}
     #chat-fab:active{transform:scale(.94)}
-    .chat-bg{position:fixed;inset:0;z-index:9001;background:rgba(0,0,0,.4);display:flex;
+    .chat-bg{position:fixed;left:0;right:0;top:0;height:100vh;height:100dvh;z-index:9001;background:rgba(0,0,0,.4);display:flex;
       align-items:flex-end;justify-content:center}
-    .chat-panel{background:var(--blanco,#fff);width:100%;max-width:620px;height:82vh;max-height:82vh;
+    .chat-panel{background:var(--blanco,#fff);width:100%;max-width:620px;height:82%;max-height:100%;
       border-radius:20px 20px 0 0;display:flex;flex-direction:column;overflow:hidden;
       box-shadow:0 -8px 30px rgba(0,0,0,.25)}
     .chat-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--linea,#e0ece8)}
     .chat-head b{font-size:15px}
     .chat-head .sub{font-size:11px;color:var(--gris,#7ea8a2)}
     .chat-x{margin-left:auto;background:none;border:none;font-size:22px;line-height:1;cursor:pointer;color:var(--gris,#7ea8a2)}
-    .chat-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+    .chat-msgs{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px;display:flex;flex-direction:column;gap:10px}
     .chat-b{max-width:82%;padding:10px 13px;border-radius:15px;font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
     .chat-b.me{align-self:flex-end;background:var(--verde,#0e3a39);color:#fff;border-bottom-right-radius:5px}
     .chat-b.ai{align-self:flex-start;background:var(--gris-claro,#eef5f3);color:var(--tinta,#12312f);border-bottom-left-radius:5px}
@@ -111,11 +111,35 @@ function abrir() {
     if (q) { inp.value = ""; enviar(q); }
   });
 
+  // Sigue el área VISIBLE real (con teclado / barra del navegador) para que el panel
+  // no se expanda-contraiga ni esconda el input debajo del teclado en el celular.
+  const vv = window.visualViewport;
+  if (vv) {
+    const ajustar = () => {
+      if (!bg) return;
+      bg.style.height = vv.height + "px";
+      bg.style.top = vv.offsetTop + "px";
+    };
+    ajustar();
+    vv.addEventListener("resize", ajustar);
+    vv.addEventListener("scroll", ajustar);
+    bg._vvAjustar = ajustar;
+  }
+
   pintar();          // vuelve a dibujar el historial (persiste mientras la app esté abierta)
   bg.querySelector("#chat-q").focus();
 }
 
-function cerrar() { if (bg) { bg.remove(); bg = null; } }
+function cerrar() {
+  if (!bg) return;
+  const vv = window.visualViewport;
+  if (vv && bg._vvAjustar) {
+    vv.removeEventListener("resize", bg._vvAjustar);
+    vv.removeEventListener("scroll", bg._vvAjustar);
+  }
+  bg.remove();
+  bg = null;
+}
 
 function pintar() {
   const cont = bg && bg.querySelector("#chat-msgs");
