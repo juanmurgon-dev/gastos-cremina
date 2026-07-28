@@ -33,7 +33,7 @@ function inyectarEstilos() {
     #chat-fab:active{transform:scale(.94)}
     .chat-bg{position:fixed;left:0;right:0;top:0;height:100vh;height:100dvh;z-index:9001;background:rgba(0,0,0,.4);display:flex;
       align-items:flex-end;justify-content:center}
-    .chat-panel{background:var(--blanco,#fff);width:100%;max-width:620px;height:82%;max-height:100%;
+    .chat-panel{background:var(--blanco,#fff);width:100%;max-width:520px;height:66%;max-height:560px;
       border-radius:20px 20px 0 0;display:flex;flex-direction:column;overflow:hidden;
       box-shadow:0 -8px 30px rgba(0,0,0,.25)}
     .chat-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--linea,#e0ece8)}
