@@ -120,6 +120,10 @@ function movimientosProductos() {
   const periodos = [...pmap.entries()].sort((a, b) => (a[1] < b[1] ? 1 : -1)).map((e) => e[0]);
   if (periodos.length < 2) return null;             // se necesitan 2 periodos para comparar
   const cur = periodos[0], prev = periodos[1];
+  // Solo comparamos SEMANAS CONSECUTIVAS. Si la semana anterior no tiene datos de producto
+  // cargados, NO comparamos contra una semana lejana (daría caídas/subidas falsas).
+  const diasGap = Math.round((new Date(pmap.get(cur) + "T00:00") - new Date(pmap.get(prev) + "T00:00")) / 86400000);
+  if (diasGap > 10) return null;
   const agg = (per) => {
     const m = new Map();
     for (const p of prod) if (p.periodo === per) {
