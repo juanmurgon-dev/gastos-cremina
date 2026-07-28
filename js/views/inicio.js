@@ -47,7 +47,8 @@ const CAT_BEBIDA = new Set(["Barra de Café", "Bebidas"]);
 // Nombres que son CATEGORÍAS del reporte, no productos. Si aparecen como "producto"
 // es basura de una importación vieja (la tabla de categorías se coló) → se ignoran.
 const CATEGORIAS_NOMBRE = new Set(["desayunos", "comida", "comidas", "entradas", "postres",
-  "barra de café", "barra de cafe", "bebidas", "bebida", "mimosas", "extras", "otros", "total productos"]);
+  "barra de café", "barra de cafe", "bebidas", "bebida", "refrescos", "mimosas", "extras", "otros",
+  "total productos", "sin variante"]);
 const esCategoriaNombre = (n) => CATEGORIAS_NOMBRE.has(String(n || "").trim().toLowerCase());
 
 // Grupo modificador "principal" de un platillo/bebida (Tipo → Sabor; evita leche/temperatura).

@@ -1248,7 +1248,7 @@ export function preciosPorInsumo() {
       const nombre = (l.descripcion || "").trim();
       if (!nombre) continue;
       if (/propina/i.test(nombre) || ES_IVA.test(nombre)) continue;   // propina/IVA no son insumo
-      const key = nombre.toLowerCase();
+      const key = normIns(nombre);   // acentos/espacios/mayúsculas no crean insumos duplicados
       if (!map.has(key)) map.set(key, { nombre, area: l.area, registros: [] });
       const pu = num(l.precio_unitario) || (num(l.cantidad) ? num(l.monto) / num(l.cantidad) : num(l.monto));
       map.get(key).registros.push({
@@ -1303,7 +1303,7 @@ export function ritmoCompras() {
     for (const l of t.lineas || []) {
       const nombre = (l.descripcion || "").trim();
       if (!nombre || /propina/i.test(nombre) || ES_IVA.test(nombre)) continue;
-      const key = nombre.toLowerCase();
+      const key = normIns(nombre);   // acentos/espacios/mayúsculas no crean insumos duplicados
       let o = insMap.get(key);
       if (!o) { o = { nombre, area: l.area, fechas: [], montos: [], unidad: l.unidad || "", provs: new Set() }; insMap.set(key, o); }
       o.fechas.push(t.fecha);
