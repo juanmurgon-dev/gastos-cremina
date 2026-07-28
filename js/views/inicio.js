@@ -50,6 +50,10 @@ const CATEGORIAS_NOMBRE = new Set(["desayunos", "comida", "comidas", "entradas",
   "barra de café", "barra de cafe", "bebidas", "bebida", "refrescos", "mimosas", "extras", "otros",
   "total productos", "sin variante"]);
 const esCategoriaNombre = (n) => CATEGORIAS_NOMBRE.has(String(n || "").trim().toLowerCase());
+// "Cayendo" se enfoca solo en cocina (comida y desayuno) y nunca cuenta el consumo de colaboradores.
+const ES_COMIDA_CAT = new Set(["desayunos", "desayuno", "comida", "comidas"]);
+const esComidaCat = (c) => ES_COMIDA_CAT.has(String(c || "").trim().toLowerCase());
+const ES_COLABORADOR = /colaborador/i;
 
 // Grupo modificador "principal" de un platillo/bebida (Tipo → Sabor; evita leche/temperatura).
 const ES_SECUNDARIO = /leche|fr[íi]o|caliente|shot|cold foam|temperatura/i;
@@ -137,14 +141,17 @@ function movimientosProductos() {
     if (chg <= -0.15) caidas.push({ nombre, cat, prev: av, cur: bv, drop: chg });
     else if (chg >= 0.15) subidas.push({ nombre, cat, prev: av, cur: bv, rise: chg });
   }
-  caidas.sort((a, b) => a.drop - b.drop);            // mayor caída primero
+  // "Cayendo" se enfoca solo en cocina (comida y desayuno) y excluye el consumo de colaboradores.
+  const caidasCocina = caidas.filter((x) => esComidaCat(x.cat) && !ES_COLABORADOR.test(x.nombre));
+  caidasCocina.sort((a, b) => a.drop - b.drop);      // mayor caída primero
   subidas.sort((a, b) => b.rise - a.rise);           // mayor subida primero
-  return { cur, prev, caidas, subidas };
+  return { cur, prev, caidas: caidasCocina, subidas };
 }
 
 // Insumo en el que más gastas y el que más subió de precio.
 function insumosDestacados() {
-  const ins = store.preciosPorInsumo();
+  // Solo insumos de COSTO DE VENTA (comida/barra); no gastos operativos/fijos como gas, luz o renta.
+  const ins = store.preciosPorInsumo().filter((i) => i.tipo === "costo de venta");
   if (!ins.length) return null;
   const conGasto = ins.map((i) => ({ ...i, gasto: (i.registros || []).reduce((a, r) => a + store.num(r.monto), 0) }));
   const masGasto = conGasto.slice().sort((a, b) => b.gasto - a.gasto)[0] || null;
