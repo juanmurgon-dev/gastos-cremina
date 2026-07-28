@@ -243,6 +243,28 @@ function construirResumen() {
       L.push(`\nMÁS VENDIDOS (${periodo}):`);
       for (const [n, a] of top) L.push(`- ${n}: ${Math.round(a.u)} vendidos, ${money(a.v)}`);
     }
+
+    // Margen por platillo: cruza el precio de venta promedio con el costo por porción.
+    // Es el dato CLAVE para decidir precios ("este platillo casi no deja").
+    const costos = store.mapaCostos();
+    if (costos.size) {
+      const filas = [];
+      for (const [n, a] of agg) {
+        const costo = costos.get(n);
+        if (costo == null || !a.u) continue;
+        const precio = a.v / a.u;
+        if (precio <= 0) continue;
+        const margen = precio - costo;
+        filas.push({ n, precio, costo, margen, pct: Math.round(margen / precio * 100), u: a.u });
+      }
+      if (filas.length) {
+        filas.sort((a, b) => a.pct - b.pct);   // peor margen primero (lo que hay que decidir)
+        L.push(`\nMARGEN POR PLATILLO (precio prom. vs costo por porción; peor margen primero):`);
+        for (const f of filas.slice(0, 8)) {
+          L.push(`- ${f.n}: precio ${money(f.precio)}, costo ${money(f.costo)}, deja ${money(f.margen)} (${f.pct}%), ${Math.round(f.u)} vendidos`);
+        }
+      }
+    }
   }
 
   // Insumos: dónde más gastas y qué subió
