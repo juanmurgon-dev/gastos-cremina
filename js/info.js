@@ -70,25 +70,31 @@ const EXPL = {
 };
 
 // HTML del botón "ⓘ" para incrustar junto a una etiqueta o título.
+const BTN_ESTILO = "cursor:pointer;background:none;padding:0;margin-left:5px;flex:none;display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1.3px solid var(--gris);color:var(--gris);font-size:10px;font-weight:800;font-style:italic;line-height:1;vertical-align:middle;font-family:Georgia,serif";
 export function icono(clave) {
   if (!EXPL[clave]) return "";
-  return `<button type="button" data-info="${clave}" aria-label="Qué significa este dato" title="Qué significa"
-    style="cursor:pointer;background:none;padding:0;margin-left:5px;flex:none;display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1.3px solid var(--gris);color:var(--gris);font-size:10px;font-weight:800;font-style:italic;line-height:1;vertical-align:middle;font-family:Georgia,serif">i</button>`;
+  return `<button type="button" data-info="${clave}" aria-label="Qué significa este dato" title="Qué significa" style="${BTN_ESTILO}">i</button>`;
+}
+// Igual que icono() pero con texto DINÁMICO (para explicar de qué semana/fecha viene un dato).
+// tip = { t, q, c, d } — cualquiera opcional.
+export function iconoTip(tip) {
+  if (!tip) return "";
+  const enc = encodeURIComponent(JSON.stringify(tip));
+  return `<button type="button" data-tip="${enc}" aria-label="De dónde sale este dato" title="De dónde sale" style="${BTN_ESTILO}">i</button>`;
 }
 
-function abrir(clave) {
-  const x = EXPL[clave];
-  if (!x) return;
+function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function pintarModal(x) {
   const bg = document.createElement("div");
   bg.className = "modal-bg";
   bg.innerHTML = `
     <div class="modal">
-      <h2 style="margin-bottom:2px">${x.t}</h2>
-      <p style="margin:6px 0 0;font-size:14px;line-height:1.5">${x.q}</p>
+      <h2 style="margin-bottom:2px">${esc(x.t)}</h2>
+      ${x.q ? `<p style="margin:6px 0 0;font-size:14px;line-height:1.5">${esc(x.q)}</p>` : ""}
       ${x.c ? `<div class="titulo-seccion" style="margin-top:14px">Cómo se calcula</div>
-        <p class="sub" style="margin:4px 0 0;font-size:13px;line-height:1.5">${x.c}</p>` : ""}
+        <p class="sub" style="margin:4px 0 0;font-size:13px;line-height:1.5">${esc(x.c)}</p>` : ""}
       ${x.d ? `<div class="titulo-seccion" style="margin-top:12px">De dónde sale</div>
-        <p class="sub" style="margin:4px 0 0;font-size:13px;line-height:1.5">${x.d}</p>` : ""}
+        <p class="sub" style="margin:4px 0 0;font-size:13px;line-height:1.5">${esc(x.d)}</p>` : ""}
       <button class="btn sec" data-cerrar style="margin-top:18px">Entendido</button>
     </div>`;
   document.body.appendChild(bg);
@@ -96,6 +102,8 @@ function abrir(clave) {
   bg.addEventListener("click", (e) => { if (e.target === bg) cerrar(); });
   bg.querySelector("[data-cerrar]").addEventListener("click", cerrar);
 }
+function abrir(clave) { if (EXPL[clave]) pintarModal(EXPL[clave]); }
+function abrirTip(x) { if (x) pintarModal(x); }
 
 // Un solo listener global: al tocar cualquier "ⓘ" (ahora o tras re-render), abre.
 let montado = false;
@@ -104,6 +112,8 @@ let montado = false;
   montado = true;
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-info]");
-    if (b) abrir(b.getAttribute("data-info"));
+    if (b) { abrir(b.getAttribute("data-info")); return; }
+    const tp = e.target.closest("[data-tip]");
+    if (tp) { try { abrirTip(JSON.parse(decodeURIComponent(tp.getAttribute("data-tip")))); } catch (_) { /* ignora */ } }
   });
 })();
