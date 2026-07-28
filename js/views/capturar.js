@@ -15,10 +15,10 @@ export function render(el, ctx) {
     <div id="paso-inicio">
       <div class="card" style="text-align:center">
         <h2 style="margin-bottom:6px">Registrar un ticket</h2>
-        <p class="sub" style="margin:0 0 16px">Toma la foto del recibo y yo saco los artículos.</p>
+        <p class="sub" style="margin:0 0 16px">Toma la foto del recibo o elígela de tu galería, y yo saco los artículos.</p>
         <label class="btn" style="margin-bottom:10px">
           📸 Tomar / elegir foto
-          <input id="file" type="file" accept="image/*" capture="environment" hidden />
+          <input id="file" type="file" accept="image/*" hidden />
         </label>
         <button class="btn sec" id="btn-texto">✍️ Escribir a mano</button>
       </div>
