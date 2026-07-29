@@ -18,7 +18,7 @@ import * as recetas from "./views/recetas.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.87";
+export const APP_VERSION = "v3.88";
 export const APP_FECHA = "27 jul 2026";
 
 const VISTAS = {
@@ -63,7 +63,7 @@ function aplicarSesion(session) {
   if (user) {
     store.init();
     if (!shellMontado) montarShell(user);
-    chat.montar();          // botón flotante 💬 (idempotente)
+    if (ENV !== "beta") chat.montar();   // botón flotante 💬 (oculto en beta por ahora)
   } else {
     shellMontado = false;
     montarLogin();
