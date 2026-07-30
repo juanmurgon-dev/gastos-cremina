@@ -262,6 +262,11 @@ function lunesDeInicio(d) { const x = new Date(d); const g = (x.getDay() + 6) % 
 // Rango [desde,hasta] + etiquetas para un modo y offset (0 = periodo actual).
 function rangoPeriodo(modo, off) {
   const hoy = new Date();
+  if (modo === "dia") {
+    const d = new Date(hoy); d.setDate(hoy.getDate() - off);
+    const iso = isoDe(d);
+    return { desde: iso, hasta: iso, etiqueta: `${d.getDate()} ${MES_LARGO[d.getMonth()]} ${d.getFullYear()}`, corta: `${d.getDate()} ${MES_S[d.getMonth()]}`, esActual: off === 0 };
+  }
   if (modo === "mes") {
     const m = new Date(hoy.getFullYear(), hoy.getMonth() - off, 1);
     const fin = new Date(m.getFullYear(), m.getMonth() + 1, 0);
@@ -297,6 +302,14 @@ function metricasKpi(desde, hasta, soloUnDia = false) {
     tCuenta: k.cuentas > 0 ? venta / k.cuentas : 0,
   };
 }
+// Flecha de tendencia vs el periodo anterior (arriba = verde, abajo = rojo).
+function trendKpi(cur, prev) {
+  if (!prev || prev <= 0 || !cur) return "";
+  const chg = (cur - prev) / prev * 100;
+  if (Math.abs(chg) < 1) return ` <span style="color:var(--gris);font-size:10px">→</span>`;
+  const up = chg > 0;
+  return ` <span style="color:${up ? "var(--verde)" : "var(--rojo)"};font-size:10px;font-weight:700">${up ? "▲" : "▼"}${Math.abs(Math.round(chg))}%</span>`;
+}
 
 // Orden de las tarjetas del Inicio (lo acomoda el usuario con ▲▼; se guarda por dispositivo).
 const ORDEN_DEFAULT = ["utilidad", "comensales", "rentabilidad", "tendencia", "actuar", "vistazo", "meta"];
@@ -310,7 +323,7 @@ function guardarOrden(ord) { try { localStorage.setItem("platify.inicio.orden", 
 
 function renderOwner(el) {
   let modo = "semana";
-  try { const m = localStorage.getItem("platify.inicio.modo"); if (m === "semana" || m === "mes" || m === "año") modo = m; } catch (_) { /* sin storage */ }
+  try { const m = localStorage.getItem("platify.inicio.modo"); if (m === "dia" || m === "semana" || m === "mes" || m === "año") modo = m; } catch (_) { /* sin storage */ }
   let off = 0;    // 0 = periodo actual
   let orden = cargarOrden();
   let acomodando = false;
@@ -322,7 +335,7 @@ function renderOwner(el) {
     const r = rangoPeriodo(modo, off);
     const hoyISO = store.hoyISO();
     const finReal = (r.esActual && r.hasta > hoyISO) ? hoyISO : r.hasta;
-    const modoLbl = modo === "semana" ? "de la semana" : modo === "mes" ? "del mes" : "del año";
+    const modoLbl = modo === "dia" ? "del día" : modo === "semana" ? "de la semana" : modo === "mes" ? "del mes" : "del año";
 
     // ── Agregados del periodo elegido ──
     const per = agregarRango(r.desde, r.hasta);
@@ -336,13 +349,11 @@ function renderOwner(el) {
     const verdicto = sinDatos ? "Sin datos en este periodo" : utilidad > 0 ? "Vas ganando" : utilidad < 0 ? "Vas perdiendo" : "Vas a mano";
     const costoCol = foodCost <= 35 ? "var(--verde)" : foodCost <= 45 ? "var(--amarillo)" : "var(--rojo)";
 
-    // ── Comensales y ticket promedio, comparativa Día / Semana / Mes (fijo, no depende del selector) ──
-    const hoyKpiISO = store.hoyISO();
-    const rSemHoy = rangoPeriodo("semana", 0), rMesHoy = rangoPeriodo("mes", 0);
-    const kDia = metricasKpi(hoyKpiISO, hoyKpiISO, true);   // solo registros de UN día
-    const kSem = metricasKpi(rSemHoy.desde, rSemHoy.hasta);
-    const kMes = metricasKpi(rMesHoy.desde, rMesHoy.hasta);
-    const hayKpi = kDia.comensales > 0 || kSem.comensales > 0 || kMes.comensales > 0;
+    // ── Comensales y ticket promedio del periodo SELECCIONADO, con tendencia vs el anterior ──
+    const rPrev = rangoPeriodo(modo, off + 1);
+    const km = metricasKpi(r.desde, r.hasta, modo === "dia");     // en "día" solo cuenta registros de un día
+    const kmPrev = metricasKpi(rPrev.desde, rPrev.hasta, modo === "dia");
+    const hayKpi = km.comensales > 0 || km.cuentas > 0;
 
     // ── Gasto por área (todas las líneas): cocina / barra / otro (piso+limpieza+otro) ──
     const spa = store.sumaPor(store.lineasEnRango(r.desde, r.hasta), "area");
@@ -384,7 +395,7 @@ function renderOwner(el) {
     const hayArea = ingArea.cocina || ingArea.barra || gastoArea.cocina || gastoArea.barra;
 
     // ── Tendencia: N periodos hacia atrás terminando en el seleccionado ──
-    const N = modo === "año" ? 3 : modo === "mes" ? 6 : 8;
+    const N = modo === "dia" ? 10 : modo === "año" ? 3 : modo === "mes" ? 6 : 8;
     const serie = [];
     for (let i = N - 1; i >= 0; i--) { const rr = rangoPeriodo(modo, off + i); serie.push({ etq: rr.corta, ...agregarRango(rr.desde, rr.hasta) }); }
     const maxSerie = Math.max(1, ...serie.map((s) => s.ingreso));
@@ -440,24 +451,13 @@ function renderOwner(el) {
         ${gfSem === 0 ? `<div class="sub" style="margin-top:8px;font-size:12px">💡 Registra tus gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : ""}
       </div>`;
 
-    const celComen = (v) => `<div style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${v > 0 ? Math.round(v) : "—"}</div>`;
-    const celDin = (v) => `<div style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${v > 0 ? money(v) : "—"}</div>`;
     cards.comensales = hayKpi ? `<div class="card">
-        <h2 style="margin-bottom:4px">Comensales y ticket promedio${info.iconoTip({ t: "Comensales y ticket promedio", q: "Cuánta gente atendiste y cuánto gastó en promedio, por día, semana y mes.", c: "Comensales y mesas salen del encabezado de tu reporte. Por persona = venta ÷ comensales. Por cuenta = venta ÷ mesas atendidas.", d: "La columna 'Día' solo se llena si subes reportes diarios; 'Semana' y 'Mes' se llenan también con reportes semanales. Se captura al importar." })}</h2>
-        <div style="display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr;gap:8px 8px;align-items:center;margin-top:8px">
-          <div></div>
-          <div class="sub" style="font-size:11px;font-weight:700;text-align:right">Día</div>
-          <div class="sub" style="font-size:11px;font-weight:700;text-align:right">Semana</div>
-          <div class="sub" style="font-size:11px;font-weight:700;text-align:right">Mes</div>
-
-          <div style="font-size:12.5px;font-weight:600">Comensales</div>
-          ${celComen(kDia.comensales)}${celComen(kSem.comensales)}${celComen(kMes.comensales)}
-
-          <div style="font-size:12.5px;font-weight:600">$ / persona</div>
-          ${celDin(kDia.tPersona)}${celDin(kSem.tPersona)}${celDin(kMes.tPersona)}
-
-          <div style="font-size:12.5px;font-weight:600">$ / cuenta</div>
-          ${celDin(kDia.tCuenta)}${celDin(kSem.tCuenta)}${celDin(kMes.tCuenta)}
+        <h2 style="margin-bottom:4px">Comensales y ticket promedio${info.iconoTip({ t: "Comensales y ticket promedio", q: "Cuánta gente atendiste " + modoLbl + " y cuánto gastó en promedio.", c: "Comensales y mesas salen del encabezado de tu reporte. Por persona = venta ÷ comensales. Por cuenta = venta ÷ mesas atendidas.", d: "Cambia Día/Semana/Mes/Año arriba para ver cada periodo. La flecha compara contra el periodo anterior (" + rPrev.etiqueta + ")." })}</h2>
+        <p class="sub" style="margin:0 0 10px">${modoLbl.charAt(0).toUpperCase() + modoLbl.slice(1)} · flecha vs ${esc(rPrev.etiqueta)}.</p>
+        <div class="row-stats">
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.comensales || "—"}</div><div class="l">Comensales${trendKpi(km.comensales, kmPrev.comensales)}</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.tPersona > 0 ? money(km.tPersona) : "—"}</div><div class="l">Por persona${trendKpi(km.tPersona, kmPrev.tPersona)}</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.tCuenta > 0 ? money(km.tCuenta) : "—"}</div><div class="l">Por cuenta${trendKpi(km.tCuenta, kmPrev.tCuenta)}</div></div>
         </div>
       </div>` : "";
 
@@ -469,7 +469,7 @@ function renderOwner(el) {
       </div>`;
 
     cards.tendencia = `<div class="card">
-        <h2 style="margin-bottom:8px">Tendencia · ingreso ${modo === "año" ? "por año" : modo === "mes" ? "por mes" : "por semana"}${info.icono("tendencia")}</h2>
+        <h2 style="margin-bottom:8px">Tendencia · ingreso ${modo === "dia" ? "por día" : modo === "año" ? "por año" : modo === "mes" ? "por mes" : "por semana"}${info.icono("tendencia")}</h2>
         ${serie.map((s) => { const c = s.ingreso > 0 ? s.gastoVar / s.ingreso * 100 : 0;
           return `<div class="barra-row"><span class="etq" style="width:84px;font-size:12px">${s.etq}</span>
             <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * s.ingreso / maxSerie)}%;background:var(--verde-claro);opacity:${opac(s.ingreso, maxSerie)}"></span></span>
@@ -508,7 +508,7 @@ function renderOwner(el) {
 
     el.innerHTML = `
       <div class="card" style="padding:12px">
-        <div class="segmented" style="font-size:13px">${seg("semana", "Semana")}${seg("mes", "Mes")}${seg("año", "Año")}</div>
+        <div class="segmented" style="font-size:12px">${seg("dia", "Día")}${seg("semana", "Semana")}${seg("mes", "Mes")}${seg("año", "Año")}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px">
           <button class="btn sec chico" id="ant" title="Periodo anterior"${acomodando ? " disabled style='opacity:.35'" : ""}>◀</button>
           <div style="flex:1;text-align:center">
