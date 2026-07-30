@@ -690,6 +690,7 @@ function limpiarLinea(l) {
   return {
     area: AREAS.includes(l.area) ? l.area : "otro",
     descripcion: (l.descripcion || "").toString().trim(),
+    codigo: (l.codigo || "").toString().trim(),   // código/SKU del producto en el proveedor
     cantidad: num(l.cantidad),
     unidad: l.unidad || "",
     precio_unitario: num(l.precio_unitario ?? l.precioUnitario),

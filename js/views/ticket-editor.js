@@ -12,6 +12,8 @@ function lineaHTML(l = {}) {
     <button type="button" class="quitar" data-quitar title="Quitar línea">×</button>
     <label class="campo"><span>Descripción</span>
       <input data-f="descripcion" value="${escapar(l.descripcion || "")}" placeholder="Ej. Tomate saladet" /></label>
+    <label class="campo"><span>Código del proveedor</span>
+      <input data-f="codigo" value="${escapar(l.codigo || "")}" placeholder="Código / SKU del proveedor (opcional)" /></label>
     <div class="fila">
       <label class="campo"><span>Cantidad</span>
         <input data-f="cantidad" type="number" step="any" inputmode="decimal" value="${l.cantidad ?? ""}" /></label>
@@ -118,7 +120,7 @@ export function crearEditor(contenedor, ticket = {}) {
       const lineas = [...cont.querySelectorAll("[data-linea]")].map((row) => {
         const g = (f) => { const el = row.querySelector(`[data-f="${f}"]`); return el ? el.value : ""; };
         return {
-          descripcion: g("descripcion"), cantidad: g("cantidad"), unidad: g("unidad"),
+          descripcion: g("descripcion"), codigo: g("codigo"), cantidad: g("cantidad"), unidad: g("unidad"),
           precio_unitario: g("precio_unitario"), area: g("area"), tipo: g("tipo"), monto: g("monto")
         };
       }).filter((l) => l.descripcion || num(l.monto));
