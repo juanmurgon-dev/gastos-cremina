@@ -311,34 +311,6 @@ async function guardarKpiDesde(data) {
   try { await store.guardarKpiDia(fecha, { comensales: com, cuentas: mes, venta: N(data.venta_total), hasta: data.hasta || data.desde }); } catch (_) { /* no bloquear la importación */ }
 }
 
-// Baja la foto de un ticket (URL pública) y la vuelve base64 para mandarla a la IA.
-async function fotoABase64(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("no pude bajar la foto");
-  const blob = await res.blob();
-  return await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(",")[1] || "");
-    r.onerror = () => reject(new Error("no pude leer la foto"));
-    r.readAsDataURL(blob);
-  });
-}
-// Rellena el código en las líneas existentes que NO lo tengan, emparejando por
-// descripción normalizada con las líneas que la IA leyó de la foto.
-function rellenarCodigos(existentes, lineasIA) {
-  let cambios = 0;
-  const usados = new Set();
-  const out = (existentes || []).map((l) => {
-    if ((l.codigo || "").toString().trim() || !(l.descripcion || "").trim()) return l;
-    const nd = store.normIns(l.descripcion);
-    const idx = (lineasIA || []).findIndex((li, i) =>
-      !usados.has(i) && (li.codigo || "").toString().trim() && store.normIns(li.descripcion) === nd);
-    if (idx >= 0) { usados.add(idx); cambios++; return { ...l, codigo: String(lineasIA[idx].codigo).trim() }; }
-    return l;
-  });
-  return { out, cambios };
-}
-
 async function procesarPDF(f, semanaBackup) {
   const pdfBase64 = await fileToBase64(f);
   const { data, error } = await supabase.functions.invoke("extraer-reporte", { body: { pdfBase64 } });
@@ -404,13 +376,6 @@ export function montar(el) {
     </div>
 
     <div class="card">
-      <h2>Rellenar SKU desde fotos</h2>
-      <p class="sub" style="margin-top:-4px">Re-lee las <b>fotos</b> de tus tickets guardados y rellena el <b>código/SKU</b> del proveedor en las líneas donde la foto lo muestre. Usa IA; puede tardar unos minutos.</p>
-      <button class="btn sec" id="rellenarSku">🔄 Rellenar SKU de mis tickets</button>
-      <div id="sku-msg"></div>
-    </div>
-
-    <div class="card">
       <h2>Respaldo de tus datos</h2>
       <p class="sub" style="margin-top:-4px">Descarga TODO tu historial (gastos, ventas, gastos fijos, requisiciones…) en un archivo. Guárdalo por seguridad.</p>
       <button class="btn sec" id="respaldo">⬇ Descargar respaldo (todo)</button>
@@ -436,47 +401,6 @@ export function montar(el) {
       msg.innerHTML = `<div class="error-box" style="margin-top:10px">No pude generar el respaldo: ${(e && e.message) || e}</div>`;
     }
     btn.disabled = false; btn.textContent = "⬇ Descargar respaldo (todo)";
-  });
-
-  el.querySelector("#rellenarSku").addEventListener("click", async () => {
-    const btn = el.querySelector("#rellenarSku");
-    const msg = el.querySelector("#sku-msg");
-    const cands = (store.state.tickets || []).filter((t) => t.fotoUrl &&
-      (t.lineas || []).some((l) => (l.descripcion || "").trim() && !(l.codigo || "").toString().trim()));
-    if (!cands.length) { msg.innerHTML = `<div class="aviso-box" style="margin-top:10px">No hay tickets con foto pendientes de SKU.</div>`; return; }
-    if (!confirm(`Voy a re-leer ${cands.length} ticket(s) con foto para sacar los SKU. Usa IA y puede tardar varios minutos. ¿Continuar?`)) return;
-
-    if (!document.getElementById("imp-spin-css")) {
-      const st = document.createElement("style"); st.id = "imp-spin-css";
-      st.textContent = "@keyframes impspin{to{transform:rotate(360deg)}}.imp-spin{width:18px;height:18px;border:2.5px solid var(--linea);border-top-color:var(--naranja);border-radius:50%;animation:impspin .8s linear infinite;display:inline-block;vertical-align:middle;flex:none}";
-      document.head.appendChild(st);
-    }
-    btn.disabled = true;
-    let tocados = 0, skusNuevos = 0, fallos = 0;
-    const total = cands.length;
-    const pintar = (i) => {
-      const pct = Math.round(i / total * 100);
-      msg.innerHTML = `<div style="margin-top:12px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span class="imp-spin"></span><span style="font-size:13.5px;font-weight:700">Re-leyendo ${Math.min(i + 1, total)} de ${total}…</span></div>
-        <div class="barra-track" style="height:10px"><span class="barra-fill" style="width:${Math.max(4, pct)}%;background:var(--naranja);transition:width .25s"></span></div>
-        <div class="sub" style="margin-top:8px;font-size:12px">${skusNuevos} SKU rellenados${fallos ? ` · ${fallos} sin leer` : ""}</div>
-      </div>`;
-    };
-    for (let i = 0; i < cands.length; i++) {
-      const t = cands[i];
-      pintar(i);
-      await new Promise((r) => setTimeout(r, 15));
-      try {
-        const b64 = await fotoABase64(t.fotoUrl);
-        const { data, error } = await supabase.functions.invoke("extraer-ticket", { body: { imagenBase64: b64, mediaType: "image/jpeg" } });
-        if (error || !data || data.error) throw new Error((error && error.message) || (data && data.error) || "sin datos");
-        const lineasIA = (data.tickets || []).flatMap((tk) => tk.lineas || []);
-        const { out, cambios } = rellenarCodigos(t.lineas || [], lineasIA);
-        if (cambios > 0) { await store.actualizarTicket(t.id, { lineas: out }); tocados++; skusNuevos += cambios; }
-      } catch (e) { fallos++; }
-    }
-    btn.disabled = false;
-    msg.innerHTML = `<div class="ok-box" style="margin-top:12px">Listo. Rellené <b>${skusNuevos}</b> SKU en <b>${tocados}</b> ticket(s).${fallos ? ` (${fallos} no se pudieron leer.)` : ""}</div>`;
   });
 
   el.querySelector("#files").addEventListener("change", async (e) => {
