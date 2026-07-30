@@ -167,6 +167,8 @@ export function render(el) {
 
       <div class="card">
         <h2>Agregar insumo</h2>
+        <label class="campo"><span>Código / SKU del proveedor</span>
+          <input id="rqSku" placeholder="Escribe el SKU y se llena el insumo" autocomplete="off" /></label>
         <label class="campo" style="position:relative"><span>Insumo</span>
           <input id="rqNom" placeholder="Escribe y elige, ej. carne…" autocomplete="off" />
           <div id="rqSug" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--blanco);border:1px solid var(--linea);border-radius:12px;box-shadow:var(--sombra);max-height:250px;overflow-y:auto;margin-top:4px"></div>
@@ -198,8 +200,19 @@ export function render(el) {
     });
 
     $("#rqNom").addEventListener("change", () => {
-      const hit = byName.get($("#rqNom").value.trim().toLowerCase());
+      const nom = $("#rqNom").value.trim();
+      const hit = byName.get(nom.toLowerCase());
       if (hit && !$("#rqUni").value) $("#rqUni").value = hit.unidad || "";
+      if (!$("#rqSku").value.trim()) { const cod = store.codigoDeInsumo(nom); if (cod) $("#rqSku").value = cod; }
+    });
+    // SKU → insumo: al escribir un código conocido, llena el insumo y la unidad.
+    $("#rqSku").addEventListener("input", () => {
+      const found = store.insumoPorCodigo($("#rqSku").value);
+      if (found) {
+        $("#rqNom").value = found.nombre;
+        if (found.unidad) $("#rqUni").value = found.unidad;
+        cerrarSug();
+      }
     });
 
     // Autocompletar: al escribir, despliega los insumos que coinciden (ej. "carne").
@@ -219,6 +232,7 @@ export function render(el) {
         nomEl.value = it.dataset.n;
         const hit = byName.get(it.dataset.n.toLowerCase());
         if (hit) $("#rqUni").value = hit.unidad || $("#rqUni").value;
+        if (!$("#rqSku").value.trim()) { const cod = store.codigoDeInsumo(it.dataset.n); if (cod) $("#rqSku").value = cod; }
         cerrarSug();
         $("#rqCant").focus();
       }));
@@ -234,8 +248,9 @@ export function render(el) {
       const precio = hit ? num(hit.precioActual) : 0;
       const proveedor = hit && hit.registros[0] ? (hit.registros[0].proveedor || "") : "";
       const unidad = $("#rqUni").value.trim() || (hit && hit.unidad) || "pz";
-      editing.items.push({ nombre, cantidad, unidad, precio, proveedor, estatus: "pendiente" });
-      $("#rqNom").value = ""; $("#rqCant").value = ""; $("#rqUni").value = "";
+      const codigo = $("#rqSku").value.trim() || store.codigoDeInsumo(nombre);
+      editing.items.push({ nombre, cantidad, unidad, precio, proveedor, codigo, estatus: "pendiente" });
+      $("#rqNom").value = ""; $("#rqCant").value = ""; $("#rqUni").value = ""; $("#rqSku").value = "";
       $("#rqNom").focus();
       pintarItems(); guardar();
     });
@@ -250,7 +265,7 @@ export function render(el) {
     const precio = hit ? num(hit.precioActual) : 0;
     const proveedor = hit && hit.registros[0] ? (hit.registros[0].proveedor || "") : "";
     const uni = unidad || (hit && hit.unidad) || "pz";
-    return { nombre, cantidad: num(cantidad) || 1, unidad: uni, precio, proveedor, estatus: "pendiente" };
+    return { nombre, cantidad: num(cantidad) || 1, unidad: uni, precio, proveedor, codigo: store.codigoDeInsumo(nombre), estatus: "pendiente" };
   }
 
   // Modal de revisión: el usuario ajusta/quita antes de agregar a la lista.
@@ -405,7 +420,7 @@ export function render(el) {
     return `<div class="barra-row" data-i="${idx}" style="gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--linea);padding:8px 0">
       <span class="etq" style="width:100%;font-weight:600;display:flex;align-items:center;gap:8px">
         <button data-f="estat" class="chip" title="Cambiar estatus" style="background:${ie.c};border:none;cursor:pointer;flex:none">${ie.t}</button>
-        <span style="flex:1;min-width:0">${esc(it.nombre)}</span>
+        <span style="flex:1;min-width:0">${esc(it.nombre)}${(it.codigo || store.codigoDeInsumo(it.nombre)) ? `<span class="sub" style="font-size:10.5px;margin-left:6px;white-space:nowrap">SKU ${esc(it.codigo || store.codigoDeInsumo(it.nombre))}</span>` : ""}</span>
         <span class="val" style="margin-left:auto">${money(montoDe(it))}</span></span>
       <input data-f="cant" type="number" step="any" inputmode="decimal" value="${it.cantidad}" style="width:64px" />
       <span class="sub" style="align-self:center">${esc(it.unidad)} ×</span>

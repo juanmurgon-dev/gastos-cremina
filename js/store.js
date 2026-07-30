@@ -1224,6 +1224,35 @@ export function emparejarInsumo(nombre) {
   return (hit && hit.score >= 65) ? hit.nombre : raw;
 }
 
+// Busca un insumo por el CÓDIGO/SKU del proveedor (guardado en las líneas de tickets).
+// Devuelve { nombre, unidad } del ticket más reciente que coincida, o null.
+export function insumoPorCodigo(codigo) {
+  const c = (codigo || "").toString().trim().toLowerCase();
+  if (!c) return null;
+  const tks = [...state.tickets].sort((a, b) => ((a.fecha || "") < (b.fecha || "") ? 1 : -1));
+  for (const t of tks) {
+    for (const l of t.lineas || []) {
+      if ((l.codigo || "").toString().trim().toLowerCase() === c && (l.descripcion || "").trim()) {
+        return { nombre: emparejarInsumo(l.descripcion.trim()), unidad: l.unidad || "" };
+      }
+    }
+  }
+  return null;
+}
+
+// El CÓDIGO/SKU conocido de un insumo (por su nombre), del ticket más reciente que lo traiga.
+export function codigoDeInsumo(nombre) {
+  const n = normIns(nombre);
+  if (!n) return "";
+  const tks = [...state.tickets].sort((a, b) => ((a.fecha || "") < (b.fecha || "") ? 1 : -1));
+  for (const t of tks) {
+    for (const l of t.lineas || []) {
+      if ((l.codigo || "").toString().trim() && normIns(l.descripcion) === n) return l.codigo.toString().trim();
+    }
+  }
+  return "";
+}
+
 // Proveedores existentes (ya canonizados) con cuántos tickets tiene cada uno.
 export function proveedoresConocidos() {
   const m = new Map();
