@@ -281,6 +281,26 @@ function agregarRango(desde, hasta) {
   return { ingreso, gasto, gastoVar };
 }
 
+// Comensales + ticket promedio de un rango. La venta sale del reporte (encabezado);
+// si no la trae, cae a la venta de los cortes de caja del rango.
+function metricasKpi(desde, hasta) {
+  const k = store.kpisEnRango(desde, hasta);
+  const venta = k.venta > 0 ? k.venta : agregarRango(desde, hasta).ingreso;
+  return {
+    comensales: k.comensales, cuentas: k.cuentas, venta,
+    tPersona: k.comensales > 0 ? venta / k.comensales : 0,
+    tCuenta: k.cuentas > 0 ? venta / k.cuentas : 0,
+  };
+}
+// Flecha de tendencia vs el periodo anterior (arriba = verde, abajo = rojo).
+function trendKpi(cur, prev) {
+  if (!prev || prev <= 0 || !cur) return "";
+  const chg = (cur - prev) / prev * 100;
+  if (Math.abs(chg) < 1) return ` <span style="color:var(--gris);font-size:10px">→</span>`;
+  const up = chg > 0;
+  return ` <span style="color:${up ? "var(--verde)" : "var(--rojo)"};font-size:10px;font-weight:700">${up ? "▲" : "▼"}${Math.abs(Math.round(chg))}%</span>`;
+}
+
 function renderOwner(el) {
   let modo = "semana";
   try { const m = localStorage.getItem("platify.inicio.modo"); if (m === "semana" || m === "mes" || m === "año") modo = m; } catch (_) { /* sin storage */ }
@@ -306,6 +326,12 @@ function renderOwner(el) {
     const colU = sinDatos ? "var(--gris)" : utilidad > 0 ? "var(--verde)" : utilidad < 0 ? "var(--rojo)" : "var(--tinta)";
     const verdicto = sinDatos ? "Sin datos en este periodo" : utilidad > 0 ? "Vas ganando" : utilidad < 0 ? "Vas perdiendo" : "Vas a mano";
     const costoCol = foodCost <= 35 ? "var(--verde)" : foodCost <= 45 ? "var(--amarillo)" : "var(--rojo)";
+
+    // ── Comensales y ticket promedio (del encabezado del reporte), con tendencia ──
+    const rPrev = rangoPeriodo(modo, off + 1);
+    const km = metricasKpi(r.desde, r.hasta);
+    const kmPrev = metricasKpi(rPrev.desde, rPrev.hasta);
+    const hayKpi = km.comensales > 0 || km.cuentas > 0;
 
     // ── Gasto por área (todas las líneas): cocina / barra / otro (piso+limpieza+otro) ──
     const spa = store.sumaPor(store.lineasEnRango(r.desde, r.hasta), "area");
@@ -415,6 +441,16 @@ function renderOwner(el) {
         </div>
         ${gfSem === 0 ? `<div class="sub" style="margin-top:8px;font-size:12px">💡 Registra tus gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : ""}
       </div>
+
+      ${hayKpi ? `<div class="card">
+        <h2 style="margin-bottom:4px">Comensales y ticket promedio${info.iconoTip({ t: "Comensales y ticket promedio", q: "Cuánta gente atendiste y cuánto gastó en promedio.", c: "Comensales y mesas vienen del encabezado de tu reporte diario. Por persona = venta ÷ comensales. Por cuenta = venta ÷ mesas atendidas.", d: "Se captura de cada reporte diario que subes en Importar. La flecha compara contra el periodo anterior (" + rPrev.etiqueta + ")." })}</h2>
+        <p class="sub" style="margin:0 0 10px">La flecha compara vs ${esc(rPrev.etiqueta)}.</p>
+        <div class="row-stats">
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.comensales || "—"}</div><div class="l">Comensales${trendKpi(km.comensales, kmPrev.comensales)}</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.tPersona > 0 ? money(km.tPersona) : "—"}</div><div class="l">Por persona${trendKpi(km.tPersona, kmPrev.tPersona)}</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.tCuenta > 0 ? money(km.tCuenta) : "—"}</div><div class="l">Por cuenta${trendKpi(km.tCuenta, kmPrev.tCuenta)}</div></div>
+        </div>
+      </div>` : ""}
 
       <div class="card">
         <h2 style="margin-bottom:4px">Rentabilidad por área${info.iconoTip({ t: "Rentabilidad por área", q: "Cuánto entra (ventas) vs cuánto cuesta el insumo, en cocina y barra.", c: "Ingreso = ventas de las categorías del área (Cocina: desayunos, comida, entradas, postres · Barra: café, bebidas, mimosas, refrescos). Insumo = tus tickets con esa área, solo costo de venta. Deja% = (ingreso − insumo) / ingreso.", d: "El ingreso sale de tus reportes de venta por producto; el insumo, de tus tickets. Necesita que tus tickets tengan el ÁREA marcada." })}</h2>

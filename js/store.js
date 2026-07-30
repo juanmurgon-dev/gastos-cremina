@@ -18,6 +18,7 @@ export const COLOR_AREA = {
 export const state = {
   tickets: [],
   cortes: [],
+  kpisDia: [],          // comensales/cuentas/venta por día (del encabezado del reporte)
   productos: [],
   modificadores: [],
   combos: [],
@@ -96,6 +97,31 @@ async function cargarCortes() {
   // La tabla puede no existir todavía (si aún no corren el import de ventas).
   const { data, error } = await supabase.from("cortes").select("*").order("fecha", { ascending: false });
   if (!error && data) { state.cortes = data; notify(); }
+}
+
+// KPIs por día (comensales, cuentas, venta) que vienen en el encabezado del reporte.
+async function cargarKpis() {
+  const { data, error } = await supabase.from("kpis_dia").select("*").order("fecha", { ascending: false });
+  if (!error && data) { state.kpisDia = data; notify(); }
+}
+// Guarda (upsert por fecha) los KPIs de un día. Idempotente al re-subir el reporte.
+export async function guardarKpiDia(fecha, kpi) {
+  if (!fecha) return;
+  const row = { fecha, comensales: Math.round(num(kpi.comensales)), cuentas: Math.round(num(kpi.cuentas)), venta: num(kpi.venta) };
+  const { error } = await supabase.from("kpis_dia").upsert(row);
+  if (error) throw error;
+  await cargarKpis();
+}
+// Suma comensales / cuentas / venta de los días dentro de [desde, hasta].
+export function kpisEnRango(desdeISO, hastaISO) {
+  let comensales = 0, cuentas = 0, venta = 0;
+  for (const k of state.kpisDia || []) {
+    if (!k.fecha) continue;
+    if (desdeISO && k.fecha < desdeISO) continue;
+    if (hastaISO && k.fecha > hastaISO) continue;
+    comensales += num(k.comensales); cuentas += num(k.cuentas); venta += num(k.venta);
+  }
+  return { comensales, cuentas, venta };
 }
 
 async function cargarProductos() {
@@ -532,7 +558,7 @@ export async function init() {
   arrancado = true;
   // allSettled: aunque una consulta falle, la app SIEMPRE deja de estar "cargando".
   await cargarMiOrg();  // primero: define single vs multi-tenant y el orgId
-  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones(), cargarCostosPlatillo(), cargarRecetas(), cargarRecetasFicha()]);
+  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones(), cargarCostosPlatillo(), cargarRecetas(), cargarRecetasFicha(), cargarKpis()]);
   try { await recalcularTodos(); } catch (e) { /* recetas o precios aún no disponibles */ }
   state.listo = true;
   notify();
@@ -546,6 +572,7 @@ export async function init() {
     .on("postgres_changes", { event: "*", schema: "public", table: "tickets" }, cargarTickets)
     .on("postgres_changes", { event: "*", schema: "public", table: "config" }, cargarConfig)
     .on("postgres_changes", { event: "*", schema: "public", table: "requisiciones" }, cargarRequisiciones)
+    .on("postgres_changes", { event: "*", schema: "public", table: "kpis_dia" }, cargarKpis)
     .subscribe();
 }
 

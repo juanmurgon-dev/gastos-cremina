@@ -293,6 +293,14 @@ async function importarProductosPDF(r) {
   return { periodo: out.periodo, prod: out.filas, dia: fechaDia };
 }
 
+// Guarda los KPIs del encabezado del reporte (comensales/mesas/venta) para ese día.
+async function guardarKpiDesde(data, fecha) {
+  if (!fecha) return;   // solo reportes de UN día (los semanales no se pueden repartir por día)
+  const com = N(data.comensales), mes = N(data.mesas);
+  if (!com && !mes) return;   // el reporte no traía ese encabezado
+  try { await store.guardarKpiDia(fecha, { comensales: com, cuentas: mes, venta: N(data.venta_total) }); } catch (_) { /* no bloquear la importación */ }
+}
+
 async function procesarPDF(f, semanaBackup) {
   const pdfBase64 = await fileToBase64(f);
   const { data, error } = await supabase.functions.invoke("extraer-reporte", { body: { pdfBase64 } });
@@ -316,6 +324,7 @@ async function procesarPDF(f, semanaBackup) {
   }
   if (data.tipo === "productos") {
     const out = await importarProductosPDF(data);
+    await guardarKpiDesde(data, out.dia);
     return [out.dia
       ? `✅ (PDF) Día ${out.dia} · ${out.prod} productos (sumado a la semana ${out.periodo})`
       : `✅ (PDF) Productos ${out.periodo} · ${out.prod} productos`];
@@ -325,6 +334,7 @@ async function procesarPDF(f, semanaBackup) {
       ? (() => { const wk = semanaDe(data.desde); return { desde: wk.desde, hasta: wk.hasta, periodo: labelRango(wk.desde, wk.hasta) }; })()
       : semanaBackup;
     const fechaDia = (data.desde && (!data.hasta || data.hasta === data.desde)) ? data.desde : null;
+    await guardarKpiDesde(data, fechaDia);
     const vrows = (data.items || []).map((v) => ({
       producto: String(v.producto || ""), grupo: String(v.grupo || ""),
       opcion: String(v.opcion || ""), unidades: N(v.unidades), venta: N(v.venta),
