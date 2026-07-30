@@ -240,132 +240,204 @@ function delta(actual, previo, subeEsBueno, etiqueta) {
   return `<span style="color:${col};font-size:12px">${sube ? "▲" : "▼"} ${Math.abs(Math.round(p))}% ${etiqueta || "vs. sem. pasada"}</span>`;
 }
 
+// ─────────── Tablero por periodo (Semana / Mes / Año) ───────────
+const MES_LARGO = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+// Categorías de venta → área del negocio (para el ingreso por área).
+const CAT_A_AREA = (() => {
+  const m = {};
+  ["desayunos", "comida", "comidas", "postres", "entradas"].forEach((c) => (m[c] = "cocina"));
+  ["café", "cafe", "barra de café", "barra de cafe", "bebidas", "bebida", "mimosas", "refrescos", "refresco"].forEach((c) => (m[c] = "barra"));
+  return m;
+})();
+const areaDeCategoria = (cat) => CAT_A_AREA[String(cat || "").trim().toLowerCase()] || null;
+
+const isoDe = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const parseFecha = (s) => new Date(s + "T00:00");
+function lunesDeInicio(d) { const x = new Date(d); const g = (x.getDay() + 6) % 7; x.setDate(x.getDate() - g); x.setHours(0, 0, 0, 0); return x; }
+
+// Rango [desde,hasta] + etiquetas para un modo y offset (0 = periodo actual).
+function rangoPeriodo(modo, off) {
+  const hoy = new Date();
+  if (modo === "mes") {
+    const m = new Date(hoy.getFullYear(), hoy.getMonth() - off, 1);
+    const fin = new Date(m.getFullYear(), m.getMonth() + 1, 0);
+    return { desde: isoDe(m), hasta: isoDe(fin), etiqueta: `${MES_LARGO[m.getMonth()]} ${m.getFullYear()}`, corta: `${MES_S[m.getMonth()]} ${String(m.getFullYear()).slice(2)}`, esActual: off === 0 };
+  }
+  if (modo === "año") {
+    const y = hoy.getFullYear() - off;
+    return { desde: `${y}-01-01`, hasta: `${y}-12-31`, etiqueta: String(y), corta: String(y), esActual: off === 0 };
+  }
+  const lun = lunesDeInicio(hoy); lun.setDate(lun.getDate() - off * 7);
+  const dom = new Date(lun); dom.setDate(lun.getDate() + 6);
+  return { desde: isoDe(lun), hasta: isoDe(dom), lunes: lun, etiqueta: `${lun.getDate()}–${dom.getDate()} ${MES_S[dom.getMonth()]}`, corta: `${lun.getDate()} ${MES_S[lun.getMonth()]}`, esActual: off === 0 };
+}
+
+// Ingreso (cortes) + gasto (tickets) de un rango de fechas.
+function agregarRango(desde, hasta) {
+  const ingreso = store.cortesEnRango(desde, hasta).reduce((a, c) => a + num(c.ventas_total), 0);
+  const ts = store.ticketsEnRango(desde, hasta);
+  const gasto = ts.reduce((a, t) => a + store.gastoTicket(t), 0);
+  const gastoVar = ts.reduce((a, t) => a + store.gastoVariable(t), 0);
+  return { ingreso, gasto, gastoVar };
+}
+
 function renderOwner(el) {
-  let off = 0; // 0 = esta semana
-  const rerender = () => pintar();
+  let modo = "semana";
+  try { const m = localStorage.getItem("platify.inicio.modo"); if (m === "semana" || m === "mes" || m === "año") modo = m; } catch (_) { /* sin storage */ }
+  let off = 0;    // 0 = periodo actual
   const unsub = store.subscribe(pintar);
   pintar();
 
   function pintar() {
     if (!store.state.listo) { el.innerHTML = `<div class="vacio">Cargando…</div>`; return; }
+    const r = rangoPeriodo(modo, off);
+    const hoyISO = store.hoyISO();
+    const finReal = (r.esActual && r.hasta > hoyISO) ? hoyISO : r.hasta;
+    const modoLbl = modo === "semana" ? "de la semana" : modo === "mes" ? "del mes" : "del año";
 
-    const semanas = store.ventasSemanas(14); // i=0 actual, i=1 pasada…
-    const wk = semanas[off] || semanas[0];
-    const prevFull = semanas[off + 1] || null;
-    const meta = store.metaDeSemana(wk.desde);
+    // ── Agregados del periodo elegido ──
+    const per = agregarRango(r.desde, r.hasta);
+    const ingreso = per.ingreso, gasto = per.gasto, gastoVar = per.gastoVar;
+    const foodCost = ingreso > 0 ? gastoVar / ingreso * 100 : 0;
+    const dias = Math.max(1, Math.round((parseFecha(finReal) - parseFecha(r.desde)) / 86400000) + 1);
+    const fijos = store.gastoFijoMensual() / 30 * dias;
+    const utilidad = ingreso - gasto - fijos;
+    const sinDatos = ingreso === 0 && gasto === 0;
+    const colU = sinDatos ? "var(--gris)" : utilidad > 0 ? "var(--verde)" : utilidad < 0 ? "var(--rojo)" : "var(--tinta)";
+    const verdicto = sinDatos ? "Sin datos en este periodo" : utilidad > 0 ? "Vas ganando" : utilidad < 0 ? "Vas perdiendo" : "Vas a mano";
+    const costoCol = foodCost <= 35 ? "var(--verde)" : foodCost <= 45 ? "var(--amarillo)" : "var(--rojo)";
 
-    const venta = wk.venta, gasto = wk.gasto;
-    const gastoVar = wk.gastoVar ?? gasto; // solo "costo de venta" (sin operativo/IVA)
-    const costo = venta > 0 ? (gastoVar / venta) * 100 : 0;
+    // ── Gasto por área (todas las líneas): cocina / barra / otro (piso+limpieza+otro) ──
+    const spa = store.sumaPor(store.lineasEnRango(r.desde, r.hasta), "area");
+    const gastoArea = { cocina: spa.cocina || 0, barra: spa.barra || 0, otro: (spa.piso || 0) + (spa.limpieza || 0) + (spa.otro || 0) };
 
-    // ¿Semana en curso y a medias? Cuántos días llevamos.
-    let diasT = 7, parcial = false;
-    if (off === 0) {
-      diasT = Math.min(7, Math.max(1, Math.floor((new Date() - wk.lunes) / 86400000) + 1));
-      parcial = diasT < 7;
+    // ── Rentabilidad por área: ingreso (categorías de venta) vs insumo (líneas costo de venta) ──
+    const ingArea = { cocina: 0, barra: 0 };
+    for (const p of store.state.productos || []) {
+      if (!p.desde || p.desde < r.desde || p.desde > r.hasta) continue;
+      if (ES_CORTESIA.test(p.producto || "") || ES_CORTESIA.test(p.categoria || "")) continue;
+      const a = areaDeCategoria(p.categoria);
+      if (a) ingArea[a] += num(p.venta);
     }
-    const cmpLbl = parcial ? `vs. mismos ${diasT} días` : "vs. sem. pasada";
-
-    // Comparar contra el MISMO punto de la semana pasada (no la semana completa).
-    let prev = prevFull;
-    if (parcial && prevFull) {
-      const pl = new Date(wk.lunes); pl.setDate(pl.getDate() - 7);
-      prev = store.semanaParcial(pl, diasT);
+    const insArea = { cocina: 0, barra: 0 };
+    for (const l of store.lineasEnRango(r.desde, r.hasta)) {
+      if (l.tipo !== "costo de venta") continue;
+      if (l.area === "cocina" || l.area === "barra") insArea[l.area] += num(l.monto);
     }
-    const costoPrev = prev && prev.venta > 0 ? ((prev.gastoVar ?? prev.gasto) / prev.venta) * 100 : 0;
+    const maxRent = Math.max(1, ingArea.cocina, ingArea.barra, insArea.cocina, insArea.barra);
+    const bloqueArea = (nom, ing, gas) => {
+      const margen = ing > 0 ? Math.round((ing - gas) / ing * 100) : null;
+      const mcol = margen == null ? "var(--gris)" : margen >= 60 ? "var(--verde)" : margen >= 40 ? "var(--amarillo)" : "var(--rojo)";
+      return `<div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><b>${nom}</b>
+          <span style="font-size:12px;font-weight:700;color:${mcol}">${margen == null ? "sin ingreso" : "deja " + margen + "%"}</span></div>
+        <div class="barra-row" style="margin-top:5px"><span class="etq" style="width:58px;font-size:11px">Ingreso</span>
+          <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * ing / maxRent)}%;background:var(--verde-claro)"></span></span>
+          <span class="val" style="width:78px">${kmoney(ing)}</span></div>
+        <div class="barra-row"><span class="etq" style="width:58px;font-size:11px">Insumo</span>
+          <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * gas / maxRent)}%;background:var(--naranja)"></span></span>
+          <span class="val" style="width:78px">${kmoney(gas)}</span></div>
+      </div>`;
+    };
+    const hayArea = ingArea.cocina || ingArea.barra || insArea.cocina || insArea.barra;
 
-    // Proyección al cierre: con el ritmo REAL de la semana pasada (no lineal).
-    let proy = null;
-    if (parcial) {
-      const fV = (prev && prev.venta > 0 && prevFull) ? prevFull.venta / prev.venta : 7 / diasT;
-      const fG = (prev && prev.gasto > 0 && prevFull) ? prevFull.gasto / prev.gasto : 7 / diasT;
-      proy = { dias: diasT, venta: venta * fV, gasto: gasto * fG };
-    }
+    const gaItems = [
+      { n: "Cocina", v: gastoArea.cocina, c: "var(--verde-claro)" },
+      { n: "Barra", v: gastoArea.barra, c: "var(--naranja)" },
+      { n: "Otro", v: gastoArea.otro, c: "var(--gris)" },
+    ].filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+    const maxGA = Math.max(1, ...gaItems.map((x) => x.v));
 
-    // Meta
-    const pct = meta > 0 ? Math.min(100, 100 * gastoVar / meta) : 0;
-    const cMeta = pct >= 100 ? "var(--rojo)" : pct >= 85 ? "var(--amarillo)" : "var(--verde)";
+    // ── Tendencia: N periodos hacia atrás terminando en el seleccionado ──
+    const N = modo === "año" ? 3 : modo === "mes" ? 6 : 8;
+    const serie = [];
+    for (let i = N - 1; i >= 0; i--) { const rr = rangoPeriodo(modo, off + i); serie.push({ etq: rr.corta, ...agregarRango(rr.desde, rr.hasta) }); }
+    const maxSerie = Math.max(1, ...serie.map((s) => s.ingreso));
 
-    const ultimas = semanas.slice(0, 6).slice().reverse(); // 6 semanas, viejo→nuevo
-    const maxV = Math.max(1, ...ultimas.map((s) => s.venta));
-
-    // ── Vitales para la radiografía ──
+    // ── Snapshot de la SEMANA ACTUAL para "Para actuar" y "De un vistazo" (siempre ahora) ──
+    const semanas = store.ventasSemanas(14);
+    const wk = semanas[0], prevWk = semanas[1] || null;
+    const cWk = wk.venta > 0 ? (wk.gastoVar ?? wk.gasto) / wk.venta * 100 : 0;
+    const metaWk = store.metaDeSemana(wk.desde);
+    const pctMeta = metaWk > 0 ? Math.min(100, 100 * wk.gastoVar / metaWk) : 0;
+    const cMeta = pctMeta >= 100 ? "var(--rojo)" : pctMeta >= 85 ? "var(--amarillo)" : "var(--verde)";
     const gfSem = store.gastoFijoMensual() / 30 * 7;
-    const usaProy = (off === 0 && parcial && proy);
-    const hVenta = usaProy ? proy.venta : venta;
-    const hGasto = usaProy ? proy.gasto : gasto;
-    const util = hVenta - hGasto - gfSem;
-    const sinDatos = venta === 0;
-    const colU = sinDatos ? "var(--gris)" : util > 0 ? "var(--verde)" : util < 0 ? "var(--rojo)" : "var(--tinta)";
-    const verdicto = sinDatos ? "Aún sin ventas esta semana" : util > 0 ? "Vas ganando" : util < 0 ? "Vas perdiendo" : "Vas a mano";
-    const heroTit = usaProy ? "Utilidad proyectada al cierre" : (off === 0 ? "Utilidad de la semana" : "Utilidad de esa semana");
-    const costoCol = costo <= 35 ? "var(--verde)" : costo <= 45 ? "var(--amarillo)" : "var(--rojo)";
+    const contrib = 1 - (num(store.state.config.costoVarPct) || 26) / 100;
+    const beDia = contrib > 0.02 ? (gfSem / contrib) / 7 : 0;
+    const diasWk = Math.min(7, Math.max(1, Math.floor((new Date() - wk.lunes) / 86400000) + 1));
+    const ventaDiaAct = wk.venta > 0 ? wk.venta / diasWk : 0;
+    const tp = topProductos(), ins = insumosDestacados(), cd = movimientosProductos(), pulso = store.pulsoDiario();
 
-    // Punto de equilibrio: cuánto vender para no perder.
-    const gfMes = store.gastoFijoMensual();
-    const costoVarPct = num(store.state.config.costoVarPct) || 26;
-    const contrib = 1 - costoVarPct / 100;
-    const beSem = contrib > 0.02 ? gfSem / contrib : 0;
-    const beDia = beSem / 7;
-    const ventaDiaAct = venta > 0 ? venta / (off === 0 ? diasT : 7) : 0;
-
-    const tp = topProductos();
-    const ins = insumosDestacados();
-    const cd = movimientosProductos();
-    const pulso = store.pulsoDiario();
-
-    // ── Para actuar: máximo 3 cosas, lo crítico primero ──
     const acc = [];
-    if (meta > 0 && gastoVar > meta) acc.push(`🔴 Te pasaste de tu meta de compras por <b>${money(gastoVar - meta)}</b>. Frena pedidos que no sean urgentes.`);
+    if (metaWk > 0 && wk.gastoVar > metaWk) acc.push(`🔴 Te pasaste de tu meta de compras por <b>${money(wk.gastoVar - metaWk)}</b>. Frena pedidos que no sean urgentes.`);
     const pred = store.prediccionCompras();
     if (pred.pendientes.length) {
       const nombres = pred.pendientes.slice(0, 3).map((x) => esc(x.nombre)).join(", ");
-      if (pred.seValePasar)
-        acc.push(`🧾 Vas en <b>${money(pred.gastoSemana)}</b> de tu meta <b>${money(pred.meta)}</b>, pero según tu ritmo aún te falta pedir <b>${nombres}</b> (~${money(pred.costoPendiente)}). Ojo, te pasarías del presupuesto.`);
-      else
-        acc.push(`🧾 Según tu ritmo de compras, aún te falta pedir <b>${nombres}</b> (~${money(pred.costoPendiente)}).`);
+      acc.push(pred.seValePasar
+        ? `🧾 Vas en <b>${money(pred.gastoSemana)}</b> de tu meta <b>${money(pred.meta)}</b>, pero según tu ritmo aún te falta pedir <b>${nombres}</b> (~${money(pred.costoPendiente)}). Ojo, te pasarías del presupuesto.`
+        : `🧾 Según tu ritmo de compras, aún te falta pedir <b>${nombres}</b> (~${money(pred.costoPendiente)}).`);
     }
-    if (venta > 0 && costo > 45) acc.push(`🔴 Tu costo de insumos va en <b>${Math.round(costo)}%</b> (sano ≤35%). Sube precio, ajusta porciones o baja mermas.`);
-    if (prev && prev.venta > 0 && ((venta - prev.venta) / prev.venta * 100) <= -12)
-      acc.push(`🔻 La venta bajó <b>${Math.round(Math.abs((venta - prev.venta) / prev.venta * 100))}%</b> vs. la semana pasada. Activa una promo o busca a tus clientes frecuentes.`);
-    if (cd && cd.caidas.length) {
-      const c = cd.caidas[0];
-      acc.push(`🔻 <b>${esc(c.nombre)}</b> se vendía bien y cayó <b>${Math.round(Math.abs(c.drop) * 100)}%</b> (${Math.round(c.prev)}→${Math.round(c.cur)}). ¿Se agotó, subió de precio o hay que promocionarlo?`);
-    }
-    if (cd && cd.subidas.length) {
-      const s = cd.subidas[0];
-      acc.push(`🚀 <b>${esc(s.nombre)}</b> subió <b>${Math.round(s.rise * 100)}%</b> en ventas (${Math.round(s.prev)}→${Math.round(s.cur)}). ¡Ojo del bueno! Dale más salida mientras está caliente.`);
-    }
+    if (wk.venta > 0 && cWk > 45) acc.push(`🔴 Tu costo de insumos va en <b>${Math.round(cWk)}%</b> (sano ≤35%). Sube precio, ajusta porciones o baja mermas.`);
+    if (prevWk && prevWk.venta > 0 && ((wk.venta - prevWk.venta) / prevWk.venta * 100) <= -12)
+      acc.push(`🔻 La venta bajó <b>${Math.round(Math.abs((wk.venta - prevWk.venta) / prevWk.venta * 100))}%</b> vs. la semana pasada. Activa una promo o busca a tus clientes frecuentes.`);
+    if (cd && cd.caidas.length) { const c = cd.caidas[0]; acc.push(`🔻 <b>${esc(c.nombre)}</b> se vendía bien y cayó <b>${Math.round(Math.abs(c.drop) * 100)}%</b> (${Math.round(c.prev)}→${Math.round(c.cur)}). ¿Se agotó, subió de precio o hay que promocionarlo?`); }
+    if (cd && cd.subidas.length) { const s = cd.subidas[0]; acc.push(`🚀 <b>${esc(s.nombre)}</b> subió <b>${Math.round(s.rise * 100)}%</b> en ventas (${Math.round(s.prev)}→${Math.round(s.cur)}). ¡Ojo del bueno! Dale más salida mientras está caliente.`); }
     if (ins && ins.masSubio) acc.push(`📈 <b>${esc(ins.masSubio.nombre)}</b> subió <b>${money(ins.masSubio.cambio)}</b> por ${esc(ins.masSubio.unidad || "unidad")}. Renegocia con tu proveedor o ajústalo en el menú.`);
-    if (tp && (tp.topFood || tp.topBebida)) {
-      const names = [tp.topFood && tp.topFood.producto, tp.topBebida && tp.topBebida.producto].filter(Boolean).map(esc).join(" y ");
-      acc.push(`🏆 Empuja <b>${names}</b>: es lo que más vendes. Recomiéndalo u ofrécelo en combo.`);
-    }
-    if (!sinDatos && beDia > 0 && ventaDiaAct > 0 && ventaDiaAct < beDia)
-      acc.push(`🎯 Necesitas vender <b>${money(beDia)}/día</b> para no perder; vas en <b>${money(ventaDiaAct)}/día</b>. Enfócate en subir el ticket promedio.`);
+    if (tp && (tp.topFood || tp.topBebida)) { const names = [tp.topFood && tp.topFood.producto, tp.topBebida && tp.topBebida.producto].filter(Boolean).map(esc).join(" y "); acc.push(`🏆 Empuja <b>${names}</b>: es lo que más vendes. Recomiéndalo u ofrécelo en combo.`); }
+    if (wk.venta > 0 && beDia > 0 && ventaDiaAct > 0 && ventaDiaAct < beDia) acc.push(`🎯 Necesitas vender <b>${money(beDia)}/día</b> para no perder; vas en <b>${money(ventaDiaAct)}/día</b>. Enfócate en subir el ticket promedio.`);
     if (!acc.length) acc.push(`✅ Vas en rango sano. Mantén el ritmo y registra tus cortes cada día.`);
     const accTop = acc.slice(0, 3);
 
+    const seg = (k, t) => `<button data-modo="${k}"${modo === k ? ' class="act"' : ""}>${t}</button>`;
+    const esSemActual = modo === "semana" && off === 0;
+
     el.innerHTML = `
-      <div class="card" style="text-align:center;padding:18px 16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <button class="btn sec chico" id="ant">◀</button>
-          <div style="flex:1">
-            <div style="font-weight:700;font-size:14px">${wk.etiqueta}</div>
-            <div class="sub" style="font-size:11px">${off === 0 ? "Esta semana" : off === 1 ? "Semana pasada" : "hace " + off + " semanas"}</div>
+      <div class="card" style="padding:12px">
+        <div class="segmented" style="font-size:13px">${seg("semana", "Semana")}${seg("mes", "Mes")}${seg("año", "Año")}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px">
+          <button class="btn sec chico" id="ant" title="Periodo anterior">◀</button>
+          <div style="flex:1;text-align:center">
+            <div style="font-weight:700;font-size:14px">${esc(r.etiqueta)}</div>
+            <div class="sub" style="font-size:11px">${r.esActual ? "En curso" : ""}</div>
           </div>
-          <button class="btn sec chico" id="sig">▶</button>
+          <button class="btn sec chico" id="sig" title="Periodo siguiente"${off === 0 ? " disabled style='opacity:.35'" : ""}>▶</button>
         </div>
-        <div class="sub" style="text-transform:uppercase;letter-spacing:.09em;font-size:10.5px;margin-top:12px">${heroTit}${info.icono("utilidad")}</div>
-        <div style="font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1.05;color:${colU}">${sinDatos ? "—" : money(util)}</div>
-        <div style="font-weight:700;color:${colU}">${verdicto}${usaProy && !sinDatos ? " (a este ritmo)" : ""}</div>
+      </div>
+
+      <div class="card" style="text-align:center;padding:18px 16px">
+        <div class="sub" style="text-transform:uppercase;letter-spacing:.09em;font-size:10.5px">Utilidad ${modoLbl}${info.icono("utilidad")}</div>
+        <div style="font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1.05;color:${colU}">${sinDatos ? "—" : money(utilidad)}</div>
+        <div style="font-weight:700;color:${colU}">${verdicto}${r.esActual && !sinDatos ? " (en curso)" : ""}</div>
         <div class="row-stats" style="margin-top:14px">
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:var(--verde-claro)">${kmoney(venta)}</div><div class="l">Venta${parcial ? " (parcial)" : ""}${info.icono("ventaSemana")}</div></div>
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:${costoCol}">${venta > 0 ? Math.round(costo) + "%" : "—"}</div><div class="l">Costo insumos${info.icono("costoInsumos")}</div></div>
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${beDia > 0 ? kmoney(beDia) : "—"}</div><div class="l">Vender/día p/ ganar${info.icono("venderDia")}</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:var(--verde-claro)">${kmoney(ingreso)}</div><div class="l">Ingreso</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${kmoney(gasto)}</div><div class="l">Gasto</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:${costoCol}">${ingreso > 0 ? Math.round(foodCost) + "%" : "—"}</div><div class="l">Food cost${info.icono("costoInsumos")}</div></div>
         </div>
-        ${sinDatos ? `<div class="sub" style="margin-top:10px">Espera el corte del día para ver cómo vas.</div>`
-          : (gfSem === 0 ? `<div class="sub" style="margin-top:8px;font-size:12px">💡 Registra tus gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : "")}
+        ${gfSem === 0 ? `<div class="sub" style="margin-top:8px;font-size:12px">💡 Registra tus gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : ""}
+      </div>
+
+      <div class="card">
+        <h2 style="margin-bottom:4px">Rentabilidad por área${info.iconoTip({ t: "Rentabilidad por área", q: "Cuánto entra (ventas) vs cuánto cuesta el insumo, en cocina y barra.", c: "Ingreso = ventas de las categorías del área (Cocina: desayunos, comida, entradas, postres · Barra: café, bebidas, mimosas, refrescos). Insumo = tus tickets con esa área, solo costo de venta. Deja% = (ingreso − insumo) / ingreso.", d: "El ingreso sale de tus reportes de venta por producto; el insumo, de tus tickets. Necesita que tus tickets tengan el ÁREA marcada." })}</h2>
+        <p class="sub" style="margin:0 0 10px">¿Te deja más la cocina o la barra?</p>
+        ${hayArea ? `${(ingArea.cocina || insArea.cocina) ? bloqueArea("🍳 Cocina", ingArea.cocina, insArea.cocina) : ""}${(ingArea.barra || insArea.barra) ? bloqueArea("☕ Barra", ingArea.barra, insArea.barra) : ""}`
+          : `<div class="sub">Sin datos por área en este periodo. Necesitas ventas por producto cargadas y tickets con su área marcada.</div>`}
+      </div>
+
+      ${gaItems.length ? `<div class="card">
+        <h2 style="margin-bottom:4px">Gasto por área${info.iconoTip({ t: "Gasto por área", q: "A dónde se fue tu gasto en este periodo.", c: "Suma el monto de las líneas de tus tickets agrupadas por área. 'Otro' junta piso, limpieza y lo no clasificado.", d: "Sale de tus tickets del periodo. Necesita que marques el área de cada línea al capturar." })}</h2>
+        <p class="sub" style="margin:0 0 10px">A dónde se fue el gasto ${modoLbl}.</p>
+        ${gaItems.map((x) => `<div class="barra-row"><span class="etq" style="width:66px">${x.n}</span>
+          <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * x.v / maxGA)}%;background:${x.c}"></span></span>
+          <span class="val" style="width:96px">${kmoney(x.v)}</span></div>`).join("")}
+      </div>` : ""}
+
+      <div class="card">
+        <h2 style="margin-bottom:8px">Tendencia · ingreso ${modo === "año" ? "por año" : modo === "mes" ? "por mes" : "por semana"}${info.icono("tendencia")}</h2>
+        ${serie.map((s) => { const c = s.ingreso > 0 ? s.gastoVar / s.ingreso * 100 : 0;
+          return `<div class="barra-row"><span class="etq" style="width:84px;font-size:12px">${s.etq}</span>
+            <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * s.ingreso / maxSerie)}%;background:var(--verde-claro);opacity:${opac(s.ingreso, maxSerie)}"></span></span>
+            <span class="val" style="width:120px">${kmoney(s.ingreso)} · <span style="color:${c <= 35 ? "var(--verde)" : c <= 45 ? "var(--amarillo)" : "var(--rojo)"}">${s.ingreso > 0 ? Math.round(c) + "%" : "—"}</span></span></div>`; }).join("")}
+        <div class="leyenda"><span><i style="background:var(--verde-claro)"></i>Ingreso</span><span>% = costo insumos</span></div>
       </div>
 
       <div class="card" style="border-left:4px solid var(--flame)">
@@ -373,50 +445,33 @@ function renderOwner(el) {
         ${accTop.map((a) => `<div style="font-size:13.5px;padding:8px 0;border-bottom:1px solid var(--linea);line-height:1.45">${a}</div>`).join("")}
       </div>
 
-      ${cardVistazo(tp, ins, cd, pulso)}
+      ${esSemActual ? cardVistazo(tp, ins, cd, pulso) : ""}
 
-      <div class="card">
-        <h2 style="margin-bottom:8px">Gasto de la semana</h2>
-        <div style="font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.05">${money(gasto)}</div>
-        <div class="sub" style="margin-top:2px">Todo lo que compraste esta semana${parcial ? " (hasta hoy)" : ""}: variable + operativo.</div>
-        <div class="row-stats" style="margin-top:12px">
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${kmoney(gastoVar)}</div><div class="l">Variable (insumos)</div></div>
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${kmoney(gasto - gastoVar)}</div><div class="l">Operativo</div></div>
-        </div>
-      </div>
-
-      <div class="card">
+      ${esSemActual ? `<div class="card">
         <h2 style="margin-bottom:8px">Meta de compras (semana)${info.icono("metaCompras")}</h2>
-        <div class="barra-track" style="height:12px"><span class="barra-fill" style="width:${pct}%;background:${cMeta}"></span></div>
-        <div class="sub" style="margin-top:6px">${meta > 0 ? `Llevas ${money(gastoVar)} de ${money(meta)} · ${Math.round(pct)}% usado` : "Aún sin meta. Defínela abajo o en Gastos → Meta."}</div>
+        <div class="barra-track" style="height:12px"><span class="barra-fill" style="width:${pctMeta}%;background:${cMeta}"></span></div>
+        <div class="sub" style="margin-top:6px">${metaWk > 0 ? `Llevas ${money(wk.gastoVar)} de ${money(metaWk)} · ${Math.round(pctMeta)}% usado` : "Aún sin meta. Defínela aquí o en Gastos → Meta."}</div>
         <div class="fila" style="margin-top:10px;gap:8px">
-          <input id="meta" type="number" step="any" inputmode="decimal" value="${meta || ""}" placeholder="Meta semanal (MXN)" style="flex:1" />
-          <button class="btn sec" id="guardar" style="flex:none;width:auto">Guardar</button>
+          <input id="meta" type="number" step="any" inputmode="decimal" value="${metaWk || ""}" placeholder="Meta semanal (MXN)" style="flex:1" />
+          <button class="btn sec" id="guardarMeta" style="flex:none;width:auto">Guardar</button>
         </div>
-        <div id="ok"></div>
-      </div>
+        <div id="okMeta"></div>
+      </div>` : ""}`;
 
-      <div class="card">
-        <h2>Tendencia · últimas 6 semanas${info.icono("tendencia")}</h2>
-        ${ultimas.map((s) => {
-          const c = s.venta > 0 ? ((s.gastoVar ?? s.gasto) / s.venta) * 100 : 0;
-          return `<div class="barra-row">
-            <span class="etq" style="width:88px;font-size:12px">${s.etiqueta}</span>
-            <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * s.venta / maxV)}%;background:var(--verde-claro);opacity:${opac(s.venta, maxV)}"></span></span>
-            <span class="val" style="width:120px">${kmoney(s.venta)} · <span style="color:${c <= 35 ? "var(--verde)" : c <= 45 ? "var(--amarillo)" : "var(--rojo)"}">${s.venta > 0 ? Math.round(c) + "%" : "—"}</span></span>
-          </div>`;
-        }).join("")}
-        <div class="leyenda"><span><i style="background:var(--verde-claro)"></i>Venta</span><span>% = costo</span></div>
-      </div>`;
-
-    el.querySelector("#ant").addEventListener("click", () => { off++; rerender(); });
-    el.querySelector("#sig").addEventListener("click", () => { off = Math.max(0, off - 1); rerender(); });
-    const gBtn = el.querySelector("#guardar");
-    if (gBtn) gBtn.addEventListener("click", async () => {
+    el.querySelectorAll("[data-modo]").forEach((b) => b.addEventListener("click", () => {
+      modo = b.dataset.modo; off = 0;
+      try { localStorage.setItem("platify.inicio.modo", modo); } catch (_) { /* sin storage */ }
+      pintar();
+    }));
+    el.querySelector("#ant").addEventListener("click", () => { off++; pintar(); });
+    const sig = el.querySelector("#sig");
+    if (sig && off > 0) sig.addEventListener("click", () => { off = Math.max(0, off - 1); pintar(); });
+    const gm = el.querySelector("#guardarMeta");
+    if (gm) gm.addEventListener("click", async () => {
       const v = num(el.querySelector("#meta").value);
       try {
         await store.guardarMetaSemana(wk.desde, v);   // solo esta semana en adelante
-        el.querySelector("#ok").innerHTML = `<div class="ok-box" style="margin-top:10px">Meta guardada (solo esta semana en adelante).</div>`;
+        el.querySelector("#okMeta").innerHTML = `<div class="ok-box" style="margin-top:10px">Meta guardada (solo esta semana en adelante).</div>`;
       } catch (err) { alert("No pude guardar: " + ((err && err.message) || err)); }
     });
   }
