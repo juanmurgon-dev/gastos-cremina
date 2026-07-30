@@ -400,7 +400,12 @@ export function montar(el) {
     const files = [...e.target.files];
     if (!files.length) return;
     const res = el.querySelector("#res");
-    res.innerHTML = `<div class="sub" style="margin-top:12px">Leyendo ${files.length} archivo(s)…</div>`;
+    if (!document.getElementById("imp-spin-css")) {
+      const st = document.createElement("style"); st.id = "imp-spin-css";
+      st.textContent = "@keyframes impspin{to{transform:rotate(360deg)}}.imp-spin{width:18px;height:18px;border:2.5px solid var(--linea);border-top-color:var(--naranja);border-radius:50%;animation:impspin .8s linear infinite;display:inline-block;vertical-align:middle;flex:none}";
+      document.head.appendChild(st);
+    }
+    res.innerHTML = `<div style="margin-top:14px;display:flex;align-items:center;gap:10px"><span class="imp-spin"></span><span style="font-size:13.5px;font-weight:700">Leyendo ${files.length} archivo(s)…</span></div>`;
 
     // El lector de Excel solo se carga si hay algún Excel. Un PDF NO lo necesita,
     // así que un fallo al cargarlo jamás debe bloquear la importación de un PDF.
@@ -429,9 +434,36 @@ export function montar(el) {
     const orden = { corte: 0, producto: 1, variante: 2, pdf: 3, "?": 4 };
     items.sort((a, b) => (orden[a.tipo] ?? 4) - (orden[b.tipo] ?? 4));
 
+    // Spinner (una sola vez) para que se note que está trabajando.
+    if (!document.getElementById("imp-spin-css")) {
+      const st = document.createElement("style"); st.id = "imp-spin-css";
+      st.textContent = "@keyframes impspin{to{transform:rotate(360deg)}}.imp-spin{width:18px;height:18px;border:2.5px solid var(--linea);border-top-color:var(--naranja);border-radius:50%;animation:impspin .8s linear infinite;display:inline-block;vertical-align:middle;flex:none}";
+      document.head.appendChild(st);
+    }
+    const escF = (s) => String(s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const logLinea = (l) => `<div style="font-size:13px;padding:6px 0;border-bottom:1px solid var(--linea);overflow-wrap:anywhere">${l}</div>`;
+
     const logs = [];
     let semanaRef = null;
-    for (const it of items) {
+    const total = items.length;
+    // Muestra spinner + barra + "procesando X de N" + los resultados que ya van.
+    const pintarProgreso = (hechos, actual) => {
+      const pct = Math.round(hechos / total * 100);
+      res.innerHTML = `<div style="margin-top:14px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span class="imp-spin"></span>
+          <span style="font-size:13.5px;font-weight:700">Procesando ${Math.min(hechos + 1, total)} de ${total}…</span>
+        </div>
+        <div class="sub" style="font-size:12px;margin-bottom:8px;overflow-wrap:anywhere">${escF(actual)}</div>
+        <div class="barra-track" style="height:10px"><span class="barra-fill" style="width:${Math.max(4, pct)}%;background:var(--naranja);transition:width .25s"></span></div>
+        ${logs.length ? `<div style="margin-top:12px">${logs.map(logLinea).join("")}</div>` : ""}
+      </div>`;
+    };
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      pintarProgreso(i, it.f.name);
+      await new Promise((r) => setTimeout(r, 20));   // deja que el navegador pinte antes del trabajo pesado
       try {
         if (it.err) throw it.err;
         if (it.tipo === "corte") {
@@ -451,10 +483,10 @@ export function montar(el) {
         } else if (it.tipo === "pdf") {
           logs.push(...await procesarPDF(it.f, semanaRef || semanaMasReciente()));
         } else {
-          logs.push(`⚠️ ${it.f.name}: no reconocí el formato (¿es un export de Parrot?)`);
+          logs.push(`⚠️ ${escF(it.f.name)}: no reconocí el formato (¿es un export de Parrot?)`);
         }
       } catch (err) {
-        logs.push(`❌ ${it.f.name}: ${(err && err.message) || err}`);
+        logs.push(`❌ ${escF(it.f.name)}: ${(err && err.message) || err}`);
       }
     }
     const okN = logs.filter((l) => l.startsWith("✅")).length;
@@ -470,7 +502,7 @@ export function montar(el) {
       pie = `<div class="error-box" style="margin-top:12px">No se cargó ningún archivo. Revisa los ❌ de arriba.</div>`;
     }
     res.innerHTML =
-      `<div style="margin-top:14px">${logs.map((l) => `<div style="font-size:13px;padding:6px 0;border-bottom:1px solid var(--linea)">${l}</div>`).join("")}</div>
+      `<div style="margin-top:14px"><div class="barra-track" style="height:10px;margin-bottom:12px"><span class="barra-fill" style="width:100%;background:var(--verde)"></span></div>${logs.map(logLinea).join("")}</div>
        ${pie}`;
     e.target.value = "";
   });
