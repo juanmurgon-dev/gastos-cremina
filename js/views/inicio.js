@@ -306,7 +306,7 @@ function trendKpi(cur, prev) {
 }
 
 // Orden de las tarjetas del Inicio (lo acomoda el usuario con ▲▼; se guarda por dispositivo).
-const ORDEN_DEFAULT = ["utilidad", "comensales", "rentabilidad", "gastoArea", "tendencia", "actuar", "vistazo", "meta"];
+const ORDEN_DEFAULT = ["utilidad", "comensales", "rentabilidad", "tendencia", "actuar", "vistazo", "meta"];
 function cargarOrden() {
   let ord = [];
   try { const s = JSON.parse(localStorage.getItem("platify.inicio.orden")); if (Array.isArray(s)) ord = s.filter((k) => ORDEN_DEFAULT.includes(k)); } catch (_) { /* sin storage */ }
@@ -371,12 +371,7 @@ function renderOwner(el) {
         ingArea[areaDeProductoNombre(v.producto)] += num(v.venta);
       }
     }
-    const insArea = { cocina: 0, barra: 0 };
-    for (const l of store.lineasEnRango(r.desde, r.hasta)) {
-      if (l.tipo !== "costo de venta") continue;
-      if (l.area === "cocina" || l.area === "barra") insArea[l.area] += num(l.monto);
-    }
-    const maxRent = Math.max(1, ingArea.cocina, ingArea.barra, insArea.cocina, insArea.barra);
+    const maxRent = Math.max(1, ingArea.cocina, ingArea.barra, gastoArea.cocina, gastoArea.barra);
     const bloqueArea = (nom, ing, gas) => {
       const margen = ing > 0 ? Math.round((ing - gas) / ing * 100) : null;
       const mcol = margen == null ? "var(--gris)" : margen >= 60 ? "var(--verde)" : margen >= 40 ? "var(--amarillo)" : "var(--rojo)";
@@ -386,19 +381,12 @@ function renderOwner(el) {
         <div class="barra-row" style="margin-top:5px"><span class="etq" style="width:58px;font-size:11px">Ingreso</span>
           <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * ing / maxRent)}%;background:var(--verde-claro)"></span></span>
           <span class="val" style="width:78px">${kmoney(ing)}</span></div>
-        <div class="barra-row"><span class="etq" style="width:58px;font-size:11px">Insumo</span>
+        <div class="barra-row"><span class="etq" style="width:58px;font-size:11px">Gasto</span>
           <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * gas / maxRent)}%;background:var(--naranja)"></span></span>
           <span class="val" style="width:78px">${kmoney(gas)}</span></div>
       </div>`;
     };
-    const hayArea = ingArea.cocina || ingArea.barra || insArea.cocina || insArea.barra;
-
-    const gaItems = [
-      { n: "Cocina", v: gastoArea.cocina, c: "var(--verde-claro)" },
-      { n: "Barra", v: gastoArea.barra, c: "var(--naranja)" },
-      { n: "Otro", v: gastoArea.otro, c: "var(--gris)" },
-    ].filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
-    const maxGA = Math.max(1, ...gaItems.map((x) => x.v));
+    const hayArea = ingArea.cocina || ingArea.barra || gastoArea.cocina || gastoArea.barra;
 
     // ── Tendencia: N periodos hacia atrás terminando en el seleccionado ──
     const N = modo === "año" ? 3 : modo === "mes" ? 6 : 8;
@@ -468,19 +456,11 @@ function renderOwner(el) {
       </div>` : "";
 
     cards.rentabilidad = `<div class="card">
-        <h2 style="margin-bottom:4px">Rentabilidad por área${info.iconoTip({ t: "Rentabilidad por área", q: "Cuánto entra (ventas) vs cuánto cuesta el insumo, en cocina y barra.", c: "Ingreso = ventas de las categorías del área (Cocina: desayunos, comida, entradas, postres · Barra: café, bebidas, mimosas, refrescos). Insumo = tus tickets con esa área, solo costo de venta. Deja% = (ingreso − insumo) / ingreso.", d: "El ingreso sale de tus reportes de venta por producto; el insumo, de tus tickets. Necesita que tus tickets tengan el ÁREA marcada." })}</h2>
+        <h2 style="margin-bottom:4px">Rentabilidad por área${info.iconoTip({ t: "Rentabilidad por área", q: "Cuánto entra (ventas) vs cuánto gastas, en cocina y barra.", c: "Ingreso = ventas del área (Cocina: desayunos, comida, entradas, postres · Barra: café, bebidas, mimosas, refrescos). Gasto = lo que gastaste en tickets de esa área. Deja% = (ingreso − gasto) / ingreso.", d: "El ingreso sale de tus reportes de venta; el gasto, de tus tickets. Necesita que tus tickets tengan el ÁREA marcada." })}</h2>
         <p class="sub" style="margin:0 0 10px">¿Te deja más la cocina o la barra?</p>
-        ${hayArea ? `${(ingArea.cocina || insArea.cocina) ? bloqueArea("🍳 Cocina", ingArea.cocina, insArea.cocina) : ""}${(ingArea.barra || insArea.barra) ? bloqueArea("☕ Barra", ingArea.barra, insArea.barra) : ""}`
-          : `<div class="sub">Sin datos por área en este periodo. Necesitas ventas por producto cargadas y tickets con su área marcada.</div>`}
+        ${hayArea ? `${(ingArea.cocina || gastoArea.cocina) ? bloqueArea("🍳 Cocina", ingArea.cocina, gastoArea.cocina) : ""}${(ingArea.barra || gastoArea.barra) ? bloqueArea("☕ Barra", ingArea.barra, gastoArea.barra) : ""}`
+          : `<div class="sub">Sin datos por área en este periodo. Necesitas ventas cargadas y tickets con su área marcada.</div>`}
       </div>`;
-
-    cards.gastoArea = gaItems.length ? `<div class="card">
-        <h2 style="margin-bottom:4px">Gasto por área${info.iconoTip({ t: "Gasto por área", q: "A dónde se fue tu gasto en este periodo.", c: "Suma el monto de las líneas de tus tickets agrupadas por área. 'Otro' junta piso, limpieza y lo no clasificado.", d: "Sale de tus tickets del periodo. Necesita que marques el área de cada línea al capturar." })}</h2>
-        <p class="sub" style="margin:0 0 10px">A dónde se fue el gasto ${modoLbl}.</p>
-        ${gaItems.map((x) => `<div class="barra-row"><span class="etq" style="width:66px">${x.n}</span>
-          <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * x.v / maxGA)}%;background:${x.c}"></span></span>
-          <span class="val" style="width:96px">${kmoney(x.v)}</span></div>`).join("")}
-      </div>` : "";
 
     cards.tendencia = `<div class="card">
         <h2 style="margin-bottom:8px">Tendencia · ingreso ${modo === "año" ? "por año" : modo === "mes" ? "por mes" : "por semana"}${info.icono("tendencia")}</h2>
