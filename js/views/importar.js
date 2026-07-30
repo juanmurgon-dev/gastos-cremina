@@ -293,6 +293,13 @@ async function importarProductosPDF(r) {
   return { periodo: out.periodo, prod: out.filas, dia: fechaDia };
 }
 
+// Diagnóstico: muestra en el log si el reporte trajo comensales/mesas (para saber si
+// la función los está leyendo del encabezado).
+function kpiSuffix(data) {
+  const c = Number(data && data.comensales) || 0, m = Number(data && data.mesas) || 0;
+  return (c || m) ? ` · 👥 ${Math.round(c)} comensales, ${Math.round(m)} mesas` : ` · ⚠️ el reporte no trajo comensales`;
+}
+
 // Guarda los KPIs del encabezado del reporte (comensales/mesas/venta), keyeados por
 // la fecha de INICIO del periodo (día si es diario, lunes si es semanal). Así cuenta
 // tanto si subes reportes diarios como semanales.
@@ -328,9 +335,9 @@ async function procesarPDF(f, semanaBackup) {
   if (data.tipo === "productos") {
     const out = await importarProductosPDF(data);
     await guardarKpiDesde(data);
-    return [out.dia
+    return [(out.dia
       ? `✅ (PDF) Día ${out.dia} · ${out.prod} productos (sumado a la semana ${out.periodo})`
-      : `✅ (PDF) Productos ${out.periodo} · ${out.prod} productos`];
+      : `✅ (PDF) Productos ${out.periodo} · ${out.prod} productos`) + kpiSuffix(data)];
   }
   if (data.tipo === "variantes") {
     const semana = data.desde
@@ -343,12 +350,12 @@ async function procesarPDF(f, semanaBackup) {
       opcion: String(v.opcion || ""), unidades: N(v.unidades), venta: N(v.venta),
     }));
     const out = await importarVariantes(vrows, semana, fechaDia);
-    if (out.comoProductos) return [out.dia
+    if (out.comoProductos) return [(out.dia
       ? `✅ (PDF) Día ${out.dia} · ${out.filas} productos (sumado a la semana ${out.periodo})`
-      : `✅ (PDF) Venta por producto ${out.periodo} · ${out.filas} productos (reporte por categoría)`];
-    return [out.dia
+      : `✅ (PDF) Venta por producto ${out.periodo} · ${out.filas} productos (reporte por categoría)`) + kpiSuffix(data)];
+    return [(out.dia
       ? `✅ (PDF) Día ${out.dia} · ${out.filas} líneas por variante (sumado a la semana ${out.periodo})`
-      : `✅ (PDF) Variantes ${out.periodo} · ${out.filas} líneas platillo/variante`];
+      : `✅ (PDF) Variantes ${out.periodo} · ${out.filas} líneas platillo/variante`) + kpiSuffix(data)];
   }
   return [`⚠️ ${f.name}: no reconocí el reporte del PDF.`];
 }
