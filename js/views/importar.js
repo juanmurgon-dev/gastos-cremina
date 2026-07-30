@@ -301,7 +301,7 @@ async function guardarKpiDesde(data) {
   if (!fecha) return;
   const com = N(data.comensales), mes = N(data.mesas);
   if (!com && !mes) return;   // el reporte no traía ese encabezado
-  try { await store.guardarKpiDia(fecha, { comensales: com, cuentas: mes, venta: N(data.venta_total) }); } catch (_) { /* no bloquear la importación */ }
+  try { await store.guardarKpiDia(fecha, { comensales: com, cuentas: mes, venta: N(data.venta_total), hasta: data.hasta || data.desde }); } catch (_) { /* no bloquear la importación */ }
 }
 
 async function procesarPDF(f, semanaBackup) {

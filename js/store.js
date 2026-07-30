@@ -104,21 +104,24 @@ async function cargarKpis() {
   const { data, error } = await supabase.from("kpis_dia").select("*").order("fecha", { ascending: false });
   if (!error && data) { state.kpisDia = data; notify(); }
 }
-// Guarda (upsert por fecha) los KPIs de un día. Idempotente al re-subir el reporte.
+// Guarda (upsert por fecha) los KPIs de un periodo. `hasta` = fin del periodo
+// (igual a fecha si es de un solo día). Idempotente al re-subir el reporte.
 export async function guardarKpiDia(fecha, kpi) {
   if (!fecha) return;
-  const row = { fecha, comensales: Math.round(num(kpi.comensales)), cuentas: Math.round(num(kpi.cuentas)), venta: num(kpi.venta) };
+  const row = { fecha, hasta: kpi.hasta || fecha, comensales: Math.round(num(kpi.comensales)), cuentas: Math.round(num(kpi.cuentas)), venta: num(kpi.venta) };
   const { error } = await supabase.from("kpis_dia").upsert(row);
   if (error) throw error;
   await cargarKpis();
 }
-// Suma comensales / cuentas / venta de los días dentro de [desde, hasta].
-export function kpisEnRango(desdeISO, hastaISO) {
+// Suma comensales / cuentas / venta de los registros dentro de [desde, hasta].
+// soloUnDia = cuenta solo registros de UN día (para la columna "Día"; excluye los semanales).
+export function kpisEnRango(desdeISO, hastaISO, soloUnDia = false) {
   let comensales = 0, cuentas = 0, venta = 0;
   for (const k of state.kpisDia || []) {
     if (!k.fecha) continue;
     if (desdeISO && k.fecha < desdeISO) continue;
     if (hastaISO && k.fecha > hastaISO) continue;
+    if (soloUnDia && k.hasta && k.hasta !== k.fecha) continue;   // salta los de periodo (semana/mes)
     comensales += num(k.comensales); cuentas += num(k.cuentas); venta += num(k.venta);
   }
   return { comensales, cuentas, venta };

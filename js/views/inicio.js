@@ -287,22 +287,15 @@ function agregarRango(desde, hasta) {
 
 // Comensales + ticket promedio de un rango. La venta sale del reporte (encabezado);
 // si no la trae, cae a la venta de los cortes de caja del rango.
-function metricasKpi(desde, hasta) {
-  const k = store.kpisEnRango(desde, hasta);
+// soloUnDia = para la columna "Día" (cuenta solo registros de un día, no semanales).
+function metricasKpi(desde, hasta, soloUnDia = false) {
+  const k = store.kpisEnRango(desde, hasta, soloUnDia);
   const venta = k.venta > 0 ? k.venta : agregarRango(desde, hasta).ingreso;
   return {
     comensales: k.comensales, cuentas: k.cuentas, venta,
     tPersona: k.comensales > 0 ? venta / k.comensales : 0,
     tCuenta: k.cuentas > 0 ? venta / k.cuentas : 0,
   };
-}
-// Flecha de tendencia vs el periodo anterior (arriba = verde, abajo = rojo).
-function trendKpi(cur, prev) {
-  if (!prev || prev <= 0 || !cur) return "";
-  const chg = (cur - prev) / prev * 100;
-  if (Math.abs(chg) < 1) return ` <span style="color:var(--gris);font-size:10px">→</span>`;
-  const up = chg > 0;
-  return ` <span style="color:${up ? "var(--verde)" : "var(--rojo)"};font-size:10px;font-weight:700">${up ? "▲" : "▼"}${Math.abs(Math.round(chg))}%</span>`;
 }
 
 // Orden de las tarjetas del Inicio (lo acomoda el usuario con ▲▼; se guarda por dispositivo).
@@ -343,11 +336,13 @@ function renderOwner(el) {
     const verdicto = sinDatos ? "Sin datos en este periodo" : utilidad > 0 ? "Vas ganando" : utilidad < 0 ? "Vas perdiendo" : "Vas a mano";
     const costoCol = foodCost <= 35 ? "var(--verde)" : foodCost <= 45 ? "var(--amarillo)" : "var(--rojo)";
 
-    // ── Comensales y ticket promedio (del encabezado del reporte), con tendencia ──
-    const rPrev = rangoPeriodo(modo, off + 1);
-    const km = metricasKpi(r.desde, r.hasta);
-    const kmPrev = metricasKpi(rPrev.desde, rPrev.hasta);
-    const hayKpi = km.comensales > 0 || km.cuentas > 0;
+    // ── Comensales y ticket promedio, comparativa Día / Semana / Mes (fijo, no depende del selector) ──
+    const hoyKpiISO = store.hoyISO();
+    const rSemHoy = rangoPeriodo("semana", 0), rMesHoy = rangoPeriodo("mes", 0);
+    const kDia = metricasKpi(hoyKpiISO, hoyKpiISO, true);   // solo registros de UN día
+    const kSem = metricasKpi(rSemHoy.desde, rSemHoy.hasta);
+    const kMes = metricasKpi(rMesHoy.desde, rMesHoy.hasta);
+    const hayKpi = kDia.comensales > 0 || kSem.comensales > 0 || kMes.comensales > 0;
 
     // ── Gasto por área (todas las líneas): cocina / barra / otro (piso+limpieza+otro) ──
     const spa = store.sumaPor(store.lineasEnRango(r.desde, r.hasta), "area");
@@ -445,13 +440,24 @@ function renderOwner(el) {
         ${gfSem === 0 ? `<div class="sub" style="margin-top:8px;font-size:12px">💡 Registra tus gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : ""}
       </div>`;
 
+    const celComen = (v) => `<div style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${v > 0 ? Math.round(v) : "—"}</div>`;
+    const celDin = (v) => `<div style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${v > 0 ? money(v) : "—"}</div>`;
     cards.comensales = hayKpi ? `<div class="card">
-        <h2 style="margin-bottom:4px">Comensales y ticket promedio${info.iconoTip({ t: "Comensales y ticket promedio", q: "Cuánta gente atendiste y cuánto gastó en promedio.", c: "Comensales y mesas vienen del encabezado de tu reporte. Por persona = venta ÷ comensales. Por cuenta = venta ÷ mesas atendidas.", d: "Se captura de cada reporte que subes en Importar. La flecha compara contra el periodo anterior (" + rPrev.etiqueta + ")." })}</h2>
-        <p class="sub" style="margin:0 0 10px">La flecha compara vs ${esc(rPrev.etiqueta)}.</p>
-        <div class="row-stats">
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.comensales || "—"}</div><div class="l">Comensales${trendKpi(km.comensales, kmPrev.comensales)}</div></div>
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.tPersona > 0 ? money(km.tPersona) : "—"}</div><div class="l">Por persona${trendKpi(km.tPersona, kmPrev.tPersona)}</div></div>
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.tCuenta > 0 ? money(km.tCuenta) : "—"}</div><div class="l">Por cuenta${trendKpi(km.tCuenta, kmPrev.tCuenta)}</div></div>
+        <h2 style="margin-bottom:4px">Comensales y ticket promedio${info.iconoTip({ t: "Comensales y ticket promedio", q: "Cuánta gente atendiste y cuánto gastó en promedio, por día, semana y mes.", c: "Comensales y mesas salen del encabezado de tu reporte. Por persona = venta ÷ comensales. Por cuenta = venta ÷ mesas atendidas.", d: "La columna 'Día' solo se llena si subes reportes diarios; 'Semana' y 'Mes' se llenan también con reportes semanales. Se captura al importar." })}</h2>
+        <div style="display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr;gap:8px 8px;align-items:center;margin-top:8px">
+          <div></div>
+          <div class="sub" style="font-size:11px;font-weight:700;text-align:right">Día</div>
+          <div class="sub" style="font-size:11px;font-weight:700;text-align:right">Semana</div>
+          <div class="sub" style="font-size:11px;font-weight:700;text-align:right">Mes</div>
+
+          <div style="font-size:12.5px;font-weight:600">Comensales</div>
+          ${celComen(kDia.comensales)}${celComen(kSem.comensales)}${celComen(kMes.comensales)}
+
+          <div style="font-size:12.5px;font-weight:600">$ / persona</div>
+          ${celDin(kDia.tPersona)}${celDin(kSem.tPersona)}${celDin(kMes.tPersona)}
+
+          <div style="font-size:12.5px;font-weight:600">$ / cuenta</div>
+          ${celDin(kDia.tCuenta)}${celDin(kSem.tCuenta)}${celDin(kMes.tCuenta)}
         </div>
       </div>` : "";
 
