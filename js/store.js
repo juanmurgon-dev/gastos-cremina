@@ -862,7 +862,7 @@ export function cortesEnRango(desdeISO, hastaISO) {
 
 // Pulso del ÚLTIMO día con corte: venta de ese día y comparación con el mismo
 // día de la semana pasada. Es lo único que sí tenemos por día (los cortes de
-// caja); el detalle por producto solo llega por semana desde Parrot.
+// caja); el detalle por producto solo llega por semana desde tu punto de venta.
 export function pulsoDiario() {
   const porDia = new Map();
   for (const c of state.cortes || []) {

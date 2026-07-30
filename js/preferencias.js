@@ -9,7 +9,7 @@ const DETALLE_OPTS = [
   { v: "auto", t: "Automático",
     d: "Si subes grupos modificadores, desgloso por variante; si no, me quedo en artículo. Sin que configures nada." },
   { v: "variante", t: "Por artículo y variante",
-    d: "Desgloso cada platillo por su grupo modificador (tipo, sabor, leche…). Necesitas subir el reporte de grupos modificadores de Parrot." },
+    d: "Desgloso cada platillo por su grupo modificador (tipo, sabor, leche…). Necesitas subir el reporte de grupos modificadores de tu punto de venta." },
   { v: "articulo", t: "Solo por artículo",
     d: "Me quedo al nivel de platillo. No te pido el reporte de grupos modificadores." },
 ];

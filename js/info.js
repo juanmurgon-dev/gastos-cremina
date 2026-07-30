@@ -59,7 +59,7 @@ const EXPL = {
     t: "Margen por platillo",
     q: "De lo que cobras por un platillo, qué porcentaje es ganancia después de su costo.",
     c: "(Precio − costo) ÷ precio. El precio sale de venta ÷ unidades; el costo lo capturas tú. Menos de 15% muy bajo, 15–30% flojo, 30–45% bien, arriba de 45% excelente.",
-    d: "El precio y las unidades vienen de tus reportes de Parrot; el costo por porción lo pones en esta pantalla.",
+    d: "El precio y las unidades vienen de tus reportes de tu punto de venta; el costo por porción lo pones en esta pantalla.",
   },
   minaOro: {
     t: "Mina de oro",

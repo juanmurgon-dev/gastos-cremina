@@ -1,4 +1,4 @@
-// Importador: sube los Excel de Parrot (cortes diarios + reporte de artículos
+// Importador: sube los Excel de tu punto de venta (cortes diarios + reporte de artículos
 // semanal), los lee en el navegador y los carga a Supabase. Detecta el tipo solo.
 import { supabase } from "../supabase-init.js";
 import * as store from "../store.js";
@@ -149,7 +149,7 @@ async function importarProducto(p) {
   return { periodo, desde, hasta, prod: prows.length, mods: mrows.length, combos: crows.length };
 }
 
-// Venta por producto y variante (archivo "Grupos modificadores" de Parrot).
+// Venta por producto y variante (archivo "Grupos modificadores" de tu punto de venta).
 function parseVariantes(wb, XLSX) {
   const rows = XLSX.utils.sheet_to_json(wb.Sheets["Artículo - Grupo Modificador"], { header: 1 });
   const base = {}, tmp = [];
@@ -169,7 +169,7 @@ function parseVariantes(wb, XLSX) {
 
 // Categorías de menú: si el archivo agrupa por estas (en vez de por grupo
 // modificador real), es el REPORTE en PDF/Word, no el "Grupos modificadores"
-// de Parrot. Rechazarlo evita borrar el desglose bueno por variante.
+// de tu punto de venta. Rechazarlo evita borrar el desglose bueno por variante.
 const CATEGORIAS_REPORTE = new Set(["desayunos", "comida", "entradas", "postres",
   "barra de café", "barra de cafe", "bebidas", "mimosas", "extras", "otros"]);
 
@@ -367,8 +367,8 @@ export function montar(el) {
     : "el <b>reporte de artículos</b> (semanal)";
   el.innerHTML = `
     <div class="card">
-      <h2>Importar de Parrot</h2>
-      <p class="sub" style="margin-top:0">Sube los archivos que descargas de Parrot:
+      <h2>Importar de tu punto de venta</h2>
+      <p class="sub" style="margin-top:0">Sube los archivos que descargas de tu punto de venta:
       los <b>cortes de caja</b> (diarios), y ${semanales}. Acepto <b>Excel</b> y también <b>PDF</b> de los reportes.
       Puedes soltar varios de golpe; yo detecto cuál es cuál.</p>
       <label class="btn"><input id="files" type="file" accept=".xlsx,.pdf" multiple hidden> ⬆ Elegir archivos</label>
@@ -490,7 +490,7 @@ export function montar(el) {
         } else if (it.tipo === "pdf") {
           logs.push(...await procesarPDF(it.f, semanaRef || semanaMasReciente()));
         } else {
-          logs.push(`⚠️ ${escF(it.f.name)}: no reconocí el formato (¿es un export de Parrot?)`);
+          logs.push(`⚠️ ${escF(it.f.name)}: no reconocí el formato (¿es un export de tu punto de venta?)`);
         }
       } catch (err) {
         logs.push(`❌ ${escF(it.f.name)}: ${(err && err.message) || err}`);
