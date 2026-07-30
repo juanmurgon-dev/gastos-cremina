@@ -465,10 +465,11 @@ export function render(el) {
       const doc = new JsPDF({ unit: "mm", format: "a4" });
       const M = 14, W = 210, RIGHT = W - M;
       const e = estatusInfo(derivar(editing.items));
+      const restaurante = (store.state.config.marcaNombre || store.state.orgNombre || "").trim();
       let y = 18;
 
       doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(14, 58, 57);
-      doc.text("Requisición de compras", M, y); y += 5.5;
+      doc.text(restaurante ? "Requisición · " + restaurante : "Requisición de compras", M, y); y += 5.5;
       doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(110, 106, 92);
       doc.text(`${hoyTxt()} · ${e.t} · ${editing.items.length} insumo${editing.items.length === 1 ? "" : "s"}`, M, y); y += 5;
 
@@ -528,7 +529,8 @@ export function render(el) {
       doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(168, 162, 150);
       doc.text("Generado con Platify", W / 2, 288, { align: "center" });
 
-      doc.save("Requisicion-" + hoyTxt().replace(/ /g, "-") + ".pdf");
+      const nombreArch = ("Requisición " + (restaurante || "") + " " + hoyTxt()).replace(/\s+/g, " ").replace(/[\/\\:*?"<>|]/g, "").trim();
+      doc.save(nombreArch + ".pdf");
     } catch (err) {
       console.warn("PDF directo falló, uso impresión:", err);
       imprimirPdf(conPrecios);
@@ -541,6 +543,7 @@ export function render(el) {
   function imprimirPdf(conPrecios = true) {
     const e = estatusInfo(derivar(editing.items));
     const fecha = hoyTxt();
+    const restaurante = (store.state.config.marcaNombre || store.state.orgNombre || "").trim();
     const colspan = conPrecios ? 5 : 3;
     let filas = "";
     for (const [prov, list] of grupos()) {
@@ -557,7 +560,7 @@ export function render(el) {
     }
 
     const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
-      <title>Requisicion-${esc(fecha.replace(/ /g, "-"))}</title>
+      <title>${esc("Requisición " + (restaurante ? restaurante + " " : "") + fecha)}</title>
       <style>
         *{box-sizing:border-box}
         body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#22201a;margin:22px}
@@ -573,7 +576,7 @@ export function render(el) {
         .pie{margin-top:26px;color:#a8a296;font-size:10px;text-align:center}
         @media print{ body{margin:12mm} tr{page-break-inside:avoid} }
       </style></head><body>
-      <h1>Requisición de compras</h1>
+      <h1>${restaurante ? "Requisición · " + esc(restaurante) : "Requisición de compras"}</h1>
       <div class="meta">${esc(fecha)} · ${esc(e.t)} · ${editing.items.length} insumo${editing.items.length === 1 ? "" : "s"}</div>
       <table>
         <thead><tr><th></th><th>Insumo</th><th class="c">Cantidad</th>${conPrecios ? `<th class="r">Precio</th><th class="r">Monto</th>` : ""}</tr></thead>
