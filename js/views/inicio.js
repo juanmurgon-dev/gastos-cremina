@@ -250,6 +250,10 @@ const CAT_A_AREA = (() => {
   return m;
 })();
 const areaDeCategoria = (cat) => CAT_A_AREA[String(cat || "").trim().toLowerCase()] || null;
+// Clasifica un producto a área por su NOMBRE (cuando la venta viene de variantes_venta,
+// que no trae categoría). Barra = café/bebidas; todo lo demás, cocina.
+const BARRA_KW = /latte|caf[eé]|americano|capuc|cappu|espresso|expresso|mocha|moka|\bchai\b|matcha|cortado|flat white|frapp|cold brew|\bt[eé]\b|tonic|spritz|limonada|jugo|\bagua\b|refresco|coca|fanta|sprite|mimosa|michelada|cerveza|\bvino\b|smoothie|malteada|soda|jamaica|horchata|kombucha|bebida/i;
+const areaDeProductoNombre = (nombre) => (BARRA_KW.test(String(nombre || "")) ? "barra" : "cocina");
 
 const isoDe = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const parseFecha = (s) => new Date(s + "T00:00");
@@ -356,6 +360,16 @@ function renderOwner(el) {
       if (ES_CORTESIA.test(p.producto || "") || ES_CORTESIA.test(p.categoria || "")) continue;
       const a = areaDeCategoria(p.categoria);
       if (a) ingArea[a] += num(p.venta);
+    }
+    // Si productos_venta no dio ingreso (Cremina sube reportes de "producto y variante",
+    // que van a variantes_venta SIN categoría), calcula el ingreso desde variantes,
+    // clasificando cocina/barra por el NOMBRE del producto.
+    if (!ingArea.cocina && !ingArea.barra) {
+      for (const v of store.state.variantes || []) {
+        if (!v.desde || v.desde < r.desde || v.desde > r.hasta) continue;
+        if (ES_CORTESIA.test(v.producto || "") || ES_CORTESIA.test(v.opcion || "")) continue;
+        ingArea[areaDeProductoNombre(v.producto)] += num(v.venta);
+      }
     }
     const insArea = { cocina: 0, barra: 0 };
     for (const l of store.lineasEnRango(r.desde, r.hasta)) {
@@ -495,14 +509,16 @@ function renderOwner(el) {
         <div id="okMeta"></div>
       </div>` : "";
 
-    const TITULOS = { utilidad: "Utilidad", comensales: "Comensales y ticket", rentabilidad: "Rentabilidad por área", gastoArea: "Gasto por área", tendencia: "Tendencia", actuar: "Para actuar", vistazo: "De un vistazo", meta: "Meta de compras" };
     const visibles = orden.filter((k) => cards[k]);   // solo tarjetas con contenido, en el orden guardado
-    const cuerpo = visibles.map((k) => cards[k]).join("");
-    const reorderList = visibles.map((k, i) => `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--linea)">
-        <span style="flex:1;font-size:14px;font-weight:600">${TITULOS[k] || k}</span>
-        <button class="btn sec chico" data-mv="up" data-k="${k}"${i === 0 ? " disabled style='opacity:.3'" : ""}>▲</button>
-        <button class="btn sec chico" data-mv="down" data-k="${k}"${i === visibles.length - 1 ? " disabled style='opacity:.3'" : ""}>▼</button>
-      </div>`).join("");
+    // En modo acomodar, cada tarjeta se queda visible con ▲▼ en su esquina y borde punteado.
+    const wrapAcom = (html, k, i) => `<div style="position:relative;outline:2px dashed var(--naranja);outline-offset:-3px;border-radius:16px">
+        <div style="position:absolute;top:7px;right:7px;display:flex;gap:5px;z-index:3">
+          <button class="btn sec chico" data-mv="up" data-k="${k}"${i === 0 ? " disabled style='opacity:.3'" : ""}>▲</button>
+          <button class="btn sec chico" data-mv="down" data-k="${k}"${i === visibles.length - 1 ? " disabled style='opacity:.3'" : ""}>▼</button>
+        </div>${html}</div>`;
+    const cuerpo = acomodando
+      ? visibles.map((k, i) => wrapAcom(cards[k], k, i)).join("")
+      : visibles.map((k) => cards[k]).join("");
 
     el.innerHTML = `
       <div class="card" style="padding:12px">
@@ -516,10 +532,9 @@ function renderOwner(el) {
           <button class="btn sec chico" id="sig" title="Periodo siguiente"${(off === 0 || acomodando) ? " disabled style='opacity:.35'" : ""}>▶</button>
         </div>
         <div style="text-align:center;margin-top:10px"><button class="btn sec chico" id="acomodar">${acomodando ? "✓ Listo, así queda" : "↕ Acomodar tarjetas"}</button></div>
+        ${acomodando ? `<div class="sub" style="text-align:center;font-size:11px;margin-top:6px">Mueve cada tarjeta con ▲▼ de su esquina</div>` : ""}
       </div>
-      ${acomodando
-        ? `<div class="card"><p class="sub" style="margin:0 0 6px">Sube o baja cada tarjeta con ▲ ▼. Toca "Listo" cuando quede a tu gusto.</p>${reorderList}</div>`
-        : cuerpo}`;
+      ${cuerpo}`;
 
     el.querySelector("#acomodar").addEventListener("click", () => { acomodando = !acomodando; pintar(); });
 
