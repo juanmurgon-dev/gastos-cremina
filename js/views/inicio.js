@@ -301,10 +301,22 @@ function trendKpi(cur, prev) {
   return ` <span style="color:${up ? "var(--verde)" : "var(--rojo)"};font-size:10px;font-weight:700">${up ? "▲" : "▼"}${Math.abs(Math.round(chg))}%</span>`;
 }
 
+// Orden de las tarjetas del Inicio (lo acomoda el usuario con ▲▼; se guarda por dispositivo).
+const ORDEN_DEFAULT = ["utilidad", "comensales", "rentabilidad", "gastoArea", "tendencia", "actuar", "vistazo", "meta"];
+function cargarOrden() {
+  let ord = [];
+  try { const s = JSON.parse(localStorage.getItem("platify.inicio.orden")); if (Array.isArray(s)) ord = s.filter((k) => ORDEN_DEFAULT.includes(k)); } catch (_) { /* sin storage */ }
+  for (const k of ORDEN_DEFAULT) if (!ord.includes(k)) ord.push(k);   // agrega tarjetas nuevas al final
+  return ord;
+}
+function guardarOrden(ord) { try { localStorage.setItem("platify.inicio.orden", JSON.stringify(ord)); } catch (_) { /* sin storage */ } }
+
 function renderOwner(el) {
   let modo = "semana";
   try { const m = localStorage.getItem("platify.inicio.modo"); if (m === "semana" || m === "mes" || m === "año") modo = m; } catch (_) { /* sin storage */ }
   let off = 0;    // 0 = periodo actual
+  let orden = cargarOrden();
+  let acomodando = false;
   const unsub = store.subscribe(pintar);
   pintar();
 
@@ -417,20 +429,9 @@ function renderOwner(el) {
     const seg = (k, t) => `<button data-modo="${k}"${modo === k ? ' class="act"' : ""}>${t}</button>`;
     const esSemActual = modo === "semana" && off === 0;
 
-    el.innerHTML = `
-      <div class="card" style="padding:12px">
-        <div class="segmented" style="font-size:13px">${seg("semana", "Semana")}${seg("mes", "Mes")}${seg("año", "Año")}</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px">
-          <button class="btn sec chico" id="ant" title="Periodo anterior">◀</button>
-          <div style="flex:1;text-align:center">
-            <div style="font-weight:700;font-size:14px">${esc(r.etiqueta)}</div>
-            <div class="sub" style="font-size:11px">${r.esActual ? "En curso" : ""}</div>
-          </div>
-          <button class="btn sec chico" id="sig" title="Periodo siguiente"${off === 0 ? " disabled style='opacity:.35'" : ""}>▶</button>
-        </div>
-      </div>
-
-      <div class="card" style="text-align:center;padding:18px 16px">
+    // ── Cada tarjeta por separado, para poder reordenarlas ──
+    const cards = {};
+    cards.utilidad = `<div class="card" style="text-align:center;padding:18px 16px">
         <div class="sub" style="text-transform:uppercase;letter-spacing:.09em;font-size:10.5px">Utilidad ${modoLbl}${info.icono("utilidad")}</div>
         <div style="font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1.05;color:${colU}">${sinDatos ? "—" : money(utilidad)}</div>
         <div style="font-weight:700;color:${colU}">${verdicto}${r.esActual && !sinDatos ? " (en curso)" : ""}</div>
@@ -440,50 +441,50 @@ function renderOwner(el) {
           <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:${costoCol}">${ingreso > 0 ? Math.round(foodCost) + "%" : "—"}</div><div class="l">Food cost${info.icono("costoInsumos")}</div></div>
         </div>
         ${gfSem === 0 ? `<div class="sub" style="margin-top:8px;font-size:12px">💡 Registra tus gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : ""}
-      </div>
+      </div>`;
 
-      ${hayKpi ? `<div class="card">
-        <h2 style="margin-bottom:4px">Comensales y ticket promedio${info.iconoTip({ t: "Comensales y ticket promedio", q: "Cuánta gente atendiste y cuánto gastó en promedio.", c: "Comensales y mesas vienen del encabezado de tu reporte diario. Por persona = venta ÷ comensales. Por cuenta = venta ÷ mesas atendidas.", d: "Se captura de cada reporte diario que subes en Importar. La flecha compara contra el periodo anterior (" + rPrev.etiqueta + ")." })}</h2>
+    cards.comensales = hayKpi ? `<div class="card">
+        <h2 style="margin-bottom:4px">Comensales y ticket promedio${info.iconoTip({ t: "Comensales y ticket promedio", q: "Cuánta gente atendiste y cuánto gastó en promedio.", c: "Comensales y mesas vienen del encabezado de tu reporte. Por persona = venta ÷ comensales. Por cuenta = venta ÷ mesas atendidas.", d: "Se captura de cada reporte que subes en Importar. La flecha compara contra el periodo anterior (" + rPrev.etiqueta + ")." })}</h2>
         <p class="sub" style="margin:0 0 10px">La flecha compara vs ${esc(rPrev.etiqueta)}.</p>
         <div class="row-stats">
           <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.comensales || "—"}</div><div class="l">Comensales${trendKpi(km.comensales, kmPrev.comensales)}</div></div>
           <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.tPersona > 0 ? money(km.tPersona) : "—"}</div><div class="l">Por persona${trendKpi(km.tPersona, kmPrev.tPersona)}</div></div>
           <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.tCuenta > 0 ? money(km.tCuenta) : "—"}</div><div class="l">Por cuenta${trendKpi(km.tCuenta, kmPrev.tCuenta)}</div></div>
         </div>
-      </div>` : ""}
+      </div>` : "";
 
-      <div class="card">
+    cards.rentabilidad = `<div class="card">
         <h2 style="margin-bottom:4px">Rentabilidad por área${info.iconoTip({ t: "Rentabilidad por área", q: "Cuánto entra (ventas) vs cuánto cuesta el insumo, en cocina y barra.", c: "Ingreso = ventas de las categorías del área (Cocina: desayunos, comida, entradas, postres · Barra: café, bebidas, mimosas, refrescos). Insumo = tus tickets con esa área, solo costo de venta. Deja% = (ingreso − insumo) / ingreso.", d: "El ingreso sale de tus reportes de venta por producto; el insumo, de tus tickets. Necesita que tus tickets tengan el ÁREA marcada." })}</h2>
         <p class="sub" style="margin:0 0 10px">¿Te deja más la cocina o la barra?</p>
         ${hayArea ? `${(ingArea.cocina || insArea.cocina) ? bloqueArea("🍳 Cocina", ingArea.cocina, insArea.cocina) : ""}${(ingArea.barra || insArea.barra) ? bloqueArea("☕ Barra", ingArea.barra, insArea.barra) : ""}`
           : `<div class="sub">Sin datos por área en este periodo. Necesitas ventas por producto cargadas y tickets con su área marcada.</div>`}
-      </div>
+      </div>`;
 
-      ${gaItems.length ? `<div class="card">
+    cards.gastoArea = gaItems.length ? `<div class="card">
         <h2 style="margin-bottom:4px">Gasto por área${info.iconoTip({ t: "Gasto por área", q: "A dónde se fue tu gasto en este periodo.", c: "Suma el monto de las líneas de tus tickets agrupadas por área. 'Otro' junta piso, limpieza y lo no clasificado.", d: "Sale de tus tickets del periodo. Necesita que marques el área de cada línea al capturar." })}</h2>
         <p class="sub" style="margin:0 0 10px">A dónde se fue el gasto ${modoLbl}.</p>
         ${gaItems.map((x) => `<div class="barra-row"><span class="etq" style="width:66px">${x.n}</span>
           <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * x.v / maxGA)}%;background:${x.c}"></span></span>
           <span class="val" style="width:96px">${kmoney(x.v)}</span></div>`).join("")}
-      </div>` : ""}
+      </div>` : "";
 
-      <div class="card">
+    cards.tendencia = `<div class="card">
         <h2 style="margin-bottom:8px">Tendencia · ingreso ${modo === "año" ? "por año" : modo === "mes" ? "por mes" : "por semana"}${info.icono("tendencia")}</h2>
         ${serie.map((s) => { const c = s.ingreso > 0 ? s.gastoVar / s.ingreso * 100 : 0;
           return `<div class="barra-row"><span class="etq" style="width:84px;font-size:12px">${s.etq}</span>
             <span class="barra-track"><span class="barra-fill" style="width:${Math.max(3, 100 * s.ingreso / maxSerie)}%;background:var(--verde-claro);opacity:${opac(s.ingreso, maxSerie)}"></span></span>
             <span class="val" style="width:120px">${kmoney(s.ingreso)} · <span style="color:${c <= 35 ? "var(--verde)" : c <= 45 ? "var(--amarillo)" : "var(--rojo)"}">${s.ingreso > 0 ? Math.round(c) + "%" : "—"}</span></span></div>`; }).join("")}
         <div class="leyenda"><span><i style="background:var(--verde-claro)"></i>Ingreso</span><span>% = costo insumos</span></div>
-      </div>
+      </div>`;
 
-      <div class="card" style="border-left:4px solid var(--flame)">
+    cards.actuar = `<div class="card" style="border-left:4px solid var(--flame)">
         <h2 style="margin-bottom:10px">Para actuar</h2>
         ${accTop.map((a) => `<div style="font-size:13.5px;padding:8px 0;border-bottom:1px solid var(--linea);line-height:1.45">${a}</div>`).join("")}
-      </div>
+      </div>`;
 
-      ${esSemActual ? cardVistazo(tp, ins, cd, pulso) : ""}
+    cards.vistazo = esSemActual ? cardVistazo(tp, ins, cd, pulso) : "";
 
-      ${esSemActual ? `<div class="card">
+    cards.meta = esSemActual ? `<div class="card">
         <h2 style="margin-bottom:8px">Meta de compras (semana)${info.icono("metaCompras")}</h2>
         <div class="barra-track" style="height:12px"><span class="barra-fill" style="width:${pctMeta}%;background:${cMeta}"></span></div>
         <div class="sub" style="margin-top:6px">${metaWk > 0 ? `Llevas ${money(wk.gastoVar)} de ${money(metaWk)} · ${Math.round(pctMeta)}% usado` : "Aún sin meta. Defínela aquí o en Gastos → Meta."}</div>
@@ -492,7 +493,50 @@ function renderOwner(el) {
           <button class="btn sec" id="guardarMeta" style="flex:none;width:auto">Guardar</button>
         </div>
         <div id="okMeta"></div>
-      </div>` : ""}`;
+      </div>` : "";
+
+    const TITULOS = { utilidad: "Utilidad", comensales: "Comensales y ticket", rentabilidad: "Rentabilidad por área", gastoArea: "Gasto por área", tendencia: "Tendencia", actuar: "Para actuar", vistazo: "De un vistazo", meta: "Meta de compras" };
+    const visibles = orden.filter((k) => cards[k]);   // solo tarjetas con contenido, en el orden guardado
+    const cuerpo = visibles.map((k) => cards[k]).join("");
+    const reorderList = visibles.map((k, i) => `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--linea)">
+        <span style="flex:1;font-size:14px;font-weight:600">${TITULOS[k] || k}</span>
+        <button class="btn sec chico" data-mv="up" data-k="${k}"${i === 0 ? " disabled style='opacity:.3'" : ""}>▲</button>
+        <button class="btn sec chico" data-mv="down" data-k="${k}"${i === visibles.length - 1 ? " disabled style='opacity:.3'" : ""}>▼</button>
+      </div>`).join("");
+
+    el.innerHTML = `
+      <div class="card" style="padding:12px">
+        <div class="segmented" style="font-size:13px">${seg("semana", "Semana")}${seg("mes", "Mes")}${seg("año", "Año")}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px">
+          <button class="btn sec chico" id="ant" title="Periodo anterior"${acomodando ? " disabled style='opacity:.35'" : ""}>◀</button>
+          <div style="flex:1;text-align:center">
+            <div style="font-weight:700;font-size:14px">${esc(r.etiqueta)}</div>
+            <div class="sub" style="font-size:11px">${r.esActual ? "En curso" : ""}</div>
+          </div>
+          <button class="btn sec chico" id="sig" title="Periodo siguiente"${(off === 0 || acomodando) ? " disabled style='opacity:.35'" : ""}>▶</button>
+        </div>
+        <div style="text-align:center;margin-top:10px"><button class="btn sec chico" id="acomodar">${acomodando ? "✓ Listo, así queda" : "↕ Acomodar tarjetas"}</button></div>
+      </div>
+      ${acomodando
+        ? `<div class="card"><p class="sub" style="margin:0 0 6px">Sube o baja cada tarjeta con ▲ ▼. Toca "Listo" cuando quede a tu gusto.</p>${reorderList}</div>`
+        : cuerpo}`;
+
+    el.querySelector("#acomodar").addEventListener("click", () => { acomodando = !acomodando; pintar(); });
+
+    if (acomodando) {
+      el.querySelectorAll("[data-mv]").forEach((b) => b.addEventListener("click", () => {
+        const key = b.dataset.k, dir = b.dataset.mv;
+        const vis = orden.filter((k) => cards[k]);
+        const i = vis.indexOf(key), j = dir === "up" ? i - 1 : i + 1;
+        if (i < 0 || j < 0 || j >= vis.length) return;
+        [vis[i], vis[j]] = [vis[j], vis[i]];
+        let vi = 0;
+        orden = orden.map((k) => (cards[k] ? vis[vi++] : k));   // conserva la posición de las ocultas
+        guardarOrden(orden);
+        pintar();
+      }));
+      return;   // en modo acomodar no se necesitan los demás listeners
+    }
 
     el.querySelectorAll("[data-modo]").forEach((b) => b.addEventListener("click", () => {
       modo = b.dataset.modo; off = 0;
