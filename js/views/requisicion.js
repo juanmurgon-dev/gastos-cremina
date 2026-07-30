@@ -331,6 +331,10 @@ export function render(el) {
         <button class="btn sec" id="rqCsv">⬇ Exportar CSV</button>
         <button class="btn sec" id="rqPdf" title="Abre la impresión: elige 'Guardar como PDF'">📄 Guardar PDF</button>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="rqConPrecios" checked style="width:16px;height:16px;accent-color:var(--verde);flex:none" />
+        Incluir precios en el PDF
+      </label>
       <button class="btn sec" id="rqDel" style="margin-top:10px;color:var(--rojo)">Borrar esta requisición</button>
     </div>`;
     cont.innerHTML = html;
@@ -365,7 +369,7 @@ export function render(el) {
     });
     cont.querySelector("#rqWa").addEventListener("click", copiarWa);
     cont.querySelector("#rqCsv").addEventListener("click", exportarCsv);
-    cont.querySelector("#rqPdf").addEventListener("click", exportarPdf);
+    cont.querySelector("#rqPdf").addEventListener("click", () => exportarPdf(cont.querySelector("#rqConPrecios")?.checked ?? true));
     cont.querySelector("#rqDel").addEventListener("click", borrar);
   }
 
@@ -451,7 +455,7 @@ export function render(el) {
 
   // Genera un PDF REAL y lo descarga (no depende del diálogo de impresión).
   // Si no hay internet para cargar la librería, cae al respaldo de impresión.
-  async function exportarPdf() {
+  async function exportarPdf(conPrecios = true) {
     const btn = el.querySelector("#rqPdf");
     const txtOrig = btn ? btn.textContent : "";
     if (btn) { btn.disabled = true; btn.textContent = "Generando…"; }
@@ -473,8 +477,10 @@ export function render(el) {
         doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(14, 58, 57);
         doc.text("INSUMO", M + 5, y);
         doc.text("CANTIDAD", M + 96, y);
-        doc.text("PRECIO", RIGHT - 32, y, { align: "right" });
-        doc.text("MONTO", RIGHT, y, { align: "right" });
+        if (conPrecios) {
+          doc.text("PRECIO", RIGHT - 32, y, { align: "right" });
+          doc.text("MONTO", RIGHT, y, { align: "right" });
+        }
         y += 2.5; doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.2); doc.line(M, y, RIGHT, y); y += 4;
       };
       const salto = () => { if (y > 270) { doc.addPage(); y = 18; encabezado(); } };
@@ -492,23 +498,32 @@ export function render(el) {
           doc.text(it.estatus === "pedido" ? "OK" : "-", M, y);
           doc.text(String(it.nombre || "").slice(0, 44), M + 5, y);
           doc.text(`${num(it.cantidad)} ${it.unidad || ""}`.trim(), M + 96, y);
-          doc.text(num(it.precio) ? money(num(it.precio)) : "-", RIGHT - 32, y, { align: "right" });
-          doc.text(num(it.precio) ? money(montoDe(it)) : "-", RIGHT, y, { align: "right" });
+          if (conPrecios) {
+            doc.text(num(it.precio) ? money(num(it.precio)) : "-", RIGHT - 32, y, { align: "right" });
+            doc.text(num(it.precio) ? money(montoDe(it)) : "-", RIGHT, y, { align: "right" });
+          }
           y += 5;
         }
         salto();
-        doc.setFont("helvetica", "bold"); doc.setTextColor(110, 106, 92);
-        doc.text("Subtotal " + String(prov).slice(0, 28), RIGHT - 32, y, { align: "right" });
-        doc.text(money(totalDe(list)), RIGHT, y, { align: "right" });
-        doc.setDrawColor(225, 225, 225); doc.setLineWidth(0.2); doc.line(M, y + 1.5, RIGHT, y + 1.5);
-        y += 8;
+        if (conPrecios) {
+          doc.setFont("helvetica", "bold"); doc.setTextColor(110, 106, 92);
+          doc.text("Subtotal " + String(prov).slice(0, 28), RIGHT - 32, y, { align: "right" });
+          doc.text(money(totalDe(list)), RIGHT, y, { align: "right" });
+          doc.setDrawColor(225, 225, 225); doc.setLineWidth(0.2); doc.line(M, y + 1.5, RIGHT, y + 1.5);
+          y += 8;
+        } else {
+          doc.setDrawColor(225, 225, 225); doc.setLineWidth(0.2); doc.line(M, y, RIGHT, y);
+          y += 6;
+        }
       }
 
-      salto();
-      doc.setDrawColor(14, 58, 57); doc.setLineWidth(0.5); doc.line(M, y, RIGHT, y); y += 6;
-      doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(14, 58, 57);
-      doc.text("TOTAL", RIGHT - 32, y, { align: "right" });
-      doc.text(money(totalDe(editing.items)), RIGHT, y, { align: "right" });
+      if (conPrecios) {
+        salto();
+        doc.setDrawColor(14, 58, 57); doc.setLineWidth(0.5); doc.line(M, y, RIGHT, y); y += 6;
+        doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(14, 58, 57);
+        doc.text("TOTAL", RIGHT - 32, y, { align: "right" });
+        doc.text(money(totalDe(editing.items)), RIGHT, y, { align: "right" });
+      }
 
       doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(168, 162, 150);
       doc.text("Generado con Platify", W / 2, 288, { align: "center" });
@@ -516,29 +531,29 @@ export function render(el) {
       doc.save("Requisicion-" + hoyTxt().replace(/ /g, "-") + ".pdf");
     } catch (err) {
       console.warn("PDF directo falló, uso impresión:", err);
-      imprimirPdf();
+      imprimirPdf(conPrecios);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = txtOrig || "📄 Guardar PDF"; }
     }
   }
 
   // Respaldo: documento con formato + impresión del sistema ("Guardar como PDF").
-  function imprimirPdf() {
+  function imprimirPdf(conPrecios = true) {
     const e = estatusInfo(derivar(editing.items));
     const fecha = hoyTxt();
+    const colspan = conPrecios ? 5 : 3;
     let filas = "";
     for (const [prov, list] of grupos()) {
-      filas += `<tr class="prov"><td colspan="5">${esc(prov)}</td></tr>`;
+      filas += `<tr class="prov"><td colspan="${colspan}">${esc(prov)}</td></tr>`;
       for (const it of list) {
         filas += `<tr>
           <td class="c">${it.estatus === "pedido" ? "✔" : "○"}</td>
           <td>${esc(it.nombre)}</td>
           <td class="c">${num(it.cantidad)} ${esc(it.unidad || "")}</td>
-          <td class="r">${num(it.precio) ? money(num(it.precio)) : "—"}</td>
-          <td class="r">${num(it.precio) ? money(montoDe(it)) : "—"}</td>
+          ${conPrecios ? `<td class="r">${num(it.precio) ? money(num(it.precio)) : "—"}</td><td class="r">${num(it.precio) ? money(montoDe(it)) : "—"}</td>` : ""}
         </tr>`;
       }
-      filas += `<tr class="sub"><td colspan="4" class="r">Subtotal ${esc(prov)}</td><td class="r">${money(totalDe(list))}</td></tr>`;
+      if (conPrecios) filas += `<tr class="sub"><td colspan="4" class="r">Subtotal ${esc(prov)}</td><td class="r">${money(totalDe(list))}</td></tr>`;
     }
 
     const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
@@ -561,10 +576,10 @@ export function render(el) {
       <h1>Requisición de compras</h1>
       <div class="meta">${esc(fecha)} · ${esc(e.t)} · ${editing.items.length} insumo${editing.items.length === 1 ? "" : "s"}</div>
       <table>
-        <thead><tr><th></th><th>Insumo</th><th class="c">Cantidad</th><th class="r">Precio</th><th class="r">Monto</th></tr></thead>
+        <thead><tr><th></th><th>Insumo</th><th class="c">Cantidad</th>${conPrecios ? `<th class="r">Precio</th><th class="r">Monto</th>` : ""}</tr></thead>
         <tbody>${filas}</tbody>
       </table>
-      <div class="total">TOTAL: ${money(totalDe(editing.items))}</div>
+      ${conPrecios ? `<div class="total">TOTAL: ${money(totalDe(editing.items))}</div>` : ""}
       <div class="pie">Generado con Platify</div>
     </body></html>`;
 
