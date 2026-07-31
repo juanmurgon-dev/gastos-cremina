@@ -122,14 +122,19 @@ async function importarCorte(c) {
 
 async function importarProducto(p) {
   if (!p.desde) throw new Error("no pude leer las fechas del reporte");
-  // Todo se guarda por SEMANA (lunes–domingo), aunque el reporte traiga 1 día.
+  // Todo se guarda por SEMANA (lunes–domingo). Si el reporte es de UN día,
+  // ACUMULA: reemplaza solo ese día y limpia el agregado semanal viejo.
   const wk = semanaDe(p.desde);
   const desde = wk.desde, hasta = wk.hasta;
   const periodo = labelRango(desde, hasta);
-  await supabase.from("productos_venta").delete().eq("desde", desde);
+  const fechaDia = (!p.hasta || p.hasta === p.desde) ? p.desde : null;   // reporte de UN día
+  let delP = supabase.from("productos_venta").delete().eq("desde", desde);
+  if (fechaDia) delP = delP.or(`fecha.eq.${fechaDia},fecha.is.null`);
+  await delP;
+  // modificadores/combos no tienen columna 'fecha': se reemplazan por semana.
   await supabase.from("modificadores_venta").delete().eq("desde", desde);
   await supabase.from("combos_venta").delete().eq("desde", desde);
-  const prows = p.prods.map((x) => ({ periodo, desde, hasta, ...x }));
+  const prows = p.prods.map((x) => ({ periodo, desde, hasta, fecha: fechaDia || null, ...x }));
   const mrows = Object.entries(p.mods).map(([modificador, cantidad]) =>
     ({ periodo, desde, hasta, modificador, cantidad }));
   const crows = Object.entries(p.combos).map(([k, cantidad]) => {
@@ -146,7 +151,7 @@ async function importarProducto(p) {
     const e3 = await supabase.from("combos_venta").insert(crows);
     if (e3.error) throw new Error(e3.error.message);
   }
-  return { periodo, desde, hasta, prod: prows.length, mods: mrows.length, combos: crows.length };
+  return { periodo, desde, hasta, dia: fechaDia, prod: prows.length, mods: mrows.length, combos: crows.length };
 }
 
 // Venta por producto y variante (archivo "Grupos modificadores" de tu punto de venta).
@@ -372,6 +377,11 @@ export function montar(el) {
       los <b>cortes de caja</b> (diarios), y ${semanales}. Acepto <b>Excel</b> y también <b>PDF</b> de los reportes.
       Puedes soltar varios de golpe; yo detecto cuál es cuál.</p>
       <label class="btn"><input id="files" type="file" accept=".xlsx,.pdf" multiple hidden> ⬆ Elegir archivos</label>
+      <div class="aviso-box" style="margin-top:12px;font-size:12.5px;line-height:1.5">
+        📅 <b>¿Subes un reporte de 1 día?</b> Se <b>suma</b> a la semana, no la reemplaza.
+        Sube cada día y se van acumulando solos (lunes–domingo). Consejo: sube el <b>día completo</b>
+        junto (corte + productos + variantes) para que se registre con su fecha correcta.
+      </div>
       <div id="res"></div>
     </div>
 
@@ -452,6 +462,7 @@ export function montar(el) {
 
     const logs = [];
     let semanaRef = null;
+    let diaRef = null;   // día detectado en el lote (corte o reporte de 1 día) → acumula variantes por día
     const total = items.length;
     // Muestra spinner + barra + "procesando X de N" + los resultados que ya van.
     const pintarProgreso = (hechos, actual) => {
@@ -476,17 +487,23 @@ export function montar(el) {
         if (it.tipo === "corte") {
           const c = parseCorte(XLSX.utils.sheet_to_json(it.wb.Sheets["Detalle corte de caja"], { header: 1 }));
           await importarCorte(c);
+          if (c.fecha) diaRef = c.fecha;   // el corte de caja trae la fecha exacta del día
           logs.push(`✅ Corte #${c.corte} · ${c.fecha} · ${money(c.ventas_total)}`);
         } else if (it.tipo === "producto") {
           const p = parseProducto(it.wb, XLSX);
           const r = await importarProducto(p);
           semanaRef = { desde: r.desde, hasta: r.hasta, periodo: r.periodo };
-          logs.push(`✅ Productos ${r.periodo} · ${r.prod} productos, ${r.combos} combos`);
+          if (r.dia) diaRef = r.dia;       // reporte de productos de un solo día
+          logs.push(r.dia
+            ? `✅ Productos día ${r.dia} · ${r.prod} productos (sumado a la semana ${r.periodo})`
+            : `✅ Productos ${r.periodo} · ${r.prod} productos, ${r.combos} combos`);
         } else if (it.tipo === "variante") {
-          const r = await importarVariantes(parseVariantes(it.wb, XLSX), semanaRef || semanaMasReciente());
+          const r = await importarVariantes(parseVariantes(it.wb, XLSX), semanaRef || semanaMasReciente(), diaRef);
           logs.push(r.comoProductos
             ? `✅ Venta por producto ${r.periodo} · ${r.filas} productos (reporte por categoría — no toqué el desglose por variante)`
-            : `✅ Variantes ${r.periodo} · ${r.filas} líneas platillo/variante`);
+            : diaRef
+              ? `✅ Variantes día ${diaRef} · ${r.filas} líneas (sumado a la semana ${r.periodo})`
+              : `✅ Variantes ${r.periodo} · ${r.filas} líneas platillo/variante`);
         } else if (it.tipo === "pdf") {
           logs.push(...await procesarPDF(it.f, semanaRef || semanaMasReciente()));
         } else {
