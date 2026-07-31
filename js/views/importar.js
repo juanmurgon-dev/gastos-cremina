@@ -498,7 +498,7 @@ export function montar(el) {
     }
     const okN = logs.filter((l) => l.startsWith("✅")).length;
     const malN = logs.length - okN;
-    if (okN) await store.recargarVentas();
+    if (okN) { await store.recargarVentas(); store.logActividad("reporte", okN + " archivo(s)"); }
 
     let pie;
     if (okN && !malN) {

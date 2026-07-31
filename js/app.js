@@ -18,7 +18,7 @@ import * as recetas from "./views/recetas.js";
 import * as requisicion from "./views/requisicion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.105";
+export const APP_VERSION = "v3.106";
 export const APP_FECHA = "27 jul 2026";
 
 const VISTAS = {
@@ -142,8 +142,9 @@ function montarShell(user) {
 
   // Onboarding: si la BD es multi-tenant y el usuario aún no tiene restaurante,
   // pídelo antes que nada. Luego, el nombre de la persona.
-  let orgPedida = false, nombrePedido = false, rolPintado = "__none__";
+  let orgPedida = false, nombrePedido = false, rolPintado = "__none__", aperturaLog = false;
   store.subscribe(() => {
+    if (store.state.listo && !aperturaLog) { aperturaLog = true; store.logActividad && store.logActividad("apertura"); }
     // Cuando ya se conoce el rol, ajusta las pestañas visibles.
     if (store.state.miRol !== rolPintado) {
       rolPintado = store.state.miRol;

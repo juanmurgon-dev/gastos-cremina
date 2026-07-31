@@ -171,6 +171,7 @@ function nota(texto, clase) {
 async function enviar(pregunta) {
   if (!bg) return;
   historial.push({ role: "user", content: pregunta });
+  store.logActividad && store.logActividad("chat");
   pintar();
   const btn = bg.querySelector("#chat-form button");
   if (btn) btn.disabled = true;
