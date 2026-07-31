@@ -129,7 +129,7 @@ async function importarProducto(p) {
   const periodo = labelRango(desde, hasta);
   const fechaDia = (!p.hasta || p.hasta === p.desde) ? p.desde : null;   // reporte de UN día
   let delP = supabase.from("productos_venta").delete().eq("desde", desde);
-  if (fechaDia) delP = delP.or(`fecha.eq.${fechaDia},fecha.is.null`);
+  delP = fechaDia ? delP.eq("fecha", fechaDia) : delP.is("fecha", null);
   await delP;
   // modificadores/combos no tienen columna 'fecha': se reemplazan por semana.
   await supabase.from("modificadores_venta").delete().eq("desde", desde);
@@ -182,8 +182,11 @@ const CATEGORIAS_REPORTE = new Set(["desayunos", "comida", "entradas", "postres"
 async function cargarVariantes(rows, wk, fechaDia) {
   const { desde, hasta, periodo } = wk;
   const out = rows.map((v) => ({ periodo, desde, hasta, fecha: fechaDia || null, ...v }));
+  // Día individual → reemplaza solo ESE día. Consolidado (varios días) → reemplaza solo
+  // el agregado sin fecha. Así un consolidado (ej. 27–29) y un día suelto (ej. 30) COEXISTEN
+  // y se suman en la semana, siempre que no se traslapen en el mismo día.
   let del = supabase.from("variantes_venta").delete().eq("desde", desde);
-  if (fechaDia) del = del.or(`fecha.eq.${fechaDia},fecha.is.null`);
+  del = fechaDia ? del.eq("fecha", fechaDia) : del.is("fecha", null);
   const { error: ed } = await del;
   if (ed) throw new Error(ed.message);
   const { error: ei } = await supabase.from("variantes_venta").insert(out);
@@ -276,8 +279,9 @@ function fileToBase64(file) {
 async function cargarProductos(prows, wk, fechaDia) {
   const { desde, hasta, periodo } = wk;
   const rows = prows.map((p) => ({ periodo, desde, hasta, fecha: fechaDia || null, ...p }));
+  // Día individual → solo ese día. Consolidado → solo el agregado sin fecha. Coexisten.
   let del = supabase.from("productos_venta").delete().eq("desde", desde);
-  if (fechaDia) del = del.or(`fecha.eq.${fechaDia},fecha.is.null`);
+  del = fechaDia ? del.eq("fecha", fechaDia) : del.is("fecha", null);
   const { error: ed } = await del;
   if (ed) throw new Error(ed.message);
   const { error: ei } = await supabase.from("productos_venta").insert(rows);
@@ -378,9 +382,9 @@ export function montar(el) {
       Puedes soltar varios de golpe; yo detecto cuál es cuál.</p>
       <label class="btn"><input id="files" type="file" accept=".xlsx,.pdf" multiple hidden> ⬆ Elegir archivos</label>
       <div class="aviso-box" style="margin-top:12px;font-size:12.5px;line-height:1.5">
-        📅 <b>¿Subes un reporte de 1 día?</b> Se <b>suma</b> a la semana, no la reemplaza.
-        Sube cada día y se van acumulando solos (lunes–domingo). Consejo: sube el <b>día completo</b>
-        junto (corte + productos + variantes) para que se registre con su fecha correcta.
+        📅 <b>Días y consolidados se suman en la semana.</b> Puedes mezclar un consolidado
+        (ej. 27–29 jul) con días sueltos (ej. 30 jul) y se acumulan juntos.
+        <b>Ojo:</b> no subas un consolidado y un día que <b>incluyan la misma fecha</b> — se contaría doble.
       </div>
       <div id="res"></div>
     </div>
