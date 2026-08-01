@@ -5,6 +5,7 @@ import { COLOR_AREA, money, toISO, lunesDe, etiquetaSemana } from "../store.js";
 import { descargarCSV } from "../csv.js";
 import * as gastosFijos from "./gastos-fijos.js";
 import * as metaCalc from "./meta-calc.js";
+import * as precioAjuste from "./precio-ajuste.js";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -12,7 +13,7 @@ const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
 export function render(el) {
   let sub = "variables";
   el.innerHTML = `
-    <div class="segmented" style="font-size:13px"><button data-s="variables">Variables</button><button data-s="fijos">Fijos</button><button data-s="meta">Meta</button></div>
+    <div class="segmented" style="font-size:13px"><button data-s="variables">Variables</button><button data-s="fijos">Fijos</button><button data-s="precio">Precio</button><button data-s="meta">Meta</button></div>
     <div id="rsub"></div>`;
   const subEl = el.querySelector("#rsub");
   const btns = [...el.querySelectorAll(".segmented button")];
@@ -24,6 +25,7 @@ export function render(el) {
     subEl.innerHTML = "";
     limpiar = sub === "variables" ? renderVariables(subEl)
       : sub === "fijos" ? gastosFijos.montar(subEl)
+      : sub === "precio" ? precioAjuste.montar(subEl)
       : metaCalc.montar(subEl);
   }
   marcar(); renderSub();
