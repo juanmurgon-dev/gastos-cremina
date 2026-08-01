@@ -134,10 +134,27 @@ function renderVariables(el) {
     const porProv = store.sumaPor(lineas, "proveedor");
     const semanas = store.ultimasSemanas(12).reverse();
 
+    // COGS del mes EN CURSO (costo de venta = insumos), siempre visible sin importar
+    // el periodo seleccionado, para tenerlo de referencia mensual.
+    const hoyD = new Date();
+    const m0 = new Date(hoyD.getFullYear(), hoyD.getMonth(), 1);
+    const mFinReal = new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 0);
+    const cogsMes = store.lineasEnRango(toISO(m0), toISO(mFinReal > hoyD ? hoyD : mFinReal))
+      .filter((l) => l.tipo === "costo de venta").reduce((a, l) => a + store.num(l.monto), 0);
+    const cogsPeriodo = store.num(porTipo["costo de venta"]);
+
     cuerpo.innerHTML = `
+      <div class="card" style="border-left:4px solid #2ec4b6">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div><h2 style="margin:0">COGS del mes</h2>
+            <div class="sub" style="font-size:11.5px">Costo de venta (insumos) · ${MESES[hoyD.getMonth()]} ${hoyD.getFullYear()}</div></div>
+          <div style="font-size:24px;font-weight:800;color:#16514f;white-space:nowrap">${money(cogsMes)}</div>
+        </div>
+      </div>
       <div class="card">
         <div class="row-stats">
           <div class="stat"><div class="n">${money(total)}</div><div class="l">Gastado</div></div>
+          <div class="stat"><div class="n" style="color:#16514f">${money(cogsPeriodo)}</div><div class="l">COGS (periodo)</div></div>
           <div class="stat"><div class="n">${ts.length}</div><div class="l">Tickets</div></div>
           <div class="stat"><div class="n">${lineas.length}</div><div class="l">Artículos</div></div>
         </div>
