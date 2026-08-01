@@ -244,7 +244,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--sea); borde
 .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--mint-2); color: var(--sea-txt); border: 1px solid var(--linea); }
 .up { color: var(--rojo); } .down { color: var(--sea-txt); }
 .stat { text-align: center; padding: 4px; }
-.stat .n { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--tinta); }
+.stat .n { font-size: clamp(15px, 5vw, 24px); font-weight: 800; font-variant-numeric: tabular-nums; color: var(--tinta); overflow-wrap: anywhere; }
 .stat .l { font-size: 12px; color: var(--gris); }
 .row-stats { display: flex; gap: 10px; }
 .row-stats > * { flex: 1; }

@@ -144,7 +144,7 @@ export function montar(el) {
         </div>
         <div style="margin-top:12px;padding:10px;border-radius:10px;background:var(--fondo-2, #f6f6f4);display:flex;justify-content:space-between;align-items:center">
           <div><b>Prime cost</b> (food + labor)<div class="sub" style="font-size:11.5px">Meta ≤ 60–65%. ${laborPct ? "" : "Agrega tu nómina a gastos fijos para verlo."}</div></div>
-          <div style="font-size:22px;font-weight:800;color:${laborPct ? primeCol : "var(--gris)"}">${laborPct ? Math.round(prime) + "%" : "—"}</div>
+          <div style="font-size:clamp(16px,6vw,22px);font-weight:800;color:${laborPct ? primeCol : "var(--gris)"};white-space:nowrap">${laborPct ? Math.round(prime) + "%" : "—"}</div>
         </div>
       </div>
 
@@ -153,7 +153,7 @@ export function montar(el) {
         <div class="sub" style="margin-bottom:10px">Para cubrir todo y quedarte con ${uMin}–${uMax}% de utilidad.</div>
         ${necesita ? `
           <div style="text-align:center;padding:14px;border-radius:12px;background:var(--fondo-2, #f6f6f4)">
-            <div style="font-size:32px;font-weight:800;color:var(--naranja)">+${xLo.toFixed(1)}% a +${xHi.toFixed(1)}%</div>
+            <div style="font-size:clamp(20px,7.5vw,32px);font-weight:800;color:var(--naranja);overflow-wrap:anywhere">+${xLo.toFixed(1)}% a +${xHi.toFixed(1)}%</div>
             <div class="sub">aumento uniforme sobre todos los precios</div>
           </div>
           <div style="margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">

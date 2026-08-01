@@ -146,13 +146,13 @@ function renderVariables(el) {
     cuerpo.innerHTML = `
       <div class="card" style="border-left:4px solid #2ec4b6">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-          <div><h2 style="margin:0">COGS del mes</h2>
+          <div style="min-width:0"><h2 style="margin:0">COGS del mes</h2>
             <div class="sub" style="font-size:11.5px">Costo de venta (insumos) · ${MESES[hoyD.getMonth()]} ${hoyD.getFullYear()}</div></div>
-          <div style="font-size:24px;font-weight:800;color:#16514f;white-space:nowrap">${money(cogsMes)}</div>
+          <div style="font-size:clamp(18px,6vw,24px);font-weight:800;color:#16514f;white-space:nowrap">${money(cogsMes)}</div>
         </div>
       </div>
       <div class="card">
-        <div class="row-stats">
+        <div class="row-stats" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div class="stat"><div class="n">${money(total)}</div><div class="l">Gastado</div></div>
           <div class="stat"><div class="n" style="color:#16514f">${money(cogsPeriodo)}</div><div class="l">COGS (periodo)</div></div>
           <div class="stat"><div class="n">${ts.length}</div><div class="l">Tickets</div></div>
