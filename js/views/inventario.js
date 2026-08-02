@@ -49,6 +49,9 @@ function inyectarCSS() {
   const st = document.createElement("style"); st.id = "inv-css";
   st.textContent = `
     .inv-in{font-size:16px;min-height:44px;padding:8px 10px;border:1px solid var(--linea);border-radius:10px;background:var(--fondo,#fff);width:100%;box-sizing:border-box}
+    input[type="date"].inv-in{-webkit-appearance:none;appearance:none;min-width:0;display:block;text-align:left}
+    input[type="date"].inv-in::-webkit-date-and-time-value{text-align:left;margin:0}
+    input[type="date"].inv-in::-webkit-calendar-picker-indicator{margin:0}
     .inv-num{font-size:16px;min-height:44px;text-align:right}
     .inv-linea{padding:10px 12px;border-bottom:1px solid var(--linea)}
     .inv-linea .nom{font-weight:600;margin-bottom:6px}
