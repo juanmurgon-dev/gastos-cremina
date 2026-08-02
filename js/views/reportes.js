@@ -33,7 +33,7 @@ export function render(el) {
 }
 
 function renderVariables(el) {
-  const st = { modo: "semana", semanaOff: 0, mesOff: 0, desde: "", hasta: "" };
+  const st = { modo: "semana", diaOff: 0, semanaOff: 0, mesOff: 0, desde: "", hasta: "", porFecha: "gasto" };
 
   // Rango por defecto para el modo personalizado: esta semana
   const lun0 = lunesDe(new Date());
@@ -42,8 +42,10 @@ function renderVariables(el) {
 
   el.innerHTML = `
     <div class="card" style="padding:12px">
+      <div class="segmented" style="font-size:12.5px;margin-bottom:10px"><button data-f="gasto">Fecha del gasto</button><button data-f="subida">Fecha de subida</button></div>
       <select id="modo" style="margin-bottom:10px">
-        <option value="semana">Por semana</option>
+        <option value="dia">Por día</option>
+        <option value="semana" selected>Por semana</option>
         <option value="mes">Por mes</option>
         <option value="rango">Rango de fechas</option>
         <option value="todo">Todo el histórico</option>
@@ -55,11 +57,16 @@ function renderVariables(el) {
 
   const modoSel = el.querySelector("#modo");
   modoSel.addEventListener("change", () => { st.modo = modoSel.value; pintarCtrl(); pintar(); });
+  const fbtns = [...el.querySelectorAll('.segmented button[data-f]')];
+  const marcarF = () => fbtns.forEach((b) => b.classList.toggle("act", b.dataset.f === st.porFecha));
+  fbtns.forEach((b) => b.addEventListener("click", () => { st.porFecha = b.dataset.f; marcarF(); pintar(); }));
+  marcarF();
   el.querySelector("#exp").addEventListener("click", () => {
     const { desde, hasta, etq } = rango();
-    const filas = store.lineasEnRango(desde, hasta).map((l) => [
-      l.fecha, l.proveedor, l.area, l.descripcion, l.cantidad, l.unidad, l.precio_unitario, l.monto, l.tipo, l.notas]);
-    descargarCSV("gastos-" + (etq || "todo"), ["Fecha", "Proveedor", "Área", "Descripción",
+    const sub = st.porFecha === "subida";
+    const filas = store.lineasEnRango(desde, hasta, sub).map((l) => [
+      l.fecha, l.subida, l.proveedor, l.area, l.descripcion, l.cantidad, l.unidad, l.precio_unitario, l.monto, l.tipo, l.notas]);
+    descargarCSV("gastos-" + (sub ? "subida-" : "") + (etq || "todo"), ["Fecha gasto", "Fecha subida", "Proveedor", "Área", "Descripción",
       "Cantidad", "Unidad", "Precio Unitario", "Monto Total", "Tipo de Gasto", "Notas"], filas);
   });
 
@@ -70,7 +77,7 @@ function renderVariables(el) {
   // ── Controles según el modo ──
   function pintarCtrl() {
     const c = el.querySelector("#ctrl");
-    if (st.modo === "semana" || st.modo === "mes") {
+    if (st.modo === "semana" || st.modo === "mes" || st.modo === "dia") {
       c.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <button class="btn sec chico" id="ant">◀</button>
@@ -95,7 +102,8 @@ function renderVariables(el) {
   }
 
   function paso(dir) {
-    if (st.modo === "semana") st.semanaOff = Math.max(0, st.semanaOff + dir);
+    if (st.modo === "dia") st.diaOff = Math.max(0, st.diaOff + dir);
+    else if (st.modo === "semana") st.semanaOff = Math.max(0, st.semanaOff + dir);
     else st.mesOff = Math.max(0, st.mesOff + dir);
     pintar();
   }
@@ -103,6 +111,12 @@ function renderVariables(el) {
   // ── Rango [desde, hasta] y etiqueta según el modo ──
   function rango() {
     const hoy = new Date();
+    if (st.modo === "dia") {
+      const d = new Date(hoy); d.setDate(d.getDate() - st.diaOff);
+      const iso = toISO(d);
+      const etq = st.diaOff === 0 ? "Hoy · " + iso : st.diaOff === 1 ? "Ayer · " + iso : iso;
+      return { desde: iso, hasta: iso, etq };
+    }
     if (st.modo === "semana") {
       const l = lunesDe(hoy); l.setDate(l.getDate() - st.semanaOff * 7);
       const d = new Date(l); d.setDate(l.getDate() + 6);
@@ -125,8 +139,9 @@ function renderVariables(el) {
     const etqEl = el.querySelector("#etq");
     if (etqEl && etq) etqEl.textContent = etq;
 
-    const lineas = store.lineasEnRango(desde, hasta);
-    const ts = store.ticketsEnRango(desde, hasta);
+    const porSubida = st.porFecha === "subida";
+    const lineas = store.lineasEnRango(desde, hasta, porSubida);
+    const ts = store.ticketsEnRango(desde, hasta, porSubida);
     const total = lineas.reduce((a, l) => a + store.num(l.monto), 0);
 
     const porArea = store.sumaPor(lineas, "area");
@@ -144,6 +159,7 @@ function renderVariables(el) {
     const cogsPeriodo = store.num(porTipo["costo de venta"]);
 
     cuerpo.innerHTML = `
+      ${porSubida ? `<div class="aviso-box" style="margin-bottom:12px;font-size:12.5px">📥 Mostrando lo <b>subido a la app</b> en este periodo (por fecha de captura, no la fecha del ticket). El "COGS del mes" de abajo sí va por fecha del gasto.</div>` : ""}
       <div class="card" style="border-left:4px solid #2ec4b6">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
           <div style="min-width:0"><h2 style="margin:0">COGS del mes</h2>

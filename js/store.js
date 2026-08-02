@@ -54,6 +54,7 @@ function rowToTicket(r) {
     fotoUrl: r.foto_url || "",
     lineas: Array.isArray(r.lineas) ? r.lineas : [],
     creadoPor: r.creado_por || "",
+    creadoEn: r.creado_en || "",       // fecha/hora de SUBIDA a la app (≠ fecha del gasto)
     editadoPor: r.editado_por || "",
     editadoEn: r.editado_en || null
   };
@@ -1001,23 +1002,28 @@ export function gastoVariable(t) {
 }
 
 // Todas las líneas (con fecha del ticket) dentro de [desde, hasta] ISO inclusive
-export function lineasEnRango(desdeISO, hastaISO) {
+// porSubida=true → filtra por la fecha en que se SUBIÓ el ticket a la app
+// (t.creado_en), no por la fecha del gasto (t.fecha).
+export function lineasEnRango(desdeISO, hastaISO, porSubida = false) {
   const out = [];
   for (const t of state.tickets) {
-    if (!t.fecha) continue;
-    if (desdeISO && t.fecha < desdeISO) continue;
-    if (hastaISO && t.fecha > hastaISO) continue;
+    const f = porSubida ? (t.creadoEn || "").slice(0, 10) : t.fecha;
+    if (!f) continue;
+    if (desdeISO && f < desdeISO) continue;
+    if (hastaISO && f > hastaISO) continue;
     for (const l of t.lineas || []) {
       if (ES_IVA.test(l.descripcion || "")) continue;   // el IVA no cuenta como gasto de insumo
-      out.push({ ...l, fecha: t.fecha, proveedor: t.proveedor, ticketId: t.id });
+      out.push({ ...l, fecha: t.fecha, subida: (t.creadoEn || "").slice(0, 10), proveedor: t.proveedor, ticketId: t.id });
     }
   }
   return out;
 }
 
-export function ticketsEnRango(desdeISO, hastaISO) {
-  return state.tickets.filter((t) =>
-    t.fecha && (!desdeISO || t.fecha >= desdeISO) && (!hastaISO || t.fecha <= hastaISO));
+export function ticketsEnRango(desdeISO, hastaISO, porSubida = false) {
+  return state.tickets.filter((t) => {
+    const f = porSubida ? (t.creadoEn || "").slice(0, 10) : t.fecha;
+    return f && (!desdeISO || f >= desdeISO) && (!hastaISO || f <= hastaISO);
+  });
 }
 
 // Suma agrupada por un campo de las líneas
