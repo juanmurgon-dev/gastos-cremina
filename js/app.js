@@ -16,9 +16,10 @@ import * as margen from "./views/margen.js";
 import * as insumos from "./views/insumos.js";
 import * as recetas from "./views/recetas.js";
 import * as requisicion from "./views/requisicion.js";
+import * as inventario from "./views/inventario.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.111";
+export const APP_VERSION = "v3.112";
 export const APP_FECHA = "27 jul 2026";
 
 const VISTAS = {
@@ -28,15 +29,16 @@ const VISTAS = {
   recetas:     { mod: recetas,     ic: "📖", txt: "Recetas" },
   margen:      { mod: margen,      ic: "📈", txt: "Margen" },
   reportes:    { mod: reportes,    ic: "📊", txt: "Gastos" },
-  requisicion: { mod: requisicion, ic: "🛒", txt: "Requis." }
+  requisicion: { mod: requisicion, ic: "🛒", txt: "Requis." },
+  inventario:  { mod: inventario,  ic: "📋", txt: "Inventario" }
 };
 
 // Pestañas visibles por rol. Los que NO están aquí (owner, admin, gerente y
 // desconocido) ven TODAS. En single-tenant (miRol=null) también ven todas.
 const TABS_ROL = {
-  chef:    ["inicio", "insumos", "recetas", "requisicion"],
-  compras: ["inicio", "requisicion", "insumos"],
-  staff:   ["inicio", "insumos"],
+  chef:    ["inicio", "insumos", "recetas", "requisicion", "inventario"],
+  compras: ["inicio", "requisicion", "insumos", "inventario"],
+  staff:   ["inicio", "insumos", "inventario"],
 };
 function tabsPermitidas() {
   const permit = TABS_ROL[store.state.miRol];

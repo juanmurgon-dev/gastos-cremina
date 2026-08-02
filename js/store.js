@@ -28,6 +28,9 @@ export const state = {
   costosPlatillo: [],   // costo directo por platillo (para el margen)
   recetas: [],          // recetas: platillo/preparación → insumos + cantidad
   recetasFicha: [],     // ficha técnica: categoría, tiempo de prep, procedimiento
+  invArticulos: [],     // catálogo de artículos de inventario (reutilizable)
+  invConteos: [],       // cabeceras de conteo + total (vista v_conteo_totales)
+  cierres: [],          // cierres mensuales con COGS (vista v_cogs_mensual)
   perfil: { nombre: "", email: "", cargado: false },
   config: { presupuestoSemanal: 35000, presupuestoPorArea: {} },
   orgId: null,          // id del restaurante (multi-tenant); null = single-tenant
@@ -562,7 +565,7 @@ export async function init() {
   arrancado = true;
   // allSettled: aunque una consulta falle, la app SIEMPRE deja de estar "cargando".
   await cargarMiOrg();  // primero: define single vs multi-tenant y el orgId
-  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones(), cargarCostosPlatillo(), cargarRecetas(), cargarRecetasFicha(), cargarKpis()]);
+  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones(), cargarCostosPlatillo(), cargarRecetas(), cargarRecetasFicha(), cargarKpis(), cargarInvArticulos(), cargarConteos(), cargarCierres()]);
   try { await recalcularTodos(); } catch (e) { /* recetas o precios aún no disponibles */ }
   state.listo = true;
   notify();
@@ -577,7 +580,160 @@ export async function init() {
     .on("postgres_changes", { event: "*", schema: "public", table: "config" }, cargarConfig)
     .on("postgres_changes", { event: "*", schema: "public", table: "requisiciones" }, cargarRequisiciones)
     .on("postgres_changes", { event: "*", schema: "public", table: "kpis_dia" }, cargarKpis)
+    .on("postgres_changes", { event: "*", schema: "public", table: "inventario_conteos" }, cargarConteos)
+    .on("postgres_changes", { event: "*", schema: "public", table: "inventario_articulos" }, cargarInvArticulos)
     .subscribe();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  INVENTARIO: catálogo de artículos, conteos mensuales y cierre/COGS.
+// ═══════════════════════════════════════════════════════════════════
+
+// Catálogo de artículos (reutilizable mes a mes).
+async function cargarInvArticulos() {
+  const { data, error } = await supabase.from("inventario_articulos").select("*").order("categoria").order("orden");
+  if (!error && data) { state.invArticulos = data; notify(); }
+}
+// Cabeceras de conteo + su total (de la vista v_conteo_totales).
+async function cargarConteos() {
+  const { data, error } = await supabase.from("v_conteo_totales").select("*").order("fecha", { ascending: false });
+  if (!error && data) { state.invConteos = data; notify(); }
+}
+// Cierres mensuales ya calculados (vista v_cogs_mensual).
+async function cargarCierres() {
+  const { data, error } = await supabase.from("v_cogs_mensual").select("*").order("periodo", { ascending: false });
+  if (!error && data) { state.cierres = data; notify(); }
+}
+export async function recargarInventario() {
+  await Promise.allSettled([cargarInvArticulos(), cargarConteos(), cargarCierres()]);
+}
+
+export function conteoBorrador() {
+  return (state.invConteos || []).find((c) => c.estado === "borrador") || null;
+}
+export function articulosActivos() {
+  return (state.invArticulos || []).filter((a) => a.activo !== false);
+}
+
+// Líneas de un conteo (se cargan bajo demanda, no viven en el estado global).
+export async function lineasDeConteo(conteoId) {
+  const { data, error } = await supabase.from("inventario_conteo_lineas")
+    .select("*").eq("conteo_id", conteoId);
+  if (error) throw error;
+  return data || [];
+}
+
+// Crea un conteo nuevo con fecha dada y genera una línea por cada artículo activo.
+export async function crearConteo(fecha) {
+  const { data, error } = await supabase.from("inventario_conteos")
+    .insert({ fecha, estado: "borrador", creado_por: (state.user && state.user.id) || null })
+    .select().single();
+  if (error) throw error;
+  const arts = articulosActivos();
+  if (arts.length) {
+    const filas = arts.map((a) => ({
+      conteo_id: data.id, articulo_id: a.id,
+      nombre_snapshot: a.nombre, unidad_snapshot: a.unidad, categoria_snapshot: a.categoria,
+      cantidad: 0, costo_unitario: num(a.costo_unitario),
+    }));
+    const { error: e2 } = await supabase.from("inventario_conteo_lineas").insert(filas);
+    if (e2) throw e2;
+  }
+  await cargarConteos();
+  logActividad("inventario", "conteo " + fecha);
+  return data;
+}
+
+// Actualiza una línea (cantidad / costo / nombre / unidad). Devuelve error si falla.
+export async function guardarLinea(lineaId, cambios) {
+  const patch = { updated_at: new Date().toISOString() };
+  if ("cantidad" in cambios) patch.cantidad = num(cambios.cantidad);
+  if ("costo_unitario" in cambios) patch.costo_unitario = num(cambios.costo_unitario);
+  if ("nombre_snapshot" in cambios) patch.nombre_snapshot = cambios.nombre_snapshot;
+  if ("unidad_snapshot" in cambios) patch.unidad_snapshot = cambios.unidad_snapshot;
+  const { error } = await supabase.from("inventario_conteo_lineas").update(patch).eq("id", lineaId);
+  if (error) throw error;
+  await cargarConteos();   // refresca el total corriente
+}
+
+// Agrega una línea ad-hoc (artículo fuera del catálogo). Opcionalmente lo guarda al catálogo.
+export async function agregarLineaAdHoc(conteoId, art, guardarEnCatalogo) {
+  let articuloId = null;
+  if (guardarEnCatalogo) {
+    const nuevo = await guardarArticulo({
+      nombre: art.nombre, unidad: art.unidad || "pza", categoria: art.categoria || "Sin categoría",
+      costo_unitario: num(art.costo_unitario), orden: 999,
+    });
+    articuloId = nuevo.id;
+  }
+  const { data, error } = await supabase.from("inventario_conteo_lineas").insert({
+    conteo_id: conteoId, articulo_id: articuloId,
+    nombre_snapshot: art.nombre, unidad_snapshot: art.unidad || "pza",
+    categoria_snapshot: art.categoria || "Sin categoría",
+    cantidad: num(art.cantidad), costo_unitario: num(art.costo_unitario),
+  }).select().single();
+  if (error) throw error;
+  await cargarConteos();
+  return data;
+}
+
+// Cierra el conteo y refresca el costo del catálogo con lo capturado (precios frescos).
+export async function cerrarConteo(conteoId) {
+  const lineas = await lineasDeConteo(conteoId);
+  for (const l of lineas) {
+    if (l.articulo_id && num(l.costo_unitario) > 0) {
+      await supabase.from("inventario_articulos")
+        .update({ costo_unitario: num(l.costo_unitario), updated_at: new Date().toISOString() })
+        .eq("id", l.articulo_id);
+    }
+  }
+  const { error } = await supabase.from("inventario_conteos")
+    .update({ estado: "cerrado", updated_at: new Date().toISOString() }).eq("id", conteoId);
+  if (error) throw error;
+  await Promise.allSettled([cargarConteos(), cargarInvArticulos()]);
+  logActividad("inventario", "cierre conteo");
+}
+
+// ── Catálogo CRUD ──
+export async function guardarArticulo(art) {
+  const row = {
+    nombre: art.nombre, unidad: art.unidad || "pza", categoria: art.categoria || "Sin categoría",
+    costo_unitario: num(art.costo_unitario), orden: num(art.orden), activo: art.activo !== false,
+    updated_at: new Date().toISOString(),
+  };
+  if (art.id) {
+    const { data, error } = await supabase.from("inventario_articulos").update(row).eq("id", art.id).select().single();
+    if (error) throw error; await cargarInvArticulos(); return data;
+  }
+  const { data, error } = await supabase.from("inventario_articulos").insert(row).select().single();
+  if (error) throw error; await cargarInvArticulos(); return data;
+}
+export async function bajaArticulo(id) {   // baja lógica (nunca borrado físico)
+  const { error } = await supabase.from("inventario_articulos")
+    .update({ activo: false, updated_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw error; await cargarInvArticulos();
+}
+export async function reactivarArticulo(id) {
+  const { error } = await supabase.from("inventario_articulos")
+    .update({ activo: true, updated_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw error; await cargarInvArticulos();
+}
+
+// ── Cierre mensual ──
+export async function guardarCierre(cierre) {
+  const row = {
+    periodo: cierre.periodo,
+    conteo_inicial_id: cierre.conteo_inicial_id || null,
+    conteo_final_id: cierre.conteo_final_id || null,
+    compras_sin_iva: num(cierre.compras_sin_iva),
+    consumo_familia: num(cierre.consumo_familia),
+    venta_neta: num(cierre.venta_neta),
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from("cierres_mensuales").upsert(row, { onConflict: "periodo" });
+  if (error) throw error;
+  await cargarCierres();
+  logActividad("inventario", "cierre " + cierre.periodo);
 }
 
 // ── Escribir ────────────────────────────────────────────────
