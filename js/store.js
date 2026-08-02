@@ -762,6 +762,12 @@ export async function reactivarArticulo(id) {
     .update({ activo: true, updated_at: new Date().toISOString() }).eq("id", id);
   if (error) throw error; await cargarInvArticulos();
 }
+// Borrado físico. Seguro para el histórico: las líneas de conteos pasados tienen
+// on delete set null (conservan nombre/unidad/valor en su snapshot).
+export async function borrarArticulo(id) {
+  const { error } = await supabase.from("inventario_articulos").delete().eq("id", id);
+  if (error) throw error; await cargarInvArticulos();
+}
 
 // ── Cierre mensual ──
 export async function guardarCierre(cierre) {

@@ -320,6 +320,12 @@ function screenCatalogo(cont) {
       });
       const baja = row.querySelector("[data-baja]");
       if (baja) baja.onclick = async () => { await (art.activo ? store.bajaArticulo(id) : store.reactivarArticulo(id)); render(); };
+      const del = row.querySelector("[data-del]");
+      if (del) del.onclick = async () => {
+        if (!confirm(`¿Borrar "${art.nombre}" del catálogo? No afecta conteos anteriores. Si solo no quieres contarlo este mes, mejor usa "Dar de baja".`)) return;
+        try { await store.borrarArticulo(id); render(); }
+        catch (err) { alert("No se pudo borrar: " + (err.message || err)); }
+      };
       const up = row.querySelector("[data-up]"), dn = row.querySelector("[data-dn]");
       if (up) up.onclick = () => mover(art, -1, arts, render);
       if (dn) dn.onclick = () => mover(art, +1, arts, render);
@@ -335,6 +341,7 @@ function filaArt(a, i, n) {
         <input class="inv-in" data-f="nombre" value="${esc(a.nombre)}" style="flex:1;min-height:40px" />
         <button class="btn sec chico inv-btn44" data-up ${i === 0 ? "disabled" : ""}>↑</button>
         <button class="btn sec chico inv-btn44" data-dn ${i === n - 1 ? "disabled" : ""}>↓</button>
+        <button class="btn peligro chico inv-btn44" data-del title="Borrar del catálogo">🗑</button>
       </div>
       <div class="inv-grid" style="margin-top:6px;grid-template-columns:1fr 70px 1fr">
         <div><span class="inv-lbl">Costo unit. (sin IVA)</span><input class="inv-in inv-num" data-f="costo" type="number" inputmode="decimal" min="0" step="any" value="${num(a.costo_unitario) || ""}" placeholder="0" /></div>
