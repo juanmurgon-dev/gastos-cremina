@@ -268,6 +268,45 @@ export function render(el) {
     return { nombre, cantidad: num(cantidad) || 1, unidad: uni, precio, proveedor, codigo: store.codigoDeInsumo(nombre), estatus: "pendiente" };
   }
 
+  // Autocompletar reutilizable para un input de insumo. Si se pasa proveedorPref,
+  // sube primero los insumos que compras a ESE proveedor y muestra su precio.
+  function montarAutocomplete(nomEl, sugEl, onPick, proveedorPref) {
+    const pnorm = proveedorPref ? store.normProv(proveedorPref) : "";
+    const precioDeProv = (i) => {
+      if (!pnorm) return null;
+      for (const r of (i.registros || [])) if (store.normProv(r.proveedor) === pnorm) return num(r.precio);
+      return null;
+    };
+    const cerrar = () => { sugEl.style.display = "none"; sugEl.innerHTML = ""; };
+    const abrir = () => {
+      let items = store.buscarInsumos(nomEl.value, 14);
+      if (pnorm) {
+        const de = (i) => (i.registros || []).some((r) => store.normProv(r.proveedor) === pnorm) ? 1 : 0;
+        items = items.map((i, idx) => ({ i, idx })).sort((a, b) => (de(b.i) - de(a.i)) || (a.idx - b.idx)).map((x) => x.i);
+      }
+      items = items.slice(0, 8);
+      if (!items.length) { cerrar(); return; }
+      sugEl.innerHTML = items.map((i) => {
+        const pp = precioDeProv(i);
+        const precio = pp != null ? pp : num(i.precioActual);
+        const marca = pp != null ? "✓ " : "";
+        return `<div class="ac-item" data-n="${esc(i.nombre)}" style="padding:11px 13px;cursor:pointer;border-bottom:1px solid var(--linea);font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:center">
+          <span>${esc(i.nombre)}</span>
+          <span class="sub" style="font-size:11.5px;white-space:nowrap">${esc(i.unidad || "")}${precio ? " · " + marca + money(precio) : ""}</span></div>`;
+      }).join("");
+      sugEl.style.display = "block";
+      sugEl.querySelectorAll(".ac-item").forEach((el2) => el2.addEventListener("mousedown", (ev) => {
+        ev.preventDefault();
+        nomEl.value = el2.dataset.n;
+        cerrar();
+        onPick(el2.dataset.n);
+      }));
+    };
+    nomEl.addEventListener("input", abrir);
+    nomEl.addEventListener("focus", abrir);
+    nomEl.addEventListener("blur", () => setTimeout(cerrar, 150));
+  }
+
   // Modal de revisión: el usuario ajusta/quita antes de agregar a la lista.
   function revisarPedido(items) {
     const bg = document.createElement("div");
@@ -368,6 +407,19 @@ export function render(el) {
         pintarItems(); guardar();
       });
       row.querySelector("[data-f='uni']").addEventListener("change", (ev) => { it.unidad = ev.target.value.trim(); pintarItems(); guardar(); });
+      // Autocompletar del nombre, con preferencia por el proveedor de este renglón.
+      const nomInp = row.querySelector("[data-f='nom']"), sugInp = row.querySelector("[data-sug]");
+      if (nomInp && sugInp) montarAutocomplete(nomInp, sugInp, (picked) => {
+        const hit = byName.get(picked.toLowerCase());
+        it.nombre = picked;
+        if (hit) {
+          it.unidad = hit.unidad || it.unidad;
+          const pr = provsDe(picked).find((p) => store.normProv(p.proveedor) === store.normProv(it.proveedor));
+          it.precio = pr ? pr.precio : num(hit.precioActual);   // precio de ESTE proveedor si lo hay
+        }
+        const c = store.codigoDeInsumo(picked); if (c) it.codigo = c;
+        pintarItems(); guardar();
+      }, it.proveedor);
       row.querySelector("[data-f='prov']").addEventListener("change", (ev) => {
         const v = ev.target.value;
         if (v === "__otro__") {
@@ -427,7 +479,10 @@ export function render(el) {
     return `<div class="barra-row" data-i="${idx}" style="gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--linea);padding:8px 0">
       <span class="etq" style="width:100%;display:flex;align-items:center;gap:8px">
         <button data-f="estat" class="chip" title="Toca para cambiar el estatus" style="background:${ie.c};border:none;cursor:pointer;flex:none;display:inline-flex;align-items:center;gap:5px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.28);padding:6px 11px">${ie.t} <span style="font-size:12px;opacity:.9">↻</span></button>
-        <input data-f="nom" value="${esc(it.nombre)}" title="Editar nombre del insumo" style="flex:1;min-width:0;font-weight:600;font-size:14px;border:1px solid var(--linea);border-radius:8px;padding:6px 8px;background:#fff" />
+        <span style="position:relative;flex:1;min-width:0">
+          <input data-f="nom" value="${esc(it.nombre)}" autocomplete="off" title="Editar nombre del insumo" style="width:100%;font-weight:600;font-size:14px;border:1px solid var(--linea);border-radius:8px;padding:6px 8px;background:#fff" />
+          <div data-sug style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--blanco);border:1px solid var(--linea);border-radius:12px;box-shadow:var(--sombra);max-height:230px;overflow-y:auto;margin-top:4px;text-align:left"></div>
+        </span>
         <span class="val" style="margin-left:auto;white-space:nowrap">${money(montoDe(it))}</span></span>
       ${sku ? `<span class="sub" style="width:100%;font-size:10.5px;margin:-2px 0 2px 2px">SKU ${esc(sku)}</span>` : ""}
       <input data-f="cant" type="number" step="any" inputmode="decimal" value="${it.cantidad}" style="width:64px" title="Cantidad" />
