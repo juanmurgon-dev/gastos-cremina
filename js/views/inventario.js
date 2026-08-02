@@ -282,10 +282,7 @@ function screenCatalogo(cont) {
       <div class="card" style="padding:10px">
         <input class="inv-in" id="busc" placeholder="Buscar artículo…" value="${esc(filtro)}" style="margin-bottom:8px" />
         <select class="inv-in" id="catf"><option value="">Todas las categorías</option>${cats.map((c) => `<option${c === catF ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>
-        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-          <button class="btn sec" id="nuevo" style="flex:1">+ Nuevo artículo</button>
-          <button class="btn sec" id="importar" style="flex:1">⬇ Traer insumos de mis tickets</button>
-        </div>
+        <button class="btn sec" id="nuevo" style="margin-top:8px">+ Nuevo artículo</button>
         <div id="nform"></div>
       </div>
       ${grupos.map((g) => `<div class="card" style="padding:0"><div style="padding:10px 12px;font-weight:700;background:var(--fondo-2,#f6f6f4)">${esc(g)}</div>
@@ -295,15 +292,6 @@ function screenCatalogo(cont) {
     busc.addEventListener("input", (e) => { filtro = e.target.value; render(); setTimeout(() => { const b = cont.querySelector("#busc"); if (b) { b.focus(); b.setSelectionRange(b.value.length, b.value.length); } }, 0); });
     cont.querySelector("#catf").addEventListener("change", (e) => { catF = e.target.value; render(); });
     cont.querySelector("#nuevo").onclick = () => formNuevo(cont.querySelector("#nform"), cats, render);
-    cont.querySelector("#importar").onclick = async (e) => {
-      if (!confirm("Traer al catálogo los insumos de tus tickets (de 'costo de venta'), usando el área como categoría y el último precio como costo. Los operativos (limpieza, etc.) se omiten. ¿Continuar?")) return;
-      e.target.disabled = true; e.target.textContent = "Importando…";
-      try {
-        const r = await store.importarInsumosACatalogo();
-        render();
-        alert(r.agregados ? `Se agregaron ${r.agregados} insumos de tus tickets${r.yaEstaban ? " (" + r.yaEstaban + " ya estaban)" : ""}. Revisa que los precios sean SIN IVA.` : "No hay insumos nuevos por traer (ya están todos en el catálogo).");
-      } catch (err) { e.target.disabled = false; e.target.textContent = "⬇ Traer insumos de mis tickets"; alert("No se pudo importar: " + (err.message || err)); }
-    };
 
     cont.querySelectorAll("[data-art]").forEach((row) => {
       const id = row.dataset.art;
