@@ -708,6 +708,31 @@ export async function guardarArticulo(art) {
   const { data, error } = await supabase.from("inventario_articulos").insert(row).select().single();
   if (error) throw error; await cargarInvArticulos(); return data;
 }
+// Trae al catálogo los insumos ya registrados en tus tickets (los de "costo de
+// venta"), usando el ÁREA del ticket como categoría y el último precio como costo.
+// Omite los que ya están en el catálogo (por nombre normalizado).
+export async function importarInsumosACatalogo() {
+  const existentes = new Set((state.invArticulos || []).map((a) => normIns(a.nombre)));
+  const insumos = preciosPorInsumo().filter((i) => i.tipo === "costo de venta");
+  const nuevos = insumos.filter((i) => !existentes.has(normIns(i.nombre)));
+  const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "Otro");
+  const ordenPorCat = {};
+  const filas = nuevos.map((i) => {
+    const categoria = cap(i.area || "otro");
+    ordenPorCat[categoria] = (ordenPorCat[categoria] || 0) + 1;
+    return {
+      nombre: i.nombre, unidad: i.unidad || "pza", categoria,
+      costo_unitario: num(i.precioActual), orden: ordenPorCat[categoria],
+    };
+  });
+  if (filas.length) {
+    const { error } = await supabase.from("inventario_articulos").insert(filas);
+    if (error) throw error;
+    await cargarInvArticulos();
+  }
+  return { agregados: filas.length, yaEstaban: insumos.length - filas.length };
+}
+
 export async function bajaArticulo(id) {   // baja lógica (nunca borrado físico)
   const { error } = await supabase.from("inventario_articulos")
     .update({ activo: false, updated_at: new Date().toISOString() }).eq("id", id);
