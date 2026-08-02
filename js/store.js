@@ -744,6 +744,22 @@ export async function borrarArticulo(id) {
   if (error) throw error; await cargarInvArticulos();
 }
 
+// Rellena el costo del CATÁLOGO con el precio sugerido de tus tickets (emparejamiento
+// difuso). Por defecto solo llena los que están en 0 (no pisa costos ya capturados).
+export async function sugerirCostosCatalogo(soloVacios = true) {
+  const arts = state.invArticulos || [];
+  const updates = [];
+  for (const a of arts) {
+    if (soloVacios && num(a.costo_unitario) > 0) continue;
+    const sug = costoSugerido(a.nombre);
+    if (sug.precio > 0) updates.push({ id: a.id, costo: sug.precio });
+  }
+  await Promise.all(updates.map((u) => supabase.from("inventario_articulos")
+    .update({ costo_unitario: u.costo, updated_at: new Date().toISOString() }).eq("id", u.id)));
+  if (updates.length) await cargarInvArticulos();
+  return { actualizados: updates.length, total: arts.length };
+}
+
 // ── Cierre mensual ──
 export async function guardarCierre(cierre) {
   const row = {

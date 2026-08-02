@@ -282,7 +282,10 @@ function screenCatalogo(cont) {
       <div class="card" style="padding:10px">
         <input class="inv-in" id="busc" placeholder="Buscar artículo…" value="${esc(filtro)}" style="margin-bottom:8px" />
         <select class="inv-in" id="catf"><option value="">Todas las categorías</option>${cats.map((c) => `<option${c === catF ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>
-        <button class="btn sec" id="nuevo" style="margin-top:8px">+ Nuevo artículo</button>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn sec" id="nuevo" style="flex:1">+ Nuevo artículo</button>
+          <button class="btn sec" id="costos" style="flex:1">💡 Costos desde tickets</button>
+        </div>
         <div id="nform"></div>
       </div>
       ${grupos.map((g) => `<div class="card" style="padding:0"><div style="padding:10px 12px;font-weight:700;background:var(--fondo-2,#f6f6f4)">${esc(g)}</div>
@@ -292,6 +295,15 @@ function screenCatalogo(cont) {
     busc.addEventListener("input", (e) => { filtro = e.target.value; render(); setTimeout(() => { const b = cont.querySelector("#busc"); if (b) { b.focus(); b.setSelectionRange(b.value.length, b.value.length); } }, 0); });
     cont.querySelector("#catf").addEventListener("change", (e) => { catF = e.target.value; render(); });
     cont.querySelector("#nuevo").onclick = () => formNuevo(cont.querySelector("#nform"), cats, render);
+    cont.querySelector("#costos").onclick = async (e) => {
+      if (!confirm("Rellenar el costo de los artículos (que están en $0) con el precio sugerido de tus tickets. No pisa costos ya capturados. Revisa que sean SIN IVA. ¿Continuar?")) return;
+      e.target.disabled = true; e.target.textContent = "Buscando…";
+      try {
+        const r = await store.sugerirCostosCatalogo(true);
+        render();
+        alert(r.actualizados ? `Se rellenaron ${r.actualizados} costos desde tickets. Revisa que sean sin IVA.` : "No encontré precios en tickets para los artículos vacíos.");
+      } catch (err) { e.target.disabled = false; e.target.textContent = "💡 Costos desde tickets"; alert("No se pudo: " + (err.message || err)); }
+    };
 
     cont.querySelectorAll("[data-art]").forEach((row) => {
       const id = row.dataset.art;
