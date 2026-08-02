@@ -6,16 +6,18 @@ import * as capturar from "./capturar.js";
 import * as tickets from "./tickets.js";
 import * as proveedores from "./proveedores.js";
 import * as ritmo from "./ritmo.js";
+import * as requisicion from "./requisicion.js";
 
-// Hub de Insumos: Capturar (registrar gasto) · Tickets (historial) · Precios.
+// Hub de Insumos: Capturar · Tickets · Requisición · Precios · Proveedores · Ritmo.
 export function render(el, ctx) {
   let sub = "capturar", limpiar = null;
   el.innerHTML = `
-    <div class="segmented" style="font-size:13px">
+    <div class="segmented" style="font-size:12px">
       <button data-s="capturar">Capturar</button>
       <button data-s="tickets">Tickets</button>
+      <button data-s="requisicion">Requis.</button>
       <button data-s="precios">Precios</button>
-      <button data-s="proveedores">Proveedores</button>
+      <button data-s="proveedores">Prov.</button>
       <button data-s="ritmo">Ritmo</button>
     </div>
     <div id="isub"></div>`;
@@ -28,6 +30,7 @@ export function render(el, ctx) {
     subEl.innerHTML = "";
     limpiar = sub === "capturar" ? capturar.render(subEl, ctx)
       : sub === "tickets" ? tickets.render(subEl, ctx)
+      : sub === "requisicion" ? requisicion.render(subEl, ctx)
       : sub === "proveedores" ? proveedores.render(subEl, ctx)
       : sub === "ritmo" ? ritmo.render(subEl, ctx)
       : renderPrecios(subEl);
