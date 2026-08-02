@@ -153,7 +153,7 @@ export function render(el) {
           <button class="btn sec chico" id="volver">‹ Volver</button>
           <span class="chip" id="rqChip" style="background:${e.c}">${e.t}</span>
         </div>
-        <p class="sub" style="margin:8px 0 0">Toca el estatus de cada producto para cambiarlo entre <b>Pendiente</b> y <b>Pedido</b>.</p>
+        <p class="sub" style="margin:8px 0 0">Toca el chip <b>↻</b> de cada insumo para cambiar su estatus (Pendiente → Pedido → Comprado). Puedes editar nombre, cantidad, unidad y precio directo en la lista.</p>
         <button class="btn" id="rqGuardar" style="margin-top:10px">💾 Guardar requisición</button>
         <div id="rqSaveMsg"></div>
       </div>
@@ -362,6 +362,12 @@ export function render(el) {
       });
       row.querySelector("[data-f='cant']").addEventListener("change", (ev) => { it.cantidad = num(ev.target.value); pintarItems(); guardar(); });
       row.querySelector("[data-f='precio']").addEventListener("change", (ev) => { it.precio = num(ev.target.value); pintarItems(); guardar(); });
+      row.querySelector("[data-f='nom']").addEventListener("change", (ev) => {
+        const v = ev.target.value.trim();
+        if (v) { it.nombre = v; const c = store.codigoDeInsumo(v); if (c) it.codigo = c; }
+        pintarItems(); guardar();
+      });
+      row.querySelector("[data-f='uni']").addEventListener("change", (ev) => { it.unidad = ev.target.value.trim(); pintarItems(); guardar(); });
       row.querySelector("[data-f='prov']").addEventListener("change", (ev) => {
         const v = ev.target.value;
         if (v === "__otro__") {
@@ -417,14 +423,17 @@ export function render(el) {
         </select>`
       : `<input data-f="prov" value="${esc(it.proveedor)}" placeholder="Proveedor" style="flex:1 1 100px;min-width:0" />`;
     const ie = estatusInfo(it.estatus);
+    const sku = it.codigo || store.codigoDeInsumo(it.nombre);
     return `<div class="barra-row" data-i="${idx}" style="gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--linea);padding:8px 0">
-      <span class="etq" style="width:100%;font-weight:600;display:flex;align-items:center;gap:8px">
-        <button data-f="estat" class="chip" title="Cambiar estatus" style="background:${ie.c};border:none;cursor:pointer;flex:none">${ie.t}</button>
-        <span style="flex:1;min-width:0">${esc(it.nombre)}${(it.codigo || store.codigoDeInsumo(it.nombre)) ? `<span class="sub" style="font-size:10.5px;margin-left:6px;white-space:nowrap">SKU ${esc(it.codigo || store.codigoDeInsumo(it.nombre))}</span>` : ""}</span>
-        <span class="val" style="margin-left:auto">${money(montoDe(it))}</span></span>
-      <input data-f="cant" type="number" step="any" inputmode="decimal" value="${it.cantidad}" style="width:64px" />
-      <span class="sub" style="align-self:center">${esc(it.unidad)} ×</span>
-      <input data-f="precio" type="number" step="any" inputmode="decimal" value="${it.precio}" style="width:80px" />
+      <span class="etq" style="width:100%;display:flex;align-items:center;gap:8px">
+        <button data-f="estat" class="chip" title="Toca para cambiar el estatus" style="background:${ie.c};border:none;cursor:pointer;flex:none;display:inline-flex;align-items:center;gap:5px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.28);padding:6px 11px">${ie.t} <span style="font-size:12px;opacity:.9">↻</span></button>
+        <input data-f="nom" value="${esc(it.nombre)}" title="Editar nombre del insumo" style="flex:1;min-width:0;font-weight:600;font-size:14px;border:1px solid var(--linea);border-radius:8px;padding:6px 8px;background:#fff" />
+        <span class="val" style="margin-left:auto;white-space:nowrap">${money(montoDe(it))}</span></span>
+      ${sku ? `<span class="sub" style="width:100%;font-size:10.5px;margin:-2px 0 2px 2px">SKU ${esc(sku)}</span>` : ""}
+      <input data-f="cant" type="number" step="any" inputmode="decimal" value="${it.cantidad}" style="width:64px" title="Cantidad" />
+      <input data-f="uni" value="${esc(it.unidad)}" placeholder="uni" style="width:58px" title="Unidad" />
+      <span class="sub" style="align-self:center">×</span>
+      <input data-f="precio" type="number" step="any" inputmode="decimal" value="${it.precio}" style="width:80px" title="Precio" />
       ${provCampo}
       <button class="linkbtn" data-del style="color:var(--rojo);padding:0 6px;font-size:16px">✕</button>
     </div>`;
