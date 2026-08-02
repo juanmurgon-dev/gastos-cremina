@@ -12,7 +12,28 @@ function selUnidad(actual, attrs = "") {
   const cur = (actual || "pza").trim();
   const ops = UNIDADES.slice();
   if (!ops.some((u) => u.toLowerCase() === cur.toLowerCase())) ops.push(cur);
-  return `<select ${attrs}>${ops.map((u) => `<option${u.toLowerCase() === cur.toLowerCase() ? " selected" : ""}>${esc(u)}</option>`).join("")}</select>`;
+  return `<select data-usel ${attrs}>${ops.map((u) => `<option${u.toLowerCase() === cur.toLowerCase() ? " selected" : ""}>${esc(u)}</option>`).join("")}<option value="__otra__">+ Otra…</option></select>`;
+}
+
+// Habilita la opción "+ Otra…" en los selectores de unidad: pregunta una unidad
+// nueva, la agrega como opción y la deja seleccionada.
+function wireOtraUnidad(root) {
+  root.querySelectorAll("select[data-usel]").forEach((sel) => {
+    if (sel._otra) return; sel._otra = true;
+    sel.addEventListener("focus", () => { sel.dataset.prev = sel.value; });
+    sel.addEventListener("change", () => {
+      if (sel.value !== "__otra__") return;
+      const u = (prompt("Nueva unidad (ej. botella, caja, manojo):") || "").trim();
+      if (u && !["__otra__"].includes(u)) {
+        if (![...sel.options].some((o) => o.value.toLowerCase() === u.toLowerCase())) {
+          sel.add(new Option(u, u), sel.options.length - 1);   // antes de "+ Otra…"
+        }
+        sel.value = u;
+      } else {
+        sel.value = sel.dataset.prev || "pza";
+      }
+    });
+  });
 }
 const hoyISO = () => new Date().toISOString().slice(0, 10);
 const horaAhora = () => new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
@@ -174,6 +195,7 @@ async function screenConteo(cont) {
       onEdit();
     });
   });
+  wireOtraUnidad(cont);
   recalc();
 
   // Botón: rellena de golpe los costos vacíos con la sugerencia de tickets.
@@ -219,6 +241,7 @@ async function screenConteo(cont) {
         <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="a-cat2" checked style="width:auto;min-height:auto" /> Guardarlo en el catálogo para el próximo mes</label>
         <button class="btn" id="a-add">Agregar al conteo</button>
       </div>`;
+    wireOtraUnidad(f);
     f.querySelector("#a-add").onclick = async (e) => {
       const nom = f.querySelector("#a-nom").value.trim();
       if (!nom) { f.querySelector("#a-nom").focus(); return; }
@@ -330,6 +353,7 @@ function screenCatalogo(cont) {
       if (up) up.onclick = () => mover(art, -1, arts, render);
       if (dn) dn.onclick = () => mover(art, +1, arts, render);
     });
+    wireOtraUnidad(cont);
   }
 }
 
@@ -364,6 +388,7 @@ function formNuevo(host, cats, onDone) {
       <input class="inv-in inv-num" id="n-costo" type="number" inputmode="decimal" placeholder="Costo unit. (sin IVA)" />
       <button class="btn" id="n-add">Guardar artículo</button>
     </div>`;
+  wireOtraUnidad(host);
   host.querySelector("#n-add").onclick = async (e) => {
     const nom = host.querySelector("#n-nom").value.trim();
     if (!nom) { host.querySelector("#n-nom").focus(); return; }
