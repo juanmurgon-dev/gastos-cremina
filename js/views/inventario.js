@@ -5,6 +5,15 @@ import * as store from "../store.js";
 import { money, num } from "../store.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+// Unidades estándar (mismas que convierten en recetas: kg↔g, L↔ml, pza). Texto libre no,
+// para que todo quede convertible. Si un artículo trae otra unidad, se conserva como opción.
+const UNIDADES = ["kg", "g", "L", "ml", "pza"];
+function selUnidad(actual, attrs = "") {
+  const cur = (actual || "pza").trim();
+  const ops = UNIDADES.slice();
+  if (!ops.some((u) => u.toLowerCase() === cur.toLowerCase())) ops.push(cur);
+  return `<select ${attrs}>${ops.map((u) => `<option${u.toLowerCase() === cur.toLowerCase() ? " selected" : ""}>${esc(u)}</option>`).join("")}</select>`;
+}
 const hoyISO = () => new Date().toISOString().slice(0, 10);
 const horaAhora = () => new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
 const primerDiaMes = (iso) => (iso || hoyISO()).slice(0, 8) + "01";
@@ -147,11 +156,13 @@ async function screenConteo(cont) {
   }
   cont.querySelectorAll("[data-linea]").forEach((row) => {
     const id = row.dataset.linea;
-    row.querySelectorAll("input").forEach((inp) => {
-      inp.addEventListener("input", () => {
-        recalc();
-        clearTimeout(timers[id]); timers[id] = setTimeout(() => guardar(id, row), 800);
-      });
+    const onEdit = () => {
+      recalc();
+      clearTimeout(timers[id]); timers[id] = setTimeout(() => guardar(id, row), 800);
+    };
+    row.querySelectorAll("input, select").forEach((inp) => {
+      inp.addEventListener("input", onEdit);
+      inp.addEventListener("change", onEdit);   // los <select> disparan 'change'
     });
   });
   recalc();
@@ -172,7 +183,7 @@ async function screenConteo(cont) {
         <input class="inv-in" id="a-nom" placeholder="Nombre del artículo" />
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <input class="inv-in" id="a-cat" placeholder="Categoría" value="${esc(cats[0] || "")}" />
-          <input class="inv-in" id="a-uni" placeholder="Unidad (kg, L, pza)" value="pza" />
+          ${selUnidad("pza", 'class="inv-in" id="a-uni"')}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <input class="inv-in inv-num" id="a-cant" type="number" inputmode="decimal" placeholder="Cantidad" />
@@ -203,7 +214,7 @@ function filaLinea(l) {
       <input class="inv-in inv-nom" style="min-height:40px" value="${esc(l.nombre_snapshot)}" />
       <div class="inv-grid" style="margin-top:6px">
         <div><span class="inv-lbl">Cantidad</span><input class="inv-in inv-num inv-cant" type="number" inputmode="decimal" min="0" step="any" value="${num(l.cantidad) || ""}" placeholder="0" /></div>
-        <div style="width:56px"><span class="inv-lbl">Unidad</span><input class="inv-in inv-uni" style="text-align:center;padding:8px 4px" value="${esc(l.unidad_snapshot)}" /></div>
+        <div style="width:62px"><span class="inv-lbl">Unidad</span>${selUnidad(l.unidad_snapshot, 'class="inv-in inv-uni" style="padding:8px 4px"')}</div>
         <div><span class="inv-lbl">Costo unit.</span><input class="inv-in inv-num inv-costo" type="number" inputmode="decimal" min="0" step="any" value="${num(l.costo_unitario) || ""}" placeholder="0" /></div>
         <div style="text-align:right;min-width:64px"><span class="inv-lbl">Valor</span><span class="inv-val" style="font-weight:700;color:#16514f">$0</span></div>
       </div>
@@ -263,12 +274,14 @@ function screenCatalogo(cont) {
       const id = row.dataset.art;
       const art = arts.find((a) => a.id === id);
       const timers = {};
-      row.querySelectorAll("input[data-f]").forEach((inp) => {
-        inp.addEventListener("input", () => {
-          clearTimeout(timers.t); timers.t = setTimeout(() => {
-            store.guardarArticulo({ id, nombre: row.querySelector('[data-f="nombre"]').value, unidad: row.querySelector('[data-f="unidad"]').value, categoria: art.categoria, costo_unitario: row.querySelector('[data-f="costo"]').value, orden: art.orden, activo: art.activo }).catch(() => {});
-          }, 700);
-        });
+      const guardarArt = () => {
+        clearTimeout(timers.t); timers.t = setTimeout(() => {
+          store.guardarArticulo({ id, nombre: row.querySelector('[data-f="nombre"]').value, unidad: row.querySelector('[data-f="unidad"]').value, categoria: art.categoria, costo_unitario: row.querySelector('[data-f="costo"]').value, orden: art.orden, activo: art.activo }).catch(() => {});
+        }, 700);
+      };
+      row.querySelectorAll("[data-f]").forEach((inp) => {
+        inp.addEventListener("input", guardarArt);
+        inp.addEventListener("change", guardarArt);
       });
       const baja = row.querySelector("[data-baja]");
       if (baja) baja.onclick = async () => { await (art.activo ? store.bajaArticulo(id) : store.reactivarArticulo(id)); render(); };
@@ -290,7 +303,7 @@ function filaArt(a, i, n) {
       </div>
       <div class="inv-grid" style="margin-top:6px;grid-template-columns:1fr 70px 1fr">
         <div><span class="inv-lbl">Costo unit. (sin IVA)</span><input class="inv-in inv-num" data-f="costo" type="number" inputmode="decimal" min="0" step="any" value="${num(a.costo_unitario) || ""}" placeholder="0" /></div>
-        <div><span class="inv-lbl">Unidad</span><input class="inv-in" data-f="unidad" value="${esc(a.unidad)}" style="text-align:center;padding:8px 4px" /></div>
+        <div><span class="inv-lbl">Unidad</span>${selUnidad(a.unidad, 'class="inv-in" data-f="unidad" style="padding:8px 4px"')}</div>
         <div style="align-self:end"><button class="btn sec chico inv-btn44" data-baja style="width:100%">${a.activo ? "Dar de baja" : "Reactivar"}</button></div>
       </div>
     </div>`;
@@ -304,7 +317,7 @@ function formNuevo(host, cats, onDone) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <input class="inv-in" id="n-cat" placeholder="Categoría" list="n-cats" value="${esc(cats[0] || "")}" />
         <datalist id="n-cats">${cats.map((c) => `<option>${esc(c)}</option>`).join("")}</datalist>
-        <input class="inv-in" id="n-uni" placeholder="Unidad" value="pza" />
+        ${selUnidad("pza", 'class="inv-in" id="n-uni"')}
       </div>
       <input class="inv-in inv-num" id="n-costo" type="number" inputmode="decimal" placeholder="Costo unit. (sin IVA)" />
       <button class="btn" id="n-add">Guardar artículo</button>
