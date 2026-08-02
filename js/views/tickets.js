@@ -5,7 +5,9 @@ import { crearEditor } from "./ticket-editor.js";
 import { descargarCSV } from "../csv.js";
 
 export function render(el) {
+  let orden = "gasto";   // "gasto" = lista por fecha del ticket · "subida" = agrupado por día de subida
   el.innerHTML = `
+    <div class="segmented" style="font-size:12.5px;margin-bottom:10px"><button data-o="gasto">Fecha del gasto</button><button data-o="subida">Día de subida</button></div>
     <input id="buscar" placeholder="Buscar proveedor o artículo…" style="margin-bottom:10px" />
     <button class="btn sec chico" id="exp" style="margin-bottom:14px">⬇ Exportar CSV</button>
     <div id="lista"></div>`;
@@ -14,16 +16,20 @@ export function render(el) {
   const buscar = el.querySelector("#buscar");
   buscar.addEventListener("input", pintar);
   el.querySelector("#exp").addEventListener("click", exportar);
+  const obtns = [...el.querySelectorAll(".segmented button[data-o]")];
+  const marcarO = () => obtns.forEach((b) => b.classList.toggle("act", b.dataset.o === orden));
+  obtns.forEach((b) => b.addEventListener("click", () => { orden = b.dataset.o; marcarO(); pintar(); }));
+  marcarO();
 
   function exportar() {
     const filas = [];
     for (const t of store.state.tickets) {
       for (const l of t.lineas || []) {
-        filas.push([t.fecha, t.proveedor, l.area, l.descripcion, l.cantidad, l.unidad,
+        filas.push([t.fecha, (t.creadoEn || "").slice(0, 10), t.proveedor, l.area, l.descripcion, l.cantidad, l.unidad,
           l.precio_unitario, l.monto, l.tipo, l.notas, t.creadoPor || "", t.editadoPor || ""]);
       }
     }
-    descargarCSV("tickets-cremina", ["Fecha", "Proveedor", "Área", "Descripción", "Cantidad",
+    descargarCSV("tickets-cremina", ["Fecha gasto", "Fecha subida", "Proveedor", "Área", "Descripción", "Cantidad",
       "Unidad", "Precio Unitario", "Monto Total", "Tipo de Gasto", "Notas", "Registrado por", "Editado por"], filas);
   }
 
@@ -43,7 +49,24 @@ export function render(el) {
       lista.innerHTML = `<div class="vacio">${q ? "Sin resultados." : "Aún no hay tickets. Captura el primero en 📸."}</div>`;
       return;
     }
-    lista.innerHTML = ts.map(filaHTML).join("");
+    if (orden === "subida") {
+      // Agrupa por DÍA DE SUBIDA (t.creadoEn), del más reciente al más viejo.
+      const grupos = new Map();
+      for (const t of [...ts].sort((a, b) => (b.creadoEn || "").localeCompare(a.creadoEn || ""))) {
+        const dia = (t.creadoEn || "").slice(0, 10);
+        if (!grupos.has(dia)) grupos.set(dia, []);
+        grupos.get(dia).push(t);
+      }
+      lista.innerHTML = [...grupos.entries()].map(([dia, arr]) => {
+        const tot = arr.reduce((a, t) => a + totalTicket(t), 0);
+        const cab = dia ? "📥 Subidos el " + fechaBonita(dia) : "📥 Sin fecha de subida";
+        return `<div class="sub" style="font-weight:700;margin:14px 2px 8px;display:flex;justify-content:space-between">
+            <span>${cab}</span><span>${arr.length} ticket(s) · ${money(tot)}</span></div>
+          ${arr.map(filaHTML).join("")}`;
+      }).join("");
+    } else {
+      lista.innerHTML = ts.map(filaHTML).join("");
+    }
     lista.querySelectorAll("[data-id]").forEach((row) =>
       row.addEventListener("click", () => abrirModal(row.dataset.id)));
   }
@@ -52,13 +75,14 @@ export function render(el) {
     const areas = [...new Set((t.lineas || []).map((l) => l.area))];
     const chips = areas.map((a) =>
       `<span class="chip" style="background:${COLOR_AREA[a] || "#8a8f98"}">${a}</span>`).join(" ");
+    const subido = t.creadoEn ? " · 📥 subido " + fechaBonita((t.creadoEn || "").slice(0, 10)) : "";
     return `
       <div class="ticket" data-id="${t.id}">
         <div class="cab">
           <span class="prov">${escapar(t.proveedor || "Sin proveedor")}</span>
           <span class="monto">${money(totalTicket(t))}</span>
         </div>
-        <div class="meta">${fechaBonita(t.fecha)} · ${(t.lineas || []).length} líneas</div>
+        <div class="meta">${fechaBonita(t.fecha)} · ${(t.lineas || []).length} líneas${subido}</div>
         <div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${chips}</div>
         ${t.aviso ? `<div class="aviso">⚠️ ${escapar(t.aviso)}</div>` : ""}
       </div>`;
@@ -76,7 +100,8 @@ export function render(el) {
         ${t.fotoUrl ? `<a href="${t.fotoUrl}" target="_blank" class="pill" style="margin-bottom:12px">📷 Ver foto</a>` : ""}
         <div id="editor"></div>
         <div class="sub" style="margin:10px 2px 4px">
-          ${t.creadoPor ? "🧾 Registrado por <b>" + escapar(t.creadoPor) + "</b>" : ""}
+          ${t.creadoEn ? "📥 Subido el <b>" + fechaHora(t.creadoEn) + "</b>" : ""}
+          ${t.creadoPor ? "<br>🧾 Registrado por <b>" + escapar(t.creadoPor) + "</b>" : ""}
           ${t.editadoPor ? "<br>✏️ Última edición por <b>" + escapar(t.editadoPor) + "</b>" + (t.editadoEn ? " · " + fechaHora(t.editadoEn) : "") : ""}
         </div>
         <div class="fila" style="margin-top:6px">
