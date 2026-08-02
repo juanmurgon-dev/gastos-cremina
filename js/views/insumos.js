@@ -12,13 +12,12 @@ import * as requisicion from "./requisicion.js";
 export function render(el, ctx) {
   let sub = "capturar", limpiar = null;
   el.innerHTML = `
-    <div class="segmented" style="font-size:12px">
+    <div class="segmented" style="font-size:12.5px">
       <button data-s="capturar">Capturar</button>
       <button data-s="tickets">Tickets</button>
       <button data-s="requisicion">Requis.</button>
       <button data-s="precios">Precios</button>
       <button data-s="proveedores">Prov.</button>
-      <button data-s="ritmo">Ritmo</button>
     </div>
     <div id="isub"></div>`;
   const subEl = el.querySelector("#isub");
@@ -32,7 +31,6 @@ export function render(el, ctx) {
       : sub === "tickets" ? tickets.render(subEl, ctx)
       : sub === "requisicion" ? requisicion.render(subEl, ctx)
       : sub === "proveedores" ? proveedores.render(subEl, ctx)
-      : sub === "ritmo" ? ritmo.render(subEl, ctx)
       : renderPrecios(subEl);
   }
   marcar(); renderSub();
