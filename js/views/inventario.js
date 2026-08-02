@@ -37,6 +37,7 @@ function inyectarCSS() {
     details.inv-cat>summary{list-style:none;cursor:pointer;padding:12px;min-height:44px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;background:var(--fondo-2,#f6f6f4)}
     details.inv-cat>summary::-webkit-details-marker{display:none}
     .inv-btn44{min-height:44px;min-width:44px}
+    .inv-sug{margin-top:4px;font-size:12px;color:#16514f;background:#eafaf0;border:1px solid #b8e6cd;border-radius:8px;padding:4px 8px;min-height:32px;width:100%;cursor:pointer}
     .inv-foot{padding-bottom:env(safe-area-inset-bottom,0)}
   `;
   document.head.appendChild(st);
@@ -116,6 +117,8 @@ async function screenConteo(cont) {
       <div class="sub" style="font-size:11px;margin-top:6px">💡 Captura todo <b>SIN IVA</b> (el IVA que pagas al proveedor se acredita, no es costo).</div>
     </div>
 
+    <button class="btn sec" id="sugtodos" style="width:100%;margin:2px 0 8px">💡 Sugerir costos desde tickets (llena los vacíos)</button>
+
     ${cats.map((c, i) => `
       <details class="inv-cat" name="invcat" ${i === 0 ? "open" : ""} data-cat="${esc(c)}">
         <summary><span>${esc(c)}</span><span class="sub" style="font-weight:600">$<span class="inv-sub">0</span> · ${mapa.get(c).length}</span></summary>
@@ -164,8 +167,32 @@ async function screenConteo(cont) {
       inp.addEventListener("input", onEdit);
       inp.addEventListener("change", onEdit);   // los <select> disparan 'change'
     });
+    const chip = row.querySelector(".inv-sug");
+    if (chip) chip.addEventListener("click", () => {
+      row.querySelector(".inv-costo").value = chip.dataset.sug;
+      chip.remove();
+      onEdit();
+    });
   });
   recalc();
+
+  // Botón: rellena de golpe los costos vacíos con la sugerencia de tickets.
+  cont.querySelector("#sugtodos").onclick = async () => {
+    const items = [];
+    cont.querySelectorAll("[data-linea]").forEach((row) => {
+      const costoInp = row.querySelector(".inv-costo");
+      const chip = row.querySelector(".inv-sug");
+      if (chip && !num(costoInp.value)) {
+        costoInp.value = chip.dataset.sug; chip.remove();
+        items.push({ id: row.dataset.linea, costo: chip.dataset.sug });
+      }
+    });
+    recalc();
+    if (!items.length) { setStatus("No hay costos vacíos con sugerencia"); return; }
+    setStatus("Guardando…");
+    try { await store.guardarCostosLote(items); setStatus("Guardado " + horaAhora() + " · " + items.length + " costos"); }
+    catch (e) { setStatus("⚠ error al guardar"); }
+  };
 
   cont.querySelector("#cerrar").onclick = async (e) => {
     if (!confirm("¿Cerrar este conteo? Se actualizarán los costos del catálogo con lo que capturaste. Ya no podrás editarlo.")) return;
@@ -208,6 +235,14 @@ async function screenConteo(cont) {
   };
 }
 
+// Chip con el costo sugerido desde tickets (si hay y difiere del capturado).
+function sugChip(l) {
+  const sug = store.costoSugerido(l.nombre_snapshot);
+  if (!(sug.precio > 0)) return "";
+  if (Math.round(num(l.costo_unitario) * 100) === Math.round(sug.precio * 100)) return "";
+  return `<button type="button" class="inv-sug" data-sug="${sug.precio}" title="Sugerido de tus tickets: ${esc(sug.insumo)}">💡 ${money(sug.precio)}</button>`;
+}
+
 function filaLinea(l) {
   return `
     <div class="inv-linea" data-linea="${l.id}">
@@ -215,7 +250,7 @@ function filaLinea(l) {
       <div class="inv-grid" style="margin-top:6px">
         <div><span class="inv-lbl">Cantidad</span><input class="inv-in inv-num inv-cant" type="number" inputmode="decimal" min="0" step="any" value="${num(l.cantidad) || ""}" placeholder="0" /></div>
         <div style="width:62px"><span class="inv-lbl">Unidad</span>${selUnidad(l.unidad_snapshot, 'class="inv-in inv-uni" style="padding:8px 4px"')}</div>
-        <div><span class="inv-lbl">Costo unit.</span><input class="inv-in inv-num inv-costo" type="number" inputmode="decimal" min="0" step="any" value="${num(l.costo_unitario) || ""}" placeholder="0" /></div>
+        <div><span class="inv-lbl">Costo unit.</span><input class="inv-in inv-num inv-costo" type="number" inputmode="decimal" min="0" step="any" value="${num(l.costo_unitario) || ""}" placeholder="0" />${sugChip(l)}</div>
         <div style="text-align:right;min-width:64px"><span class="inv-lbl">Valor</span><span class="inv-val" style="font-weight:700;color:#16514f">$0</span></div>
       </div>
     </div>`;

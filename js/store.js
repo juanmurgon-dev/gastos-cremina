@@ -248,6 +248,15 @@ export function precioInsumo(nombre) {
   return hit ? num(hit.precioActual) : 0;
 }
 
+// Costo sugerido para un artículo de inventario, buscando el insumo más parecido
+// en tus tickets (emparejamiento difuso) y tomando su último precio de compra.
+// Devuelve { precio, insumo } — precio 0 si no encontró nada razonable.
+export function costoSugerido(nombre) {
+  const match = emparejarInsumo(nombre);
+  const precio = precioInsumo(match);
+  return { precio, insumo: precio > 0 ? match : "" };
+}
+
 // Renglones de la receta de un platillo o preparación.
 export function recetasDe(producto) {
   return (state.recetas || []).filter((r) => r.producto === producto);
@@ -635,7 +644,8 @@ export async function crearConteo(fecha) {
     const filas = arts.map((a) => ({
       conteo_id: data.id, articulo_id: a.id,
       nombre_snapshot: a.nombre, unidad_snapshot: a.unidad, categoria_snapshot: a.categoria,
-      cantidad: 0, costo_unitario: num(a.costo_unitario),
+      // Si el catálogo no trae costo, sugiere el de tus tickets (último precio de compra).
+      cantidad: 0, costo_unitario: num(a.costo_unitario) || costoSugerido(a.nombre).precio,
     }));
     const { error: e2 } = await supabase.from("inventario_conteo_lineas").insert(filas);
     if (e2) throw e2;
@@ -655,6 +665,14 @@ export async function guardarLinea(lineaId, cambios) {
   const { error } = await supabase.from("inventario_conteo_lineas").update(patch).eq("id", lineaId);
   if (error) throw error;
   await cargarConteos();   // refresca el total corriente
+}
+
+// Guarda el costo de varias líneas de golpe (para el botón "sugerir costos de tickets").
+export async function guardarCostosLote(items) {
+  await Promise.all((items || []).map((it) =>
+    supabase.from("inventario_conteo_lineas")
+      .update({ costo_unitario: num(it.costo), updated_at: new Date().toISOString() }).eq("id", it.id)));
+  await cargarConteos();
 }
 
 // Agrega una línea ad-hoc (artículo fuera del catálogo). Opcionalmente lo guarda al catálogo.
