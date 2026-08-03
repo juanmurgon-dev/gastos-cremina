@@ -199,6 +199,8 @@ export async function guardarFicha(producto, f) {
   const row = {
     producto,
     categoria: String((f && f.categoria) || "").slice(0, 60),
+    numero: String((f && f.numero) || "").slice(0, 30),
+    observaciones: String((f && f.observaciones) || "").slice(0, 4000),
     tiempo: pasos.length ? pasos.reduce((a, p) => a + (num(p.tiempo) || 0), 0) : (num(f && f.tiempo) || 0),
     procedimiento: pasos.map((p) => p.descripcion).join("\n").slice(0, 4000), // compat
     pasos,

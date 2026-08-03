@@ -292,6 +292,8 @@ export function render(el) {
       ? fichaAct.pasos.map((p) => ({ descripcion: p.descripcion || "", tiempo: p.tiempo || "" }))
       : String(fichaAct.procedimiento || "").split(/\n/).map((s) => s.trim()).filter(Boolean).map((d) => ({ descripcion: d, tiempo: "" }));
     let foto = fichaAct.foto || "";
+    let numero = fichaAct.numero || "";
+    let observaciones = fichaAct.observaciones || "";
     let pasoTmp = { descripcion: "", tiempo: "" };
 
     const precioVenta = plat ? plat.precio : 0;
@@ -322,6 +324,7 @@ export function render(el) {
           <button class="btn sec chico" id="volver" style="margin-bottom:10px">← Volver</button>
 
           <div class="sub" style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--verde);font-weight:700">Ficha técnica</div>
+          <label class="campo" style="margin-top:6px"><span>Nº de receta</span><input id="num" placeholder="Ej. S1" value="${esc(numero)}" style="max-width:160px" /></label>
           ${esPrep
             ? `<label class="campo"><span>Nombre de la preparación</span><input id="nom" placeholder="Ej. Salsa verde" value="${esc(nom)}" /></label>
                <div class="fila" style="gap:8px">
@@ -377,7 +380,13 @@ export function render(el) {
             </div>
           </div>
 
+          <div style="margin-top:18px;border-top:1px solid var(--linea);padding-top:12px">
+            <div class="sub" style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--verde);font-weight:700;margin-bottom:6px">Observaciones</div>
+            <textarea id="obs" rows="4" placeholder="Notas de preparación, almacenamiento, cuidados…" style="width:100%;font-family:inherit;font-size:14px;padding:10px;border-radius:10px;border:1px solid var(--linea);resize:vertical">${esc(observaciones)}</textarea>
+          </div>
+
           <button class="btn" id="guardar" style="margin-top:14px">💾 Guardar ficha</button>
+          <button class="btn sec" id="fichaPdf" style="margin-top:8px">📄 Ficha técnica (PDF)</button>
           ${existentes.length ? `<button class="btn sec chico" id="borrar" style="margin-top:6px;color:var(--rojo)">Borrar receta</button>` : ""}
           <div id="msg" class="sub" style="text-align:center;margin-top:8px;min-height:1em"></div>
         </div>`;
@@ -468,7 +477,14 @@ export function render(el) {
         const op = cont.querySelector("#porc"); op.addEventListener("input", (e) => { porciones = e.target.value; }); op.addEventListener("change", draw);
         const ob = cont.querySelector("#obj"); ob.addEventListener("input", (e) => { objetivo = e.target.value; }); ob.addEventListener("change", draw);
       }
+      cont.querySelector("#num").addEventListener("input", (e) => { numero = e.target.value; });
+      cont.querySelector("#obs").addEventListener("input", (e) => { observaciones = e.target.value; });
       cont.querySelector("#guardar").addEventListener("click", guardar);
+      cont.querySelector("#fichaPdf").addEventListener("click", () => fichaPDF({
+        nombre: (esPrep ? nom : nombre) || "Receta", numero,
+        rendimiento: esPrep ? rendimiento : porciones, unidad: esPrep ? (unidadRinde || "") : "porciones",
+        items, pasos, observaciones, unidadDe,
+      }));
       const bb = cont.querySelector("#borrar");
       if (bb) bb.addEventListener("click", borrar);
     }
@@ -481,7 +497,7 @@ export function render(el) {
       if (!limpios.length) { msg.textContent = "Agrega al menos un ingrediente con cantidad."; return; }
       msg.textContent = "Guardando…";
       try {
-        const ficha = { categoria, tiempo: num(tiempo), pasos: pasos.filter((p) => p.descripcion.trim()), foto };
+        const ficha = { categoria, tiempo: num(tiempo), pasos: pasos.filter((p) => p.descripcion.trim()), foto, numero, observaciones };
         await store.guardarReceta(
           destino,
           limpios.map((it) => ({ insumo: it.insumo.trim(), cantidad: num(it.cantidad), unidad: it.unidad || unidadDe(it.insumo), merma: num(it.merma) || 0 })),
@@ -503,4 +519,115 @@ export function render(el) {
 
   shell();
   return () => {};
+}
+
+// ── Ficha técnica en PDF (formato de cocina) con costeo desde tus tickets ──
+async function fichaPDF(data) {
+  const fmtC = (n) => { const r = Math.round(num(n) * 1000) / 1000; return String(r); };
+  const filas = (data.items || [])
+    .filter((it) => (it.insumo || "").trim() && num(it.cantidad) > 0)
+    .map((it) => {
+      const uLinea = it.unidad || data.unidadDe(it.insumo);
+      const importe = store.costoLinea(it.insumo, it.cantidad, uLinea);
+      const cant = num(it.cantidad);
+      return {
+        codigo: store.codigoDeInsumo(it.insumo) || "",
+        insumo: it.insumo, cantidad: cant, unidad: uLinea,
+        precioUnit: cant > 0 ? importe / cant : 0, importe,
+      };
+    });
+  const total = filas.reduce((a, f) => a + f.importe, 0);
+  const d = new Date();
+  const fechaTxt = `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
+  const restaurante = (store.state.config.marcaNombre || store.state.orgNombre || "").trim();
+
+  try {
+    const mod = await import("https://esm.sh/jspdf@2.5.2");
+    const JsPDF = mod.jsPDF || (mod.default && mod.default.jsPDF) || mod.default;
+    const doc = new JsPDF({ unit: "mm", format: "a4" });
+    const M = 14, W = 210, H = 297;
+    const cols = [14, 36, 96, 120, 148, 172, 196];   // Código|Ingrediente|Cantidad|Un.|P.Unit|Importe
+    let y = 16;
+
+    doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(14, 58, 57);
+    doc.text(String(data.nombre || "Receta").toUpperCase(), W / 2, y, { align: "center" }); y += 6.5;
+    if (restaurante) { doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(150, 145, 132); doc.text(restaurante, W / 2, y, { align: "center" }); y += 5; }
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(60, 60, 60);
+    const meta = [data.numero ? "Nº " + data.numero : "", data.rendimiento ? "Rendimiento: " + fmtC(data.rendimiento) + " " + (data.unidad || "") : "", "Fecha: " + fechaTxt].filter(Boolean).join("      ·      ");
+    doc.text(meta, W / 2, y, { align: "center" }); y += 6;
+
+    // Tabla de ingredientes
+    const tableTop = y, headH = 8, rowH = 7;
+    doc.setFillColor(230, 236, 230); doc.rect(cols[0], y, cols[6] - cols[0], headH, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7.8); doc.setTextColor(14, 58, 57);
+    doc.text("CÓDIGO", cols[0] + 2, y + 5.2);
+    doc.text("INGREDIENTE", cols[1] + 2, y + 5.2);
+    doc.text("CANT.", cols[2] + 2, y + 5.2);
+    doc.text("UN.", cols[3] + 2, y + 5.2);
+    doc.text("P. UNIT.", cols[5] - 2, y + 5.2, { align: "right" });
+    doc.text("IMPORTE", cols[6] - 2, y + 5.2, { align: "right" });
+    y += headH;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(34, 32, 26);
+    for (const f of filas) {
+      doc.text(String(f.codigo).slice(0, 10), cols[0] + 2, y + 4.8);
+      doc.text(String(f.insumo).slice(0, 40), cols[1] + 2, y + 4.8);
+      doc.text(fmtC(f.cantidad), cols[2] + 2, y + 4.8);
+      doc.text(String(f.unidad || "").slice(0, 8), cols[3] + 2, y + 4.8);
+      doc.text(f.precioUnit ? money(f.precioUnit) : "—", cols[5] - 2, y + 4.8, { align: "right" });
+      doc.text(f.importe ? money(f.importe) : "—", cols[6] - 2, y + 4.8, { align: "right" });
+      y += rowH;
+    }
+    // Fila TOTAL
+    doc.setFont("helvetica", "bold"); doc.setTextColor(14, 58, 57);
+    doc.text("TOTAL", cols[4] + 2, y + 4.8);
+    doc.text(money(total), cols[6] - 2, y + 4.8, { align: "right" });
+    const costoUnidad = num(data.rendimiento) > 0 ? total / num(data.rendimiento) : 0;
+    y += rowH;
+
+    // Rejilla de la tabla
+    doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.2);
+    for (const cx of cols) doc.line(cx, tableTop, cx, y);
+    let hy = tableTop; doc.line(cols[0], hy, cols[6], hy); hy += headH; doc.line(cols[0], hy, cols[6], hy);
+    for (let i = 0; i < filas.length + 1; i++) { hy += rowH; doc.line(cols[0], hy, cols[6], hy); }
+
+    if (costoUnidad > 0) {
+      y += 5; doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(110, 106, 92);
+      doc.text(`Costo por ${data.unidad || "unidad"}: ${money(costoUnidad)}   (los precios salen de tus tickets)`, M, y);
+    }
+
+    const salto = (extra) => { if (y + (extra || 0) > H - 16) { doc.addPage(); y = 18; } };
+    const seccion = (titulo) => {
+      y += 9; salto(10);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); doc.setTextColor(14, 58, 57);
+      doc.text(titulo, W / 2, y, { align: "center" }); y += 2;
+      doc.setDrawColor(14, 58, 57); doc.setLineWidth(0.4); doc.line(M, y, W - M, y); y += 5;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(34, 32, 26);
+    };
+
+    if ((data.pasos || []).length) {
+      seccion("PROCEDIMIENTO");
+      (data.pasos || []).forEach((p, i) => {
+        const linhas = doc.splitTextToSize(`${i + 1}. ${p.descripcion}`, W - 2 * M);
+        salto(linhas.length * 4.7);
+        doc.text(linhas, M, y); y += linhas.length * 4.7 + 1.5;
+      });
+    }
+    const obs = String(data.observaciones || "").split(/\n/).map((s) => s.trim()).filter(Boolean);
+    if (obs.length) {
+      seccion("OBSERVACIONES");
+      obs.forEach((o) => {
+        const linhas = doc.splitTextToSize("• " + o, W - 2 * M);
+        salto(linhas.length * 4.7);
+        doc.text(linhas, M, y); y += linhas.length * 4.7 + 1.5;
+      });
+    }
+
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(168, 162, 150);
+    doc.text("Generado con Platify", W / 2, H - 9, { align: "center" });
+
+    const arch = ("Ficha " + (data.numero ? data.numero + " " : "") + (data.nombre || "receta")).replace(/[\/\\:*?"<>|]/g, "").trim();
+    doc.save(arch + ".pdf");
+  } catch (err) {
+    alert("No pude generar el PDF: " + ((err && err.message) || err));
+  }
 }
