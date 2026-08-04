@@ -298,7 +298,9 @@ export function render(el) {
 
     const precioVenta = plat ? plat.precio : 0;
     const insumosLista = store.preciosPorInsumo();
-    const datalist = `<datalist id="dl-insumos">${insumosLista.map((i) => `<option value="${esc(i.nombre)}">`).join("")}</datalist>`;
+    // El autocompletar incluye también los ingredientes del Registro Maestro.
+    const nombresTodos = [...new Set([...insumosLista.map((i) => i.nombre), ...(store.state.ingredientesMaestro || []).map((x) => x.nombre)])];
+    const datalist = `<datalist id="dl-insumos">${nombresTodos.map((n) => `<option value="${esc(n)}">`).join("")}</datalist>`;
     // Unidades medibles sugeridas (peso, volumen, conteo). Se convierten al costear.
     const dlUnidades = `<datalist id="dl-unidades">${["g", "kg", "mg", "oz", "lb", "ml", "l", "taza", "cda", "cdta", "fl oz", "pza", "docena"].map((u) => `<option value="${u}">`).join("")}</datalist>`;
     // Componentes que se pueden agregar como subreceta: preparaciones + platillos que ya tienen receta.
@@ -307,7 +309,7 @@ export function render(el) {
       for (const r of store.state.recetas || []) if (!r.es_preparacion && r.producto) set.add(r.producto);
       return [...set].filter((p) => p && p !== nombre && p !== nom).sort();
     };
-    const unidadDe = (insumo) => store.sugerirUnidadReceta(store.unidadInsumo(insumo));
+    const unidadDe = (insumo) => store.maestroDe(insumo) ? "g" : store.sugerirUnidadReceta(store.unidadInsumo(insumo));
 
     function draw() {
       const costoTotal = items.reduce((a, it) => a + store.costoLinea(it.insumo, it.cantidad, it.unidad || unidadDe(it.insumo)), 0);

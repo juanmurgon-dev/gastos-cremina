@@ -28,6 +28,7 @@ export const state = {
   costosPlatillo: [],   // costo directo por platillo (para el margen)
   recetas: [],          // recetas: platillo/preparación → insumos + cantidad
   recetasFicha: [],     // ficha técnica: categoría, tiempo de prep, procedimiento
+  ingredientesMaestro: [], // registro maestro: precio por gramo por ingrediente (fuente para recetas)
   invArticulos: [],     // catálogo de artículos de inventario (reutilizable)
   invConteos: [],       // cabeceras de conteo + total (vista v_conteo_totales)
   cierres: [],          // cierres mensuales con COGS (vista v_cogs_mensual)
@@ -305,13 +306,16 @@ export function costoInsumo(nombre, seen) {
     const divisor = prep ? rendimientoDe(nombre) : porcionesDe(nombre);
     return costoDeReceta(nombre, seen) / (divisor || 1);   // costo por porción/unidad
   }
-  return precioInsumo(nombre);                 // insumo comprado
+  const m = maestroDe(nombre);                 // Registro Maestro: precio por gramo tiene prioridad
+  if (m && num(m.precio_g) > 0) return num(m.precio_g);   // $/g (unidad base = g)
+  return precioInsumo(nombre);                 // insumo comprado (de tickets)
 }
 
 // Unidad de compra de un insumo (o la unidad en que rinde, si es preparación).
 export function unidadInsumo(nombre) {
   if (esPreparacion(nombre)) return unidadPreparacion(nombre);
   if (tieneReceta(nombre)) return "porción";   // platillo usado como componente → por porción
+  if (maestroDe(nombre)) return "g";           // del Registro Maestro → precio por gramo
   const key = String(nombre || "").trim().toLowerCase();
   const hit = preciosPorInsumo().find((i) => i.nombre.toLowerCase() === key);
   return hit ? (hit.unidad || "") : "";
@@ -323,7 +327,49 @@ export function unidadInsumo(nombre) {
 // Se costea la CANTIDAD BRUTA (lo que sacas del almacén, que es lo que pagas).
 // La merma NO baja el costo: sirve para saber cuánto queda útil (cantidad neta).
 export function costoLinea(insumo, cantidad, unidad, merma, seen) {
+  // Si el insumo está en el Registro Maestro → cuesta por GRAMO (fuente confiable):
+  //   costo = gramos usados × precio/g. Convierte kg/oz/lb→g, o pza→g con gramos_pz.
+  const m = (!esPreparacion(insumo) && !tieneReceta(insumo)) ? maestroDe(insumo) : null;
+  if (m && num(m.precio_g) > 0) {
+    const u = normU(unidad || "g");
+    let gramos = null;
+    if (unidadesCompatibles(u, "g")) gramos = num(cantidad) * factorConversion(u, "g");
+    else if (unidadesCompatibles(u, "pza") && num(m.gramos_pz) > 0) gramos = num(cantidad) * num(m.gramos_pz);
+    if (gramos != null) return gramos * num(m.precio_g);
+  }
   return num(cantidad) * factorConversion(unidad, unidadInsumo(insumo)) * costoInsumo(insumo, seen);
+}
+
+// ── Registro Maestro de Ingredientes (precio por gramo, fuente para recetas) ──
+async function cargarIngredientesMaestro() {
+  const { data, error } = await supabase.from("ingredientes_maestro").select("*").order("nombre");
+  if (!error && data) { state.ingredientesMaestro = data; notify(); }
+}
+export function maestroDe(nombre) {
+  const k = normIns(nombre);
+  return (state.ingredientesMaestro || []).find((x) => normIns(x.nombre) === k) || null;
+}
+export function precioGMaestro(nombre) { const m = maestroDe(nombre); return m ? num(m.precio_g) : 0; }
+export async function guardarIngredienteMaestro(row) {
+  const r = {
+    nombre: String(row.nombre || "").trim(),
+    compra_pz: num(row.compra_pz) || 1,
+    gramos_pz: num(row.gramos_pz) || 0,
+    precio_total: num(row.precio_total) || 0,
+    fecha: row.fecha || hoyISO(),
+    updated_at: new Date().toISOString(),
+  };
+  if (row.id) r.id = row.id;
+  const { error } = await supabase.from("ingredientes_maestro").upsert(r);
+  if (error) throw error;
+  await cargarIngredientesMaestro();
+  try { await recalcularTodos(); } catch (e) { /* recuesta recetas con el nuevo precio/g */ }
+}
+export async function borrarIngredienteMaestro(id) {
+  const { error } = await supabase.from("ingredientes_maestro").delete().eq("id", id);
+  if (error) throw error;
+  await cargarIngredientesMaestro();
+  try { await recalcularTodos(); } catch (e) {}
 }
 // Cantidad neta (aprovechable) después de la merma.
 export function cantidadNeta(cantidad, merma) {
@@ -590,7 +636,7 @@ export async function init() {
   arrancado = true;
   // allSettled: aunque una consulta falle, la app SIEMPRE deja de estar "cargando".
   await cargarMiOrg();  // primero: define single vs multi-tenant y el orgId
-  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones(), cargarCostosPlatillo(), cargarRecetas(), cargarRecetasFicha(), cargarKpis(), cargarInvArticulos(), cargarConteos(), cargarCierres()]);
+  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones(), cargarCostosPlatillo(), cargarRecetas(), cargarRecetasFicha(), cargarKpis(), cargarInvArticulos(), cargarConteos(), cargarCierres(), cargarIngredientesMaestro()]);
   try { await recalcularTodos(); } catch (e) { /* recetas o precios aún no disponibles */ }
   state.listo = true;
   notify();
@@ -607,6 +653,7 @@ export async function init() {
     .on("postgres_changes", { event: "*", schema: "public", table: "kpis_dia" }, cargarKpis)
     .on("postgres_changes", { event: "*", schema: "public", table: "inventario_conteos" }, cargarConteos)
     .on("postgres_changes", { event: "*", schema: "public", table: "inventario_articulos" }, cargarInvArticulos)
+    .on("postgres_changes", { event: "*", schema: "public", table: "ingredientes_maestro" }, cargarIngredientesMaestro)
     .subscribe();
 }
 
