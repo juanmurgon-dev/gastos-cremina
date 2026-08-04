@@ -142,6 +142,17 @@ function renderPrecios(el) {
     const varTot = prim ? (ult - prim) / prim : 0;
     const gastoTot = asc.reduce((a, r) => a + store.num(r.monto), 0);
 
+    // Proveedores distintos con su ÚLTIMO precio unitario, código y unidad (registros recientes primero).
+    const provMap = new Map();
+    for (const r of item.registros) {
+      const p = (r.proveedor || "").trim();
+      const key = p;   // "" = sin proveedor → nivel insumo
+      if (provMap.has(key)) continue;
+      provMap.set(key, { proveedor: p, label: p || "Sin proveedor", precio: store.num(r.precio), unidad: r.unidad || item.unidad || "", codigo: (r.codigo || "").toString().trim() });
+    }
+    const provs = [...provMap.values()].sort((a, b) => a.precio - b.precio);   // más barato primero (por unitario)
+    const minP = provs.length ? provs[0].precio : 0;
+
     const bg = document.createElement("div");
     bg.className = "modal-bg";
     bg.innerHTML = `
@@ -172,14 +183,31 @@ function renderPrecios(el) {
               <span class="val">${money(r.precio)}${r.unidad ? "/" + r.unidad : ""}</span>
             </div>`).join("")}
         </div>
+        ${provs.length ? `<div class="titulo-seccion" style="margin-top:16px">📦 Por proveedor · precio unitario</div>
+        <div class="sub" style="font-size:11px;margin:-4px 0 6px">Se compara por <b>precio unitario</b>. Cada proveedor puede tener su propia presentación y SKU.</div>
+        ${provs.map((p, idx) => {
+          const dif = p.precio - minP;
+          const barato = idx === 0 && provs.length > 1;
+          const presVal = store.presentacionDe(item.nombre, p.proveedor);
+          const skuVal = store.skuProvDe(item.nombre, p.proveedor) || p.codigo;
+          return `<div class="prov-row" data-prov="${escapar(p.proveedor)}" style="border:1px solid ${barato ? "var(--verde)" : "var(--linea)"};border-radius:10px;padding:10px;margin-top:6px;background:${barato ? "#eafaf0" : "#fff"}">
+            <div class="fila" style="justify-content:space-between;align-items:baseline;gap:8px">
+              <b style="font-size:13.5px;flex:1;min-width:0">${escapar(p.label)}${barato ? ` <span class="sub" style="color:var(--verde);font-weight:600">· más barato</span>` : ""}</b>
+              <span style="white-space:nowrap"><b>${money(p.precio)}</b><span class="sub">/${escapar(p.unidad || "u")}</span>${dif > 0.01 ? ` <span class="sub" style="color:var(--rojo)"> · +${money(dif)}</span>` : ""}</span>
+            </div>
+            <div class="fila" style="gap:8px;margin-top:8px">
+              <input class="edPres" value="${escapar(presVal)}" placeholder="Presentación (Bote 5 kg)" style="flex:1.4;min-width:0" />
+              <input class="edSkuP" value="${escapar(skuVal)}" placeholder="SKU" style="flex:1;min-width:0" />
+            </div>
+          </div>`;
+        }).join("")}` : ""}
+
         <div class="titulo-seccion" style="margin-top:16px">✏️ Corregir insumo</div>
         <div class="fila" style="gap:8px">
           <input id="edN" value="${escapar(item.nombre)}" placeholder="Nombre" style="flex:2" />
           <input id="edU" value="${escapar(item.unidad || "")}" placeholder="Unidad" style="flex:1" />
         </div>
-        <input id="edC" value="${escapar(item.codigo || "")}" placeholder="Código / SKU del proveedor" style="margin-top:8px" />
-        <input id="edP" value="${escapar(item.presentacion || "")}" placeholder="Presentación (ej. Bote 5 kg, 2 barras 908 g)" style="margin-top:8px" />
-        <div class="sub" style="font-size:11px;margin-top:4px">Cambia el nombre, la unidad (L, kg, g, ml, pza…), el SKU o la <b>presentación</b> en que viene. Se corrigen todos los tickets de este insumo y las recetas se recalculan solas.</div>
+        <div class="sub" style="font-size:11px;margin-top:4px">Cambia el nombre o la unidad (L, kg, g, ml, pza…). Se corrigen todos los tickets de este insumo y las recetas se recalculan solas.</div>
         <button class="btn" id="edSave" style="margin-top:8px">💾 Guardar cambios</button>
         <button class="btn sec" data-cerrar style="margin-top:8px">Cerrar</button>
       </div>`;
@@ -190,15 +218,17 @@ function renderPrecios(el) {
     bg.querySelector("#edSave").addEventListener("click", async () => {
       const nn = bg.querySelector("#edN").value.trim();
       const nu = bg.querySelector("#edU").value.trim();
-      const nc = bg.querySelector("#edC").value.trim();
       if (!nn) { alert("El nombre no puede quedar vacío."); return; }
-      const np = bg.querySelector("#edP").value.trim();
       const b = bg.querySelector("#edSave"); b.disabled = true; b.textContent = "Guardando…";
       try {
-        const n = await store.renombrarInsumo(item.nombre, nn, nu, nc);
-        await store.guardarPresentacion(nn, np);   // presentación keyed al nombre (nuevo)
+        const n = await store.renombrarInsumo(item.nombre, nn, nu);
+        for (const row of bg.querySelectorAll(".prov-row")) {
+          const prov = row.dataset.prov;
+          await store.guardarPresentacion(nn, prov, row.querySelector(".edPres").value.trim());
+          await store.guardarSkuProv(nn, prov, row.querySelector(".edSkuP").value.trim());
+        }
         cerrar(); pintar();
-        alert(`Listo: se corrigieron ${n} ticket(s). Las recetas se recalculan solas.`);
+        alert(`Listo: se corrigieron ${n} ticket(s). Presentación y SKU por proveedor guardados.`);
       } catch (e) { b.disabled = false; b.textContent = "💾 Guardar cambios"; alert("Error: " + ((e && e.message) || e)); }
     });
   }

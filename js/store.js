@@ -822,17 +822,38 @@ export async function actualizarTicket(id, datos) {
 
 // Corrige el NOMBRE y/o UNIDAD de un insumo en TODOS sus tickets (arregla el costeo).
 // Devuelve cuántos tickets se tocaron.
-// Presentación del insumo (ej. "Bote 5 kg", "2 barras 908 g"). Se guarda como
-// metadato en config, indexado por nombre normalizado — no toca los tickets.
-export function presentacionDe(nombre) {
-  return (state.config.presentaciones || {})[normIns(nombre)] || "";
-}
-export async function guardarPresentacion(nombre, texto) {
-  const m = { ...(state.config.presentaciones || {}) };
+// Presentación del insumo POR PROVEEDOR (ej. Prov A "Bote 5 kg", Prov B "Bidón 10 kg").
+// Metadato en config, indexado por nombre normalizado + proveedor — no toca los tickets.
+// Compat: si no hay por-proveedor, cae a la presentación a nivel insumo (versión vieja).
+export function presentacionDe(nombre, proveedor) {
+  const m = state.config.presentaciones || {};
   const k = normIns(nombre);
+  if (proveedor != null && proveedor !== "") {
+    const kp = k + "|" + normProv(proveedor);
+    if (m[kp] != null && m[kp] !== "") return m[kp];
+  }
+  return m[k] || "";
+}
+export async function guardarPresentacion(nombre, proveedor, texto) {
+  const m = { ...(state.config.presentaciones || {}) };
+  const k = normIns(nombre) + (proveedor != null && proveedor !== "" ? "|" + normProv(proveedor) : "");
   const t = String(texto || "").trim();
   if (t) m[k] = t; else delete m[k];
   await guardarConfig({ presentaciones: m });
+}
+
+// SKU del proveedor para un insumo (override editable, guardado en config).
+export function skuProvDe(nombre, proveedor) {
+  const m = state.config.skusProv || {};
+  const kp = normIns(nombre) + "|" + normProv(proveedor);
+  return m[kp] || "";
+}
+export async function guardarSkuProv(nombre, proveedor, texto) {
+  const m = { ...(state.config.skusProv || {}) };
+  const k = normIns(nombre) + "|" + normProv(proveedor);
+  const t = String(texto || "").trim();
+  if (t) m[k] = t; else delete m[k];
+  await guardarConfig({ skusProv: m });
 }
 
 export async function renombrarInsumo(viejo, nuevoNombre, nuevaUnidad, nuevoCodigo) {
@@ -1559,8 +1580,8 @@ export function preciosPorInsumo() {
     v.veces = v.registros.length;
     // Código/SKU del proveedor: el más reciente que lo tenga.
     v.codigo = (v.registros.find((r) => r.codigo) || {}).codigo || "";
-    // Presentación en que viene (ej. "Bote 5 kg", "2 barras"). Metadato en config.
-    v.presentacion = (state.config.presentaciones || {})[normIns(v.nombre)] || "";
+    // Presentación (por proveedor). Para la tarjeta se usa la del proveedor más reciente.
+    v.presentacion = presentacionDe(v.nombre, ultimo && ultimo.proveedor);
     // Clasificación del insumo: "costo de venta" u "operativo" (la de su registro más reciente).
     v.tipo = (ultimo && ultimo.tipo) || "operativo";
     arr.push(v);
