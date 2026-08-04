@@ -228,10 +228,13 @@ function renderPrecios(el) {
         <div class="titulo-seccion">Compras (${asc.length})</div>
         <div>
           ${item.registros.map((r) => `
-            <div class="barra-row" style="justify-content:space-between">
+            <div class="barra-row" style="justify-content:space-between;gap:6px">
               <span class="etq" style="width:auto">${fechaBonita(r.fecha)}</span>
-              <span class="sub" style="flex:1;text-align:center">${escapar(r.proveedor || "—")}</span>
+              <span class="sub" style="flex:1;text-align:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapar(r.proveedor || "—")}</span>
               <span class="val">${money(r.precio)}${r.unidad ? "/" + r.unidad : ""}</span>
+              ${r.fotoTicket
+                ? `<a href="${escapar(r.fotoTicket)}" target="_blank" rel="noopener" title="Ver foto del ticket" style="flex:0 0 auto;text-decoration:none;font-size:16px" onclick="event.stopPropagation()">🧾</a>`
+                : `<span title="Este ticket no tiene foto" style="flex:0 0 auto;opacity:.28;font-size:16px">🧾</span>`}
             </div>`).join("")}
         </div>
         ${provs.length ? `<div class="titulo-seccion" style="margin-top:16px">📦 Comparativa por proveedor${base ? " · costo por " + base : ""}</div>

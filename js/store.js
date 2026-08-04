@@ -1693,7 +1693,8 @@ export function preciosPorInsumo() {
       map.get(key).registros.push({
         fecha: t.fecha, precio: pu, unidad: l.unidad, proveedor: canonProv(t.proveedor), monto: num(l.monto),
         codigo: (l.codigo || "").toString().trim(),
-        tipo: TIPOS.includes(l.tipo) ? l.tipo : "operativo"
+        tipo: TIPOS.includes(l.tipo) ? l.tipo : "operativo",
+        fotoTicket: t.fotoUrl || "", ticketId: t.id   // para ver la foto del ticket de origen
       });
     }
   }
