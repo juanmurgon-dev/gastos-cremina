@@ -7,18 +7,16 @@ import * as tickets from "./tickets.js";
 import * as proveedores from "./proveedores.js";
 import * as ritmo from "./ritmo.js";
 import * as requisicion from "./requisicion.js";
-import * as maestro from "./ingredientes-maestro.js";
 
 // Hub de Insumos: Capturar · Tickets · Requisición · Precios · Proveedores · Ritmo.
 export function render(el, ctx) {
   let sub = "capturar", limpiar = null;
   el.innerHTML = `
-    <div class="segmented" style="font-size:11.5px">
+    <div class="segmented" style="font-size:12.5px">
       <button data-s="capturar">Capturar</button>
       <button data-s="tickets">Tickets</button>
       <button data-s="requisicion">Requis.</button>
       <button data-s="precios">Precios</button>
-      <button data-s="maestro">Maestro</button>
       <button data-s="proveedores">Prov.</button>
     </div>
     <div id="isub"></div>`;
@@ -32,7 +30,6 @@ export function render(el, ctx) {
     limpiar = sub === "capturar" ? capturar.render(subEl, ctx)
       : sub === "tickets" ? tickets.render(subEl, ctx)
       : sub === "requisicion" ? requisicion.render(subEl, ctx)
-      : sub === "maestro" ? maestro.render(subEl, ctx)
       : sub === "proveedores" ? proveedores.render(subEl, ctx)
       : renderPrecios(subEl);
   }
@@ -170,6 +167,10 @@ function renderPrecios(el) {
     });
     provs.sort((a, b) => (a.costoBase == null ? Infinity : a.costoBase) - (b.costoBase == null ? Infinity : b.costoBase) || a.precio - b.precio);
     const minCB = provs.reduce((m, p) => (p.costoBase != null && p.costoBase < m ? p.costoBase : m), Infinity);
+    // Registro maestro (precio por gramo) de ESTE insumo, para el costeo de recetas.
+    const mae = store.maestroDe(item.nombre) || {};
+    const pgFmt = (n) => "$" + (Math.round(store.num(n) * 10000) / 10000).toFixed(4) + "/g";
+    const calcPg = (total, pz, gpz) => { const d = store.num(pz) * store.num(gpz); return d > 0 ? store.num(total) / d : 0; };
 
     const bg = document.createElement("div");
     bg.className = "modal-bg";
@@ -218,6 +219,18 @@ function renderPrecios(el) {
           </div>`;
         }).join("")}` : ""}
 
+        <div class="titulo-seccion" style="margin-top:16px">⚖️ Precio por gramo (para recetas)</div>
+        <div class="sub" style="font-size:11px;margin:-4px 0 6px">Cuánto pagas y cuántos gramos trae, para costear recetas <b>por gramo</b>. Ej. crema: 1 pz · 4000 g/pz · $307 → $0.0768/g. Manda sobre el precio del ticket.</div>
+        <div class="fila" style="gap:8px">
+          <label class="campo" style="flex:1;margin:0"><span>Compra (Pz)</span><input id="mPz" type="number" inputmode="decimal" step="any" min="0" value="${escapar(String(mae.compra_pz != null ? mae.compra_pz : 1))}" /></label>
+          <label class="campo" style="flex:1;margin:0"><span>Gramos/Pz</span><input id="mGpz" type="number" inputmode="decimal" step="any" min="0" value="${escapar(String(mae.gramos_pz != null ? mae.gramos_pz : ""))}" /></label>
+        </div>
+        <label class="campo"><span>Precio total pagado</span><input id="mTot" type="number" inputmode="decimal" step="any" min="0" value="${escapar(String(mae.precio_total != null ? mae.precio_total : ""))}" /></label>
+        <div style="text-align:center;padding:8px;border-radius:10px;background:#eafaf0;margin-bottom:4px">
+          <span class="sub">Precio por gramo (recetas)</span>
+          <div id="mPg" style="font-size:19px;font-weight:800;color:#16514f">${pgFmt(calcPg(mae.precio_total, mae.compra_pz != null ? mae.compra_pz : 1, mae.gramos_pz))}</div>
+        </div>
+
         <div class="titulo-seccion" style="margin-top:16px">✏️ Corregir insumo</div>
         <div class="fila" style="gap:8px">
           <input id="edN" value="${escapar(item.nombre)}" placeholder="Nombre" style="flex:2" />
@@ -261,6 +274,10 @@ function renderPrecios(el) {
     bg.querySelectorAll(".edPres").forEach((inp) => inp.addEventListener("input", recompara));
     recompara();
 
+    // Precio por gramo (maestro) en vivo
+    const recalcMae = () => { const o = bg.querySelector("#mPg"); if (o) o.textContent = pgFmt(calcPg(bg.querySelector("#mTot").value, bg.querySelector("#mPz").value, bg.querySelector("#mGpz").value)); };
+    ["#mPz", "#mGpz", "#mTot"].forEach((s) => { const n = bg.querySelector(s); if (n) n.addEventListener("input", recalcMae); });
+
     bg.querySelector("#edSave").addEventListener("click", async () => {
       const nn = bg.querySelector("#edN").value.trim();
       const nu = bg.querySelector("#edU").value.trim();
@@ -273,8 +290,13 @@ function renderPrecios(el) {
           await store.guardarPresentacion(nn, prov, row.querySelector(".edPres").value.trim());
           await store.guardarSkuProv(nn, prov, row.querySelector(".edSkuP").value.trim());
         }
+        // Precio por gramo (maestro): guarda si tiene datos, borra si lo vaciaron.
+        const mGpz = store.num(bg.querySelector("#mGpz").value), mTot = store.num(bg.querySelector("#mTot").value);
+        if (mGpz > 0 && mTot > 0) {
+          await store.guardarIngredienteMaestro({ id: mae.id, nombre: nn, compra_pz: bg.querySelector("#mPz").value, gramos_pz: mGpz, precio_total: mTot });
+        } else if (mae.id) { await store.borrarIngredienteMaestro(mae.id); }
         cerrar(); pintar();
-        alert(`Listo: se corrigieron ${n} ticket(s). Presentación y SKU por proveedor guardados.`);
+        alert(`Listo: se corrigieron ${n} ticket(s). Presentación, SKU y precio/g guardados.`);
       } catch (e) { b.disabled = false; b.textContent = "💾 Guardar cambios"; alert("Error: " + ((e && e.message) || e)); }
     });
   }
