@@ -208,7 +208,8 @@ export function render(el) {
         else if (foodPct != null && foodPct > 60) alerta = `Food cost ${foodPct.toFixed(0)}% — muy alto, probable error`;
         else if (nSin > 0) alerta = `Faltan ${nSin} de ${nTot} ingredientes por costear`;
       }
-      return { tiene, costo, neto, foodPct, margPct, alerta };
+      const completa = tiene ? !!(store.fichaDe(p.producto) || {}).completa : false;
+      return { tiene, costo, neto, foodPct, margPct, alerta, completa };
     }
     // Métricas costosas (costeo de cada receta): se calculan UNA sola vez al
     // entrar, NO en cada tecla. Así el buscador solo filtra/repinta la lista.
@@ -217,12 +218,13 @@ export function render(el) {
     const totCon = filas0.filter((x) => x.m.tiene).length;
     const totSin = filas0.length - totCon;
     const totRev = filas0.filter((x) => x.m.alerta).length;
+    const totOk = filas0.filter((x) => x.m.completa).length;
     const cats = categoriasPlatillos();
 
     cont.innerHTML = `
       <div class="card">
         <h2 style="margin-bottom:2px">Fichas técnicas</h2>
-        <p class="sub" style="margin-top:0">✅ Con receta: <b>${totCon}</b> · ➕ Falta: <b>${totSin}</b> · <span style="color:var(--rojo)">⚠️ Revisar: <b>${totRev}</b></span></p>
+        <p class="sub" style="margin-top:0">📝 Con receta: <b>${totCon}</b> · ✅ Terminadas: <b>${totOk}</b> · ➕ Falta: <b>${totSin}</b> · <span style="color:var(--rojo)">⚠️ Revisar: <b>${totRev}</b></span></p>
         <div class="fila" style="gap:8px;margin:8px 0 4px;flex-wrap:wrap">
           <button class="btn sec chico" id="impcsv" style="flex:1">⬆ Importar CSV</button>
           <button class="btn sec chico" id="plantilla" style="flex:1">⬇ Formato vacío</button>
@@ -251,13 +253,14 @@ export function render(el) {
     const chip = (id, txt) => `<button class="fchip" data-f="${id}" style="border:1px solid var(--linea);background:${st.filtro === id ? "var(--verde)" : "#fff"};color:${st.filtro === id ? "#fff" : "var(--txt,#222)"};border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex:0 0 auto">${txt}</button>`;
 
     function pintarChips() {
-      chipsEl.innerHTML = chip("todas", `Todas (${filas0.length})`) + chip("con", `✅ Con receta (${totCon})`) + chip("sin", `➕ Falta (${totSin})`) + chip("revisar", `⚠️ Revisar (${totRev})`);
+      chipsEl.innerHTML = chip("todas", `Todas (${filas0.length})`) + chip("con", `📝 Con receta (${totCon})`) + chip("ok", `✅ Terminadas (${totOk})`) + chip("sin", `➕ Falta (${totSin})`) + chip("revisar", `⚠️ Revisar (${totRev})`);
       chipsEl.querySelectorAll(".fchip").forEach((c) => c.addEventListener("click", () => { st.filtro = c.dataset.f; pintarChips(); pintarLista(); }));
     }
     function pintarLista() {
       const q = st.q.trim().toLowerCase();
       let arr = filas0.filter(({ p }) => (!q || p.producto.toLowerCase().includes(q)) && (st.cat === "todas" || (p.categoria || "") === st.cat));
       if (st.filtro === "con") arr = arr.filter((x) => x.m.tiene);
+      else if (st.filtro === "ok") arr = arr.filter((x) => x.m.completa);
       else if (st.filtro === "sin") arr = arr.filter((x) => !x.m.tiene);
       else if (st.filtro === "revisar") arr = arr.filter((x) => x.m.alerta);
       arr = arr.slice();
@@ -270,7 +273,7 @@ export function render(el) {
         return `
           <button class="fila-item" data-p="${esc(p.producto)}" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--linea);padding:12px 2px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">
             <span style="min-width:0">
-              <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.alerta ? "⚠️ " : ""}${esc(p.producto)}</b>
+              <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.completa ? "✅ " : (m.alerta ? "⚠️ " : "")}${esc(p.producto)}</b>
               <span class="sub" style="font-size:12px">${p.esVariante ? "🔸 variante · " : ""}${esc(p.categoria || "")}${p.precio ? " · vende " + money(p.precio) : ""}</span>
               ${m.alerta ? `<span class="sub" style="font-size:11px;color:var(--rojo);display:block;white-space:normal">${esc(m.alerta)}</span>` : ""}
             </span>
@@ -356,6 +359,7 @@ export function render(el) {
     let foto = fichaAct.foto || "";
     let numero = fichaAct.numero || "";
     let observaciones = fichaAct.observaciones || "";
+    let completa = !!fichaAct.completa;   // el usuario la marcó como terminada/verificada
     let pasoTmp = { descripcion: "", tiempo: "" };
 
     const precioVenta = plat ? plat.precio : 0;
@@ -453,7 +457,12 @@ export function render(el) {
             <textarea id="obs" rows="4" placeholder="Notas de preparación, almacenamiento, cuidados…" style="width:100%;font-family:inherit;font-size:14px;padding:10px;border-radius:10px;border:1px solid var(--linea);resize:vertical">${esc(observaciones)}</textarea>
           </div>
 
-          <button class="btn" id="guardar" style="margin-top:14px">💾 Guardar ficha</button>
+          <label id="lblCompleta" style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px;border-radius:12px;border:1.5px solid ${completa ? "var(--verde)" : "var(--linea)"};background:${completa ? "#eafaf0" : "#fff"};cursor:pointer">
+            <input type="checkbox" id="completa" ${completa ? "checked" : ""} style="width:20px;height:20px;flex:0 0 auto;accent-color:var(--verde)" />
+            <span style="min-width:0"><b style="font-size:14px">✅ Receta terminada</b><br><span class="sub" style="font-size:11.5px">Márcala cuando esté 100% verificada (ingredientes, cantidades y costo correctos).</span></span>
+          </label>
+
+          <button class="btn" id="guardar" style="margin-top:12px">💾 Guardar ficha</button>
           <button class="btn sec" id="fichaPdf" style="margin-top:8px">📄 Ficha técnica (PDF)</button>
           ${existentes.length ? `<button class="btn sec chico" id="borrar" style="margin-top:6px;color:var(--rojo)">Borrar receta</button>` : ""}
           <div id="msg" class="sub" style="text-align:center;margin-top:8px;min-height:1em"></div>
@@ -547,6 +556,12 @@ export function render(el) {
       }
       cont.querySelector("#num").addEventListener("input", (e) => { numero = e.target.value; });
       cont.querySelector("#obs").addEventListener("input", (e) => { observaciones = e.target.value; });
+      const chkC = cont.querySelector("#completa");
+      if (chkC) chkC.addEventListener("change", (e) => {
+        completa = e.target.checked;
+        const l = cont.querySelector("#lblCompleta");
+        if (l) { l.style.borderColor = completa ? "var(--verde)" : "var(--linea)"; l.style.background = completa ? "#eafaf0" : "#fff"; }
+      });
       cont.querySelector("#guardar").addEventListener("click", guardar);
       cont.querySelector("#fichaPdf").addEventListener("click", () => fichaPDF({
         nombre: (esPrep ? nom : nombre) || "Receta", numero,
@@ -565,7 +580,7 @@ export function render(el) {
       if (!limpios.length) { msg.textContent = "Agrega al menos un ingrediente con cantidad."; return; }
       msg.textContent = "Guardando…";
       try {
-        const ficha = { categoria, tiempo: num(tiempo), pasos: pasos.filter((p) => p.descripcion.trim()), foto, numero, observaciones };
+        const ficha = { categoria, tiempo: num(tiempo), pasos: pasos.filter((p) => p.descripcion.trim()), foto, numero, observaciones, completa };
         await store.guardarReceta(
           destino,
           limpios.map((it) => ({ insumo: it.insumo.trim(), cantidad: num(it.cantidad), unidad: it.unidad || unidadDe(it.insumo), merma: num(it.merma) || 0 })),
@@ -590,6 +605,22 @@ export function render(el) {
 }
 
 // ── Ficha técnica en PDF (formato de cocina) con costeo desde tus tickets ──
+// Carga una imagen del sitio y la devuelve como dataURL + dimensiones (para el PDF).
+function cargarImagenPDF(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
+        c.getContext("2d").drawImage(img, 0, 0);
+        resolve({ dataUrl: c.toDataURL("image/png"), w: img.naturalWidth, h: img.naturalHeight });
+      } catch (e) { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
 async function fichaPDF(data) {
   const fmtC = (n) => { const r = Math.round(num(n) * 1000) / 1000; return String(r); };
   const filas = (data.items || [])
@@ -615,7 +646,12 @@ async function fichaPDF(data) {
     const doc = new JsPDF({ unit: "mm", format: "a4" });
     const M = 14, W = 210, H = 297;
     const cols = [14, 36, 96, 120, 148, 172, 196];   // Código|Ingrediente|Cantidad|Un.|P.Unit|Importe
-    let y = 16;
+    const wm = await cargarImagenPDF("assets/platify-wordmark.png");   // branding Platify
+
+    // Encabezado de marca: barra Platify + wordmark arriba a la izquierda.
+    doc.setFillColor(14, 58, 57); doc.rect(0, 0, W, 3, "F");
+    if (wm) { const ww = 22, wh = ww * wm.h / wm.w; doc.addImage(wm.dataUrl, "PNG", M, 6.5, ww, wh); }
+    let y = 18;
 
     doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(14, 58, 57);
     doc.text(String(data.nombre || "Receta").toUpperCase(), W / 2, y, { align: "center" }); y += 6.5;
@@ -690,8 +726,16 @@ async function fichaPDF(data) {
       });
     }
 
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(168, 162, 150);
-    doc.text("Generado con Platify", W / 2, H - 9, { align: "center" });
+    // Pie con branding Platify (wordmark + tagline).
+    if (wm) {
+      const ww = 24, wh = ww * wm.h / wm.w;
+      doc.addImage(wm.dataUrl, "PNG", (W - ww) / 2, H - 13.5, ww, wh);
+      doc.setFont("helvetica", "italic"); doc.setFontSize(6.5); doc.setTextColor(168, 162, 150);
+      doc.text("Del plato a la boca se cae el margen", W / 2, H - 4, { align: "center" });
+    } else {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(168, 162, 150);
+      doc.text("Generado con Platify", W / 2, H - 9, { align: "center" });
+    }
 
     const arch = ("Ficha " + (data.numero ? data.numero + " " : "") + (data.nombre || "receta")).replace(/[\/\\:*?"<>|]/g, "").trim();
     doc.save(arch + ".pdf");

@@ -195,7 +195,7 @@ async function cargarRecetasFicha() {
 // Datos de ficha (categoría, tiempo, pasos, foto) de una receta.
 export function fichaDe(producto) {
   const f = (state.recetasFicha || []).find((x) => x.producto === producto);
-  return f || { producto, categoria: "", tiempo: 0, procedimiento: "", pasos: [], foto: "" };
+  return f || { producto, categoria: "", tiempo: 0, procedimiento: "", pasos: [], foto: "", completa: false };
 }
 export async function guardarFicha(producto, f) {
   const pasos = Array.isArray(f && f.pasos)
@@ -210,6 +210,7 @@ export async function guardarFicha(producto, f) {
     procedimiento: pasos.map((p) => p.descripcion).join("\n").slice(0, 4000), // compat
     pasos,
     foto: String((f && f.foto) || "").slice(0, 800000),
+    completa: !!(f && f.completa),   // el usuario marcó la receta como terminada/verificada
     actualizado: new Date().toISOString(),
   };
   const { error } = await supabase.from("recetas_ficha").upsert(row);
