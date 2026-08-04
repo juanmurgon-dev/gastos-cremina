@@ -120,7 +120,7 @@ function renderPrecios(el) {
             <span class="monto" style="font-size:14px">${money(i.precioActual)}${i.unidad ? `<span class="sub" style="font-weight:400">/${i.unidad}</span>` : ""}</span>
           </div>
           <div class="meta" style="display:flex;justify-content:space-between;align-items:center">
-            <span><span class="chip" style="background:${COLOR_AREA[i.area] || "#9c9482"}">${i.area || "otro"}</span> · ${i.veces} compra(s)${i.codigo ? ` · <span class="sub">SKU ${escapar(i.codigo)}</span>` : ""}</span>
+            <span><span class="chip" style="background:${COLOR_AREA[i.area] || "#9c9482"}">${i.area || "otro"}</span> · ${i.veces} compra(s)${i.codigo ? ` · <span class="sub">SKU ${escapar(i.codigo)}</span>` : ""}${i.presentacion ? ` · <span class="sub">📦 ${escapar(i.presentacion)}</span>` : ""}</span>
             <span>${flecha}</span>
           </div>
         </div>`;
@@ -178,7 +178,8 @@ function renderPrecios(el) {
           <input id="edU" value="${escapar(item.unidad || "")}" placeholder="Unidad" style="flex:1" />
         </div>
         <input id="edC" value="${escapar(item.codigo || "")}" placeholder="Código / SKU del proveedor" style="margin-top:8px" />
-        <div class="sub" style="font-size:11px;margin-top:4px">Cambia el nombre, la unidad (L, kg, g, ml, pza…) o el SKU. Se corrigen todos los tickets de este insumo y las recetas se recalculan solas.</div>
+        <input id="edP" value="${escapar(item.presentacion || "")}" placeholder="Presentación (ej. Bote 5 kg, 2 barras 908 g)" style="margin-top:8px" />
+        <div class="sub" style="font-size:11px;margin-top:4px">Cambia el nombre, la unidad (L, kg, g, ml, pza…), el SKU o la <b>presentación</b> en que viene. Se corrigen todos los tickets de este insumo y las recetas se recalculan solas.</div>
         <button class="btn" id="edSave" style="margin-top:8px">💾 Guardar cambios</button>
         <button class="btn sec" data-cerrar style="margin-top:8px">Cerrar</button>
       </div>`;
@@ -191,9 +192,11 @@ function renderPrecios(el) {
       const nu = bg.querySelector("#edU").value.trim();
       const nc = bg.querySelector("#edC").value.trim();
       if (!nn) { alert("El nombre no puede quedar vacío."); return; }
+      const np = bg.querySelector("#edP").value.trim();
       const b = bg.querySelector("#edSave"); b.disabled = true; b.textContent = "Guardando…";
       try {
         const n = await store.renombrarInsumo(item.nombre, nn, nu, nc);
+        await store.guardarPresentacion(nn, np);   // presentación keyed al nombre (nuevo)
         cerrar(); pintar();
         alert(`Listo: se corrigieron ${n} ticket(s). Las recetas se recalculan solas.`);
       } catch (e) { b.disabled = false; b.textContent = "💾 Guardar cambios"; alert("Error: " + ((e && e.message) || e)); }
