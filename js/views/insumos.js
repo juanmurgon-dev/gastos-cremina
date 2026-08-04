@@ -250,13 +250,14 @@ function renderPrecios(el) {
               <input class="edSkuP" value="${escapar(skuVal)}" placeholder="SKU" style="flex:1;min-width:0" />
             </div>
             <div class="fila prov-foto" style="gap:8px;margin-top:8px;align-items:center">
-              <div class="foto-thumb" style="width:52px;height:52px;flex:0 0 auto;border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:#f6f4ee;display:flex;align-items:center;justify-content:center;cursor:pointer">
+              <div class="foto-thumb" style="width:52px;height:52px;flex:0 0 auto;border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:#f6f4ee;display:flex;align-items:center;justify-content:center">
                 <span class="foto-vacia sub" style="font-size:18px">📷</span>
-                <img class="foto-img" alt="presentación" style="display:none;width:100%;height:100%;object-fit:cover" />
+                <img class="foto-img" alt="presentación" style="display:none;width:100%;height:100%;object-fit:cover;cursor:pointer" />
               </div>
-              <button type="button" class="btn sec chico foto-sube" style="flex:1">📷 Subir foto de la presentación</button>
+              <label class="btn sec chico foto-sube" style="flex:1;margin:0;cursor:pointer;text-align:center"><span class="foto-lbl">📷 Subir foto de la presentación</span>
+                <input type="file" class="foto-file" accept="image/*" style="display:none" />
+              </label>
               <button type="button" class="btn sec chico foto-quita" style="flex:0 0 auto;color:var(--rojo);display:none">Quitar</button>
-              <input type="file" class="foto-file" accept="image/*" style="display:none" />
             </div>
           </div>`;
         }).join("")}` : ""}
@@ -321,22 +322,21 @@ function renderPrecios(el) {
     (function fotosPorProveedor() {
       const setThumb = (row, dataUrl) => {
         const img = row.querySelector(".foto-img"), vacia = row.querySelector(".foto-vacia");
-        const quita = row.querySelector(".foto-quita"), sube = row.querySelector(".foto-sube");
-        if (dataUrl) { img.src = dataUrl; img.style.display = "block"; vacia.style.display = "none"; quita.style.display = ""; sube.textContent = "📷 Cambiar foto"; }
-        else { img.removeAttribute("src"); img.style.display = "none"; vacia.style.display = ""; quita.style.display = "none"; sube.textContent = "📷 Subir foto de la presentación"; }
+        const quita = row.querySelector(".foto-quita"), lbl = row.querySelector(".foto-lbl");
+        if (dataUrl) { img.src = dataUrl; img.style.display = "block"; vacia.style.display = "none"; quita.style.display = ""; lbl.textContent = "📷 Cambiar foto"; }
+        else { img.removeAttribute("src"); img.style.display = "none"; vacia.style.display = ""; quita.style.display = "none"; lbl.textContent = "📷 Subir foto de la presentación"; }
       };
       const rows = [...bg.querySelectorAll(".prov-row")];
       rows.forEach((row) => {
         const prov = row.dataset.prov;
-        const file = row.querySelector(".foto-file"), sube = row.querySelector(".foto-sube"), quita = row.querySelector(".foto-quita"), thumb = row.querySelector(".foto-thumb");
-        sube.addEventListener("click", () => file.click());
-        thumb.addEventListener("click", () => { const img = row.querySelector(".foto-img"); if (img.style.display !== "none" && img.src) window.open(img.src, "_blank"); else file.click(); });
+        const file = row.querySelector(".foto-file"), lbl = row.querySelector(".foto-lbl"), quita = row.querySelector(".foto-quita");
+        row.querySelector(".foto-img").addEventListener("click", (e) => { const img = e.currentTarget; if (img.src) window.open(img.src, "_blank"); });
         file.addEventListener("change", async () => {
           const f = file.files && file.files[0]; if (!f) return;
-          sube.disabled = true; const prev = sube.textContent; sube.textContent = "Subiendo…";
+          const prev = lbl.textContent; lbl.textContent = "Subiendo…";
           try { const dataUrl = await comprimirFoto(f); await store.guardarFotoInsumo(item.nombre, prov, dataUrl); setThumb(row, dataUrl); }
-          catch (e) { alert("No se pudo subir la foto: " + ((e && e.message) || e)); sube.textContent = prev; }
-          sube.disabled = false; file.value = "";
+          catch (e) { alert("No se pudo subir la foto: " + ((e && e.message) || e)); lbl.textContent = prev; }
+          file.value = "";
         });
         quita.addEventListener("click", async () => {
           if (!confirm("¿Quitar la foto de este proveedor?")) return;
