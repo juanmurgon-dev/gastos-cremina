@@ -256,7 +256,7 @@ function renderPrecios(el) {
               </div>
               <button type="button" class="btn sec chico foto-sube" style="flex:1">📷 Subir foto de la presentación</button>
               <button type="button" class="btn sec chico foto-quita" style="flex:0 0 auto;color:var(--rojo);display:none">Quitar</button>
-              <input type="file" class="foto-file" accept="image/*" capture="environment" style="display:none" />
+              <input type="file" class="foto-file" accept="image/*" style="display:none" />
             </div>
           </div>`;
         }).join("")}` : ""}
