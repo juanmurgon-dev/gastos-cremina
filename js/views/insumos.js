@@ -142,16 +142,27 @@ function renderPrecios(el) {
     const varTot = prim ? (ult - prim) / prim : 0;
     const gastoTot = asc.reduce((a, r) => a + store.num(r.monto), 0);
 
-    // Proveedores distintos con su ÚLTIMO precio unitario, código y unidad (registros recientes primero).
+    // Proveedores distintos con su ÚLTIMO precio, código y unidad (registros recientes primero).
     const provMap = new Map();
     for (const r of item.registros) {
       const p = (r.proveedor || "").trim();
-      const key = p;   // "" = sin proveedor → nivel insumo
-      if (provMap.has(key)) continue;
-      provMap.set(key, { proveedor: p, label: p || "Sin proveedor", precio: store.num(r.precio), unidad: r.unidad || item.unidad || "", codigo: (r.codigo || "").toString().trim() });
+      if (provMap.has(p)) continue;
+      provMap.set(p, { proveedor: p, label: p || "Sin proveedor", precio: store.num(r.precio), unidad: r.unidad || item.unidad || "", codigo: (r.codigo || "").toString().trim() });
     }
-    const provs = [...provMap.values()].sort((a, b) => a.precio - b.precio);   // más barato primero (por unitario)
-    const minP = provs.length ? provs[0].precio : 0;
+    const provs = [...provMap.values()];
+    // Normaliza a una unidad BASE (kg / L / pza) para comparar de a de veras.
+    const parsePres = (txt) => { const m = String(txt || "").match(/(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|g|gr|grs|gramos?|lts?|l|litros?|ml|pzas?|pz|piezas?)/i); return m ? { qty: parseFloat(m[1].replace(",", ".")), unit: m[2].toLowerCase() } : null; };
+    provs.forEach((p) => { p.pres = store.presentacionDe(item.nombre, p.proveedor); p.presP = parsePres(p.pres); });
+    const cand = provs.flatMap((p) => [p.unidad, p.presP && p.presP.unit]).filter(Boolean);
+    let base = ""; for (const fam of ["kg", "L", "pza"]) { if (cand.some((u) => store.unidadesCompatibles(u, fam))) { base = fam; break; } }
+    provs.forEach((p) => {
+      let cb = null;
+      if (base && p.unidad && store.unidadesCompatibles(p.unidad, base)) cb = p.precio * store.factorConversion(base, p.unidad);
+      else if (base && p.presP && p.presP.qty > 0 && store.unidadesCompatibles(p.presP.unit, base)) cb = p.precio / (p.presP.qty * store.factorConversion(p.presP.unit, base));
+      p.costoBase = cb;   // precio por unidad base (kg/L/pza), o null si falta info
+    });
+    provs.sort((a, b) => (a.costoBase == null ? Infinity : a.costoBase) - (b.costoBase == null ? Infinity : b.costoBase) || a.precio - b.precio);
+    const minCB = provs.reduce((m, p) => (p.costoBase != null && p.costoBase < m ? p.costoBase : m), Infinity);
 
     const bg = document.createElement("div");
     bg.className = "modal-bg";
@@ -183,20 +194,22 @@ function renderPrecios(el) {
               <span class="val">${money(r.precio)}${r.unidad ? "/" + r.unidad : ""}</span>
             </div>`).join("")}
         </div>
-        ${provs.length ? `<div class="titulo-seccion" style="margin-top:16px">📦 Por proveedor · precio unitario</div>
-        <div class="sub" style="font-size:11px;margin:-4px 0 6px">Se compara por <b>precio unitario</b>. Cada proveedor puede tener su propia presentación y SKU.</div>
-        ${provs.map((p, idx) => {
-          const dif = p.precio - minP;
-          const barato = idx === 0 && provs.length > 1;
-          const presVal = store.presentacionDe(item.nombre, p.proveedor);
+        ${provs.length ? `<div class="titulo-seccion" style="margin-top:16px">📦 Comparativa por proveedor${base ? " · costo por " + base : ""}</div>
+        <div class="sub" style="font-size:11px;margin:-4px 0 6px">Se compara por <b>costo por ${base || "unidad"}</b> (normalizado con la presentación). Escribe la presentación con su cantidad, ej. <b>1.5 kg</b>, para que compare bien.</div>
+        ${provs.map((p) => {
+          const barato = p.costoBase != null && minCB !== Infinity && Math.abs(p.costoBase - minCB) < 0.01 && provs.filter((x) => x.costoBase != null).length > 1;
+          const dif = (p.costoBase != null && minCB !== Infinity) ? p.costoBase - minCB : 0;
           const skuVal = store.skuProvDe(item.nombre, p.proveedor) || p.codigo;
           return `<div class="prov-row" data-prov="${escapar(p.proveedor)}" style="border:1px solid ${barato ? "var(--verde)" : "var(--linea)"};border-radius:10px;padding:10px;margin-top:6px;background:${barato ? "#eafaf0" : "#fff"}">
             <div class="fila" style="justify-content:space-between;align-items:baseline;gap:8px">
               <b style="font-size:13.5px;flex:1;min-width:0">${escapar(p.label)}${barato ? ` <span class="sub" style="color:var(--verde);font-weight:600">· más barato</span>` : ""}</b>
-              <span style="white-space:nowrap"><b>${money(p.precio)}</b><span class="sub">/${escapar(p.unidad || "u")}</span>${dif > 0.01 ? ` <span class="sub" style="color:var(--rojo)"> · +${money(dif)}</span>` : ""}</span>
+              <span style="white-space:nowrap">${p.costoBase != null
+                ? `<b style="font-size:15px">${money(p.costoBase)}</b><span class="sub">/${base}</span>${dif > 0.01 ? ` <span class="sub" style="color:var(--rojo)">+${money(dif)}</span>` : ""}`
+                : `<b>${money(p.precio)}</b><span class="sub">/${escapar(p.unidad || "u")}</span>`}</span>
             </div>
+            <div class="sub" style="font-size:10.5px;margin-top:2px">Compra: ${money(p.precio)}/${escapar(p.unidad || "u")}${p.costoBase == null && base ? ` · <span style="color:var(--amber-osc,#b06a00)">agrega la presentación (ej. 1.5 ${base}) para comparar</span>` : ""}</div>
             <div class="fila" style="gap:8px;margin-top:8px">
-              <input class="edPres" value="${escapar(presVal)}" placeholder="Presentación (Bote 5 kg)" style="flex:1.4;min-width:0" />
+              <input class="edPres" value="${escapar(p.pres)}" placeholder="Presentación (ej. 1.5 kg)" style="flex:1.4;min-width:0" />
               <input class="edSkuP" value="${escapar(skuVal)}" placeholder="SKU" style="flex:1;min-width:0" />
             </div>
           </div>`;
