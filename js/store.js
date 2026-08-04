@@ -315,7 +315,8 @@ export function costoInsumo(nombre, seen) {
 export function unidadInsumo(nombre) {
   if (esPreparacion(nombre)) return unidadPreparacion(nombre);
   if (tieneReceta(nombre)) return "porción";   // platillo usado como componente → por porción
-  if (maestroDe(nombre)) return "g";           // del Registro Maestro → precio por gramo
+  const _m = maestroDe(nombre);
+  if (_m) return _m.unidad_base || "g";         // del Registro Maestro → su unidad base
   const key = String(nombre || "").trim().toLowerCase();
   const hit = preciosPorInsumo().find((i) => i.nombre.toLowerCase() === key);
   return hit ? (hit.unidad || "") : "";
@@ -331,11 +332,9 @@ export function costoLinea(insumo, cantidad, unidad, merma, seen) {
   //   costo = gramos usados × precio/g. Convierte kg/oz/lb→g, o pza→g con gramos_pz.
   const m = (!esPreparacion(insumo) && !tieneReceta(insumo)) ? maestroDe(insumo) : null;
   if (m && num(m.precio_g) > 0) {
-    const u = normU(unidad || "g");
-    let gramos = null;
-    if (unidadesCompatibles(u, "g")) gramos = num(cantidad) * factorConversion(u, "g");
-    else if (unidadesCompatibles(u, "pza") && num(m.gramos_pz) > 0) gramos = num(cantidad) * num(m.gramos_pz);
-    if (gramos != null) return gramos * num(m.precio_g);
+    const bu = m.unidad_base || "g";                 // unidad base del maestro (g/ml/pza/kg/L)
+    const u = normU(unidad || bu);
+    if (unidadesCompatibles(u, bu)) return num(cantidad) * factorConversion(u, bu) * num(m.precio_g);
   }
   return num(cantidad) * factorConversion(unidad, unidadInsumo(insumo)) * costoInsumo(insumo, seen);
 }
@@ -393,6 +392,7 @@ export async function guardarIngredienteMaestro(row) {
     compra_pz: num(row.compra_pz) || 1,
     gramos_pz: num(row.gramos_pz) || 0,
     precio_total: num(row.precio_total) || 0,
+    unidad_base: String(row.unidad_base || "g").trim() || "g",
     fecha: row.fecha || hoyISO(),
     updated_at: new Date().toISOString(),
   };
