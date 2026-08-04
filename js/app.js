@@ -7,7 +7,6 @@ import * as marca from "./marca.js";
 import * as preferencias from "./preferencias.js";
 import * as proveedores from "./proveedores.js";
 import * as onboarding from "./onboarding.js";
-import * as chat from "./chat.js";
 
 import * as inicio from "./views/inicio.js";
 import * as reportes from "./views/reportes.js";
@@ -16,7 +15,7 @@ import * as insumos from "./views/insumos.js";        // + Requisición adentro
 import * as inventario from "./views/inventario.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.147";
+export const APP_VERSION = "v3.148";
 export const APP_FECHA = "27 jul 2026";
 
 const VISTAS = {
@@ -60,11 +59,9 @@ function aplicarSesion(session) {
   if (user) {
     store.init();
     if (!shellMontado) montarShell(user);
-    if (ENV !== "beta") chat.montar();   // botón flotante 💬 (oculto en beta por ahora)
   } else {
     shellMontado = false;
     montarLogin();
-    chat.ocultar();
   }
 }
 
