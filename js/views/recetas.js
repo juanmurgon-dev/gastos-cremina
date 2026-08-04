@@ -210,59 +210,62 @@ export function render(el) {
       }
       return { tiene, costo, neto, foodPct, margPct, alerta };
     }
-    function draw() {
-      const costos = store.mapaCostos();
+    // Métricas costosas (costeo de cada receta): se calculan UNA sola vez al
+    // entrar, NO en cada tecla. Así el buscador solo filtra/repinta la lista.
+    const costos = store.mapaCostos();
+    const filas0 = platillos().map((p) => ({ p, m: metrica(p, costos) }));
+    const totCon = filas0.filter((x) => x.m.tiene).length;
+    const totSin = filas0.length - totCon;
+    const totRev = filas0.filter((x) => x.m.alerta).length;
+    const cats = categoriasPlatillos();
+
+    cont.innerHTML = `
+      <div class="card">
+        <h2 style="margin-bottom:2px">Fichas técnicas</h2>
+        <p class="sub" style="margin-top:0">✅ Con receta: <b>${totCon}</b> · ➕ Falta: <b>${totSin}</b> · <span style="color:var(--rojo)">⚠️ Revisar: <b>${totRev}</b></span></p>
+        <div class="fila" style="gap:8px;margin:8px 0 4px;flex-wrap:wrap">
+          <button class="btn sec chico" id="impcsv" style="flex:1">⬆ Importar CSV</button>
+          <button class="btn sec chico" id="plantilla" style="flex:1">⬇ Formato vacío</button>
+          <button class="btn sec chico" id="exptabla" style="flex:1 1 100%">⬇ Descargar recetas (tabla)</button>
+        </div>
+        <input type="file" id="fcsv" accept=".csv,text/csv" style="display:none" />
+        <input id="bq" placeholder="Buscar platillo…" style="margin:6px 0 8px" value="" />
+        <div id="chips" class="fila" style="gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px"></div>
+        <div class="fila" style="gap:8px">
+          <select id="fcat" style="flex:1;margin-bottom:12px">
+            <option value="todas">Todas las categorías</option>
+            ${cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}
+          </select>
+          <select id="forden" style="flex:1;margin-bottom:12px">
+            <option value="venta">↕ Más vendido</option>
+            <option value="costo">💲 Más costoso</option>
+            <option value="margen">📈 Mejor margen</option>
+            <option value="margenPeor">📉 Peor margen</option>
+          </select>
+        </div>
+        <div id="lista"></div>
+      </div>`;
+
+    const listaEl = cont.querySelector("#lista");
+    const chipsEl = cont.querySelector("#chips");
+    const chip = (id, txt) => `<button class="fchip" data-f="${id}" style="border:1px solid var(--linea);background:${st.filtro === id ? "var(--verde)" : "#fff"};color:${st.filtro === id ? "#fff" : "var(--txt,#222)"};border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex:0 0 auto">${txt}</button>`;
+
+    function pintarChips() {
+      chipsEl.innerHTML = chip("todas", `Todas (${filas0.length})`) + chip("con", `✅ Con receta (${totCon})`) + chip("sin", `➕ Falta (${totSin})`) + chip("revisar", `⚠️ Revisar (${totRev})`);
+      chipsEl.querySelectorAll(".fchip").forEach((c) => c.addEventListener("click", () => { st.filtro = c.dataset.f; pintarChips(); pintarLista(); }));
+    }
+    function pintarLista() {
       const q = st.q.trim().toLowerCase();
-      let arr = platillos()
-        .filter((p) => (!q || p.producto.toLowerCase().includes(q)) && (st.cat === "todas" || (p.categoria || "") === st.cat))
-        .map((p) => ({ p, m: metrica(p, costos) }));
-      const totAll = arr.length;
-      const totCon = arr.filter((x) => x.m.tiene).length;
-      const totSin = totAll - totCon;
-      const totRev = arr.filter((x) => x.m.alerta).length;
-      // Filtro
+      let arr = filas0.filter(({ p }) => (!q || p.producto.toLowerCase().includes(q)) && (st.cat === "todas" || (p.categoria || "") === st.cat));
       if (st.filtro === "con") arr = arr.filter((x) => x.m.tiene);
       else if (st.filtro === "sin") arr = arr.filter((x) => !x.m.tiene);
       else if (st.filtro === "revisar") arr = arr.filter((x) => x.m.alerta);
-      // Orden
+      arr = arr.slice();
       if (st.orden === "costo") arr.sort((a, b) => (b.m.costo == null ? -Infinity : b.m.costo) - (a.m.costo == null ? -Infinity : a.m.costo));
       else if (st.orden === "margen") arr.sort((a, b) => (b.m.margPct == null ? -Infinity : b.m.margPct) - (a.m.margPct == null ? -Infinity : a.m.margPct));
       else if (st.orden === "margenPeor") arr.sort((a, b) => (a.m.margPct == null ? Infinity : a.m.margPct) - (b.m.margPct == null ? Infinity : b.m.margPct));
       else arr.sort((a, b) => (b.p.venta || 0) - (a.p.venta || 0));
-
-      const chip = (id, txt) => `<button class="fchip" data-f="${id}" style="border:1px solid var(--linea);background:${st.filtro === id ? "var(--verde)" : "#fff"};color:${st.filtro === id ? "#fff" : "var(--txt,#222)"};border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex:0 0 auto">${txt}</button>`;
-
-      cont.innerHTML = `
-        <div class="card">
-          <h2 style="margin-bottom:2px">Fichas técnicas</h2>
-          <p class="sub" style="margin-top:0">✅ Con receta: <b>${totCon}</b> · ➕ Falta: <b>${totSin}</b> · <span style="color:var(--rojo)">⚠️ Revisar: <b>${totRev}</b></span></p>
-          <div class="fila" style="gap:8px;margin:8px 0 4px;flex-wrap:wrap">
-            <button class="btn sec chico" id="impcsv" style="flex:1">⬆ Importar CSV</button>
-            <button class="btn sec chico" id="plantilla" style="flex:1">⬇ Formato vacío</button>
-            <button class="btn sec chico" id="exptabla" style="flex:1 1 100%">⬇ Descargar recetas (tabla)</button>
-          </div>
-          <input type="file" id="fcsv" accept=".csv,text/csv" style="display:none" />
-          <input id="bq" placeholder="Buscar platillo…" style="margin:6px 0 8px" value="${esc(st.q)}" />
-          <div class="fila" style="gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px">
-            ${chip("todas", `Todas (${totAll})`)}${chip("con", `✅ Con receta (${totCon})`)}${chip("sin", `➕ Falta (${totSin})`)}${chip("revisar", `⚠️ Revisar (${totRev})`)}
-          </div>
-          <div class="fila" style="gap:8px">
-            <select id="fcat" style="flex:1;margin-bottom:12px">
-              <option value="todas"${st.cat === "todas" ? " selected" : ""}>Todas las categorías</option>
-              ${categoriasPlatillos().map((c) => `<option value="${esc(c)}"${st.cat === c ? " selected" : ""}>${esc(c)}</option>`).join("")}
-            </select>
-            <select id="forden" style="flex:1;margin-bottom:12px">
-              <option value="venta"${st.orden === "venta" ? " selected" : ""}>↕ Más vendido</option>
-              <option value="costo"${st.orden === "costo" ? " selected" : ""}>💲 Más costoso</option>
-              <option value="margen"${st.orden === "margen" ? " selected" : ""}>📈 Mejor margen</option>
-              <option value="margenPeor"${st.orden === "margenPeor" ? " selected" : ""}>📉 Peor margen</option>
-            </select>
-          </div>
-          <div id="lista"></div>
-        </div>`;
-      const lista = cont.querySelector("#lista");
-      if (!arr.length) lista.innerHTML = `<div class="vacio">No hay platillos con ese filtro.</div>`;
-      else lista.innerHTML = arr.map(({ p, m }) => {
+      listaEl.innerHTML = !arr.length ? `<div class="vacio">No hay platillos con ese filtro.</div>` : arr.map(({ p, m }) => {
         const tiene = m.tiene, costo = m.costo, margPct = m.margPct;
         return `
           <button class="fila-item" data-p="${esc(p.producto)}" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--linea);padding:12px 2px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">
@@ -278,31 +281,31 @@ export function render(el) {
             </span>
           </button>`;
       }).join("");
-
-      const bq = cont.querySelector("#bq");
-      bq.addEventListener("input", () => { st.q = bq.value; const s = bq.selectionStart; draw(); const nb = cont.querySelector("#bq"); nb.focus(); nb.setSelectionRange(s, s); });
-      const fcat = cont.querySelector("#fcat");
-      fcat.addEventListener("change", () => { st.cat = fcat.value; draw(); });
-      const forden = cont.querySelector("#forden");
-      forden.addEventListener("change", () => { st.orden = forden.value; draw(); });
-      cont.querySelectorAll(".fchip").forEach((c) => c.addEventListener("click", () => { st.filtro = c.dataset.f; draw(); }));
-      cont.querySelector("#plantilla").addEventListener("click", descargarPlantilla);
-      cont.querySelector("#exptabla").addEventListener("click", descargarTablaRecetas);
-      const fcsv = cont.querySelector("#fcsv");
-      cont.querySelector("#impcsv").addEventListener("click", () => fcsv.click());
-      fcsv.addEventListener("change", async () => {
-        const file = fcsv.files[0]; if (!file) return;
-        const btn = cont.querySelector("#impcsv"); if (btn) btn.textContent = "Importando…";
-        try {
-          const grupos = gruposDesdeCSV(parsearCSV(await file.text()));
-          if (!grupos.length) alert("No encontré recetas en el CSV. Debe tener columnas 'platillo' e 'insumo'. Usa 'Descargar formato'.");
-          else { const n = await store.importarRecetas(grupos); alert(`Listo: ${n} recetas/subrecetas importadas.`); draw(); }
-        } catch (e) { alert("Error al importar: " + (e.message || e)); }
-        fcsv.value = ""; const b2 = cont.querySelector("#impcsv"); if (b2) b2.textContent = "⬆ Importar CSV";
-      });
-      cont.querySelectorAll(".fila-item").forEach((b) => b.addEventListener("click", () => { editando = { nombre: b.dataset.p, esPrep: false }; pintar(); }));
+      listaEl.querySelectorAll(".fila-item").forEach((b) => b.addEventListener("click", () => { editando = { nombre: b.dataset.p, esPrep: false }; pintar(); }));
     }
-    draw();
+
+    // Eventos de los controles: se enganchan UNA vez; el input no se recrea al teclear.
+    const bq = cont.querySelector("#bq");
+    bq.addEventListener("input", () => { st.q = bq.value; pintarLista(); });
+    cont.querySelector("#fcat").addEventListener("change", (e) => { st.cat = e.target.value; pintarLista(); });
+    cont.querySelector("#forden").addEventListener("change", (e) => { st.orden = e.target.value; pintarLista(); });
+    cont.querySelector("#plantilla").addEventListener("click", descargarPlantilla);
+    cont.querySelector("#exptabla").addEventListener("click", descargarTablaRecetas);
+    const fcsv = cont.querySelector("#fcsv");
+    cont.querySelector("#impcsv").addEventListener("click", () => fcsv.click());
+    fcsv.addEventListener("change", async () => {
+      const file = fcsv.files[0]; if (!file) return;
+      const btn = cont.querySelector("#impcsv"); if (btn) btn.textContent = "Importando…";
+      try {
+        const grupos = gruposDesdeCSV(parsearCSV(await file.text()));
+        if (!grupos.length) alert("No encontré recetas en el CSV. Debe tener columnas 'platillo' e 'insumo'. Usa 'Descargar formato'.");
+        else { const n = await store.importarRecetas(grupos); alert(`Listo: ${n} recetas/subrecetas importadas.`); pintar(); return; }
+      } catch (e) { alert("Error al importar: " + (e.message || e)); }
+      fcsv.value = ""; const b2 = cont.querySelector("#impcsv"); if (b2) b2.textContent = "⬆ Importar CSV";
+    });
+
+    pintarChips();
+    pintarLista();
   }
 
   // ───────────── Lista de preparaciones ─────────────
