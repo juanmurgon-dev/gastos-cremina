@@ -43,7 +43,11 @@ export const state = {
 
 const subs = new Set();
 export function subscribe(fn) { subs.add(fn); return () => subs.delete(fn); }
-function notify() { subs.forEach((fn) => fn()); }
+function notify() { _preciosCache = null; _preciosMap = null; subs.forEach((fn) => fn()); }
+// Cache de preciosPorInsumo(): se reconstruye caro (recorre todos los tickets).
+// Se invalida en notify() (cualquier cambio de estado). Evita rehacerlo miles de
+// veces al costear recetas (antes bloqueaba el hilo → el buscador no escribía).
+let _preciosCache = null, _preciosMap = null;
 
 function rowToTicket(r) {
   return {
@@ -259,8 +263,7 @@ export function sugerirUnidadReceta(unidadCompra) {
 
 // Precio (última compra) de un insumo por nombre.
 export function precioInsumo(nombre) {
-  const key = String(nombre || "").trim().toLowerCase();
-  const hit = preciosPorInsumo().find((i) => i.nombre.toLowerCase() === key);
+  const hit = preciosIndex().get(String(nombre || "").trim().toLowerCase());
   return hit ? num(hit.precioActual) : 0;
 }
 
@@ -317,8 +320,7 @@ export function unidadInsumo(nombre) {
   if (tieneReceta(nombre)) return "porción";   // platillo usado como componente → por porción
   const _m = maestroDe(nombre);
   if (_m) return _m.unidad_base || "g";         // del Registro Maestro → su unidad base
-  const key = String(nombre || "").trim().toLowerCase();
-  const hit = preciosPorInsumo().find((i) => i.nombre.toLowerCase() === key);
+  const hit = preciosIndex().get(String(nombre || "").trim().toLowerCase());
   return hit ? (hit.unidad || "") : "";
 }
 
@@ -1681,6 +1683,7 @@ export function agruparProveedores() {
 }
 
 export function preciosPorInsumo() {
+  if (_preciosCache) return _preciosCache;
   const map = new Map();
   for (const t of state.tickets) {
     for (const l of t.lineas || []) {
@@ -1718,8 +1721,12 @@ export function preciosPorInsumo() {
     arr.push(v);
   }
   arr.sort((a, b) => b.veces - a.veces);
+  _preciosCache = arr;
+  _preciosMap = new Map(arr.map((i) => [i.nombre.trim().toLowerCase(), i]));
   return arr;
 }
+// Índice por nombre (minúsculas) para lookups O(1). Usa el cache.
+function preciosIndex() { if (!_preciosMap) preciosPorInsumo(); return _preciosMap; }
 
 // ── Ritmo de compras ────────────────────────────────────────────────────────
 // Cada cuánto compras cada insumo y a cada proveedor, y qué "ya toca pedir".
