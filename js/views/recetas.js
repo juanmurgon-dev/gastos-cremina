@@ -64,7 +64,11 @@ function platillos() {
       });
     }
   }
-  return [...base, ...variantes].sort((a, b) => b.venta - a.venta);
+  // Evita duplicados: si un nombre ya se genera como variante (ej. "Chilaquiles · Rojos"),
+  // no lo repitas como platillo base (pasaba con las recetas cargadas con ese nombre).
+  const nombresVariante = new Set(variantes.map((v) => v.producto));
+  const baseSinDup = base.filter((b) => !nombresVariante.has(b.producto));
+  return [...baseSinDup, ...variantes].sort((a, b) => b.venta - a.venta);
 }
 // Categorías distintas de los platillos (para el filtro).
 function categoriasPlatillos() {
