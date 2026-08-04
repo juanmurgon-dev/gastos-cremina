@@ -958,6 +958,34 @@ export async function guardarSkuProv(nombre, proveedor, texto) {
   await guardarConfig({ skusProv: m });
 }
 
+// Fotos de la presentación por insumo/proveedor (tabla dedicada, carga bajo demanda).
+// Devuelve un Map(proveedor_norm → foto base64) con las fotos de ESE insumo.
+export async function fotosDeInsumo(nombre) {
+  const m = new Map();
+  const { data, error } = await supabase.from("insumo_fotos").select("proveedor_norm,foto").eq("insumo_norm", normIns(nombre));
+  if (!error && data) for (const r of data) m.set(r.proveedor_norm || "", r.foto || "");
+  return m;
+}
+export async function guardarFotoInsumo(nombre, proveedor, foto) {
+  const row = {
+    insumo_norm: normIns(nombre), proveedor_norm: proveedor ? normProv(proveedor) : "",
+    insumo: String(nombre || "").trim(), proveedor: String(proveedor || "").trim(),
+    foto: foto || "", actualizado: new Date().toISOString(),
+  };
+  const { error } = await supabase.from("insumo_fotos").upsert(row, { onConflict: "insumo_norm,proveedor_norm" });
+  if (error) throw error;
+}
+export async function borrarFotoInsumo(nombre, proveedor) {
+  const { error } = await supabase.from("insumo_fotos").delete()
+    .eq("insumo_norm", normIns(nombre)).eq("proveedor_norm", proveedor ? normProv(proveedor) : "");
+  if (error) throw error;
+}
+// Al renombrar un insumo, mueve sus fotos a la nueva clave para que no se pierdan.
+export async function migrarFotosInsumo(viejo, nuevo) {
+  if (normIns(viejo) === normIns(nuevo)) return;
+  await supabase.from("insumo_fotos").update({ insumo_norm: normIns(nuevo), insumo: String(nuevo || "").trim() }).eq("insumo_norm", normIns(viejo));
+}
+
 export async function renombrarInsumo(viejo, nuevoNombre, nuevaUnidad, nuevoCodigo) {
   const vk = String(viejo || "").trim().toLowerCase();
   const nombre = String(nuevoNombre || "").trim();

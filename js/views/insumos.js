@@ -8,6 +8,25 @@ import * as proveedores from "./proveedores.js";
 import * as ritmo from "./ritmo.js";
 import * as requisicion from "./requisicion.js";
 
+// Comprime una foto (para que pese poco antes de guardarla en base64).
+function comprimirFoto(file, max = 640) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > max || height > max) { const s = max / Math.max(width, height); width = Math.round(width * s); height = Math.round(height * s); }
+        const c = document.createElement("canvas"); c.width = width; c.height = height;
+        c.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(c.toDataURL("image/jpeg", 0.68));
+      };
+      img.onerror = reject; img.src = r.result;
+    };
+    r.onerror = reject; r.readAsDataURL(file);
+  });
+}
+
 // Hub de Insumos: Capturar · Tickets · Requisición · Precios · Proveedores · Ritmo.
 export function render(el, ctx) {
   let sub = "capturar", limpiar = null;
@@ -230,6 +249,15 @@ function renderPrecios(el) {
               <input class="edPres" value="${escapar(p.pres)}" placeholder="${base ? "Presentación en " + base + " (ej. 1.5)" : "Presentación (ej. 1.5 kg)"}" style="flex:1.4;min-width:0" />
               <input class="edSkuP" value="${escapar(skuVal)}" placeholder="SKU" style="flex:1;min-width:0" />
             </div>
+            <div class="fila prov-foto" style="gap:8px;margin-top:8px;align-items:center">
+              <div class="foto-thumb" style="width:52px;height:52px;flex:0 0 auto;border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:#f6f4ee;display:flex;align-items:center;justify-content:center;cursor:pointer">
+                <span class="foto-vacia sub" style="font-size:18px">📷</span>
+                <img class="foto-img" alt="presentación" style="display:none;width:100%;height:100%;object-fit:cover" />
+              </div>
+              <button type="button" class="btn sec chico foto-sube" style="flex:1">📷 Subir foto de la presentación</button>
+              <button type="button" class="btn sec chico foto-quita" style="flex:0 0 auto;color:var(--rojo);display:none">Quitar</button>
+              <input type="file" class="foto-file" accept="image/*" capture="environment" style="display:none" />
+            </div>
           </div>`;
         }).join("")}` : ""}
 
@@ -289,6 +317,35 @@ function renderPrecios(el) {
     bg.querySelectorAll(".edPres").forEach((inp) => inp.addEventListener("input", recompara));
     recompara();
 
+    // Fotos de la presentación por proveedor (subir / cambiar / quitar; carga bajo demanda)
+    (function fotosPorProveedor() {
+      const setThumb = (row, dataUrl) => {
+        const img = row.querySelector(".foto-img"), vacia = row.querySelector(".foto-vacia");
+        const quita = row.querySelector(".foto-quita"), sube = row.querySelector(".foto-sube");
+        if (dataUrl) { img.src = dataUrl; img.style.display = "block"; vacia.style.display = "none"; quita.style.display = ""; sube.textContent = "📷 Cambiar foto"; }
+        else { img.removeAttribute("src"); img.style.display = "none"; vacia.style.display = ""; quita.style.display = "none"; sube.textContent = "📷 Subir foto de la presentación"; }
+      };
+      const rows = [...bg.querySelectorAll(".prov-row")];
+      rows.forEach((row) => {
+        const prov = row.dataset.prov;
+        const file = row.querySelector(".foto-file"), sube = row.querySelector(".foto-sube"), quita = row.querySelector(".foto-quita"), thumb = row.querySelector(".foto-thumb");
+        sube.addEventListener("click", () => file.click());
+        thumb.addEventListener("click", () => { const img = row.querySelector(".foto-img"); if (img.style.display !== "none" && img.src) window.open(img.src, "_blank"); else file.click(); });
+        file.addEventListener("change", async () => {
+          const f = file.files && file.files[0]; if (!f) return;
+          sube.disabled = true; const prev = sube.textContent; sube.textContent = "Subiendo…";
+          try { const dataUrl = await comprimirFoto(f); await store.guardarFotoInsumo(item.nombre, prov, dataUrl); setThumb(row, dataUrl); }
+          catch (e) { alert("No se pudo subir la foto: " + ((e && e.message) || e)); sube.textContent = prev; }
+          sube.disabled = false; file.value = "";
+        });
+        quita.addEventListener("click", async () => {
+          if (!confirm("¿Quitar la foto de este proveedor?")) return;
+          try { await store.borrarFotoInsumo(item.nombre, prov); setThumb(row, ""); } catch (e) { alert("Error: " + ((e && e.message) || e)); }
+        });
+      });
+      store.fotosDeInsumo(item.nombre).then((m) => { rows.forEach((row) => { const f = m.get(store.normProv(row.dataset.prov)); if (f) setThumb(row, f); }); }).catch(() => {});
+    })();
+
     // Precio por gramo (maestro) en vivo
     const recalcMae = () => { const o = bg.querySelector("#mPg"); if (o) o.textContent = pgFmt(calcPg(bg.querySelector("#mTot").value, bg.querySelector("#mPz").value, bg.querySelector("#mGpz").value), bg.querySelector("#mU") ? bg.querySelector("#mU").value : "g"); };
     ["#mPz", "#mGpz", "#mTot", "#mU"].forEach((s) => { const n = bg.querySelector(s); if (n) { n.addEventListener("input", recalcMae); n.addEventListener("change", recalcMae); } });
@@ -300,6 +357,7 @@ function renderPrecios(el) {
       const b = bg.querySelector("#edSave"); b.disabled = true; b.textContent = "Guardando…";
       try {
         const n = await store.renombrarInsumo(item.nombre, nn, nu);
+        if (nn !== item.nombre) { try { await store.migrarFotosInsumo(item.nombre, nn); } catch (e) {} }
         for (const row of bg.querySelectorAll(".prov-row")) {
           const prov = row.dataset.prov;
           await store.guardarPresentacion(nn, prov, row.querySelector(".edPres").value.trim());
