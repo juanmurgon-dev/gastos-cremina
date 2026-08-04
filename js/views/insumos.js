@@ -152,14 +152,16 @@ function renderPrecios(el) {
     const provs = [...provMap.values()];
     // Normaliza a una unidad BASE (kg / L / pza) para comparar de a de veras.
     const parsePres = (txt) => { const m = String(txt || "").match(/(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|g|gr|grs|gramos?|lts?|l|litros?|ml|pzas?|pz|piezas?)/i); return m ? { qty: parseFloat(m[1].replace(",", ".")), unit: m[2].toLowerCase() } : null; };
-    provs.forEach((p) => { p.pres = store.presentacionDe(item.nombre, p.proveedor); p.presP = parsePres(p.pres); });
+    const parseNum = (txt) => { const m = String(txt || "").match(/(\d+(?:[.,]\d+)?)/); return m ? parseFloat(m[1].replace(",", ".")) : null; };
+    provs.forEach((p) => { p.pres = store.presentacionDe(item.nombre, p.proveedor); p.presP = parsePres(p.pres); p.presNum = parseNum(p.pres); });
     const cand = provs.flatMap((p) => [p.unidad, p.presP && p.presP.unit]).filter(Boolean);
     let base = ""; for (const fam of ["kg", "L", "pza"]) { if (cand.some((u) => store.unidadesCompatibles(u, fam))) { base = fam; break; } }
     provs.forEach((p) => {
       let cb = null;
-      // La PRESENTACIÓN manda: "1.5 kg" ⇒ precio de compra ÷ 1.5. Si no hay presentación,
-      // se cae a la conversión por la unidad del ticket (sirve si ya viene en kg/g/L/ml).
+      // La PRESENTACIÓN manda: "1.5 kg" ⇒ precio de compra ÷ 1.5. Un número solo ("1.5")
+      // se toma como cantidad en la unidad base. Si no hay presentación, cae a la unidad del ticket.
       if (base && p.presP && p.presP.qty > 0 && store.unidadesCompatibles(p.presP.unit, base)) cb = p.precio / (p.presP.qty * store.factorConversion(p.presP.unit, base));
+      else if (base && p.presNum && p.presNum > 0) cb = p.precio / p.presNum;
       else if (base && p.unidad && store.unidadesCompatibles(p.unidad, base)) cb = p.precio * store.factorConversion(base, p.unidad);
       p.costoBase = cb;   // precio por unidad base (kg/L/pza), o null si falta info
     });
@@ -211,7 +213,7 @@ function renderPrecios(el) {
             </div>
             <div class="sub" style="font-size:10.5px;margin-top:2px">Compra: ${money(p.precio)}/${escapar(p.unidad || "u")}${p.costoBase == null && base ? ` · <span style="color:var(--amber-osc,#b06a00)">agrega la presentación (ej. 1.5 ${base}) para comparar</span>` : ""}</div>
             <div class="fila" style="gap:8px;margin-top:8px">
-              <input class="edPres" value="${escapar(p.pres)}" placeholder="Presentación (ej. 1.5 kg)" style="flex:1.4;min-width:0" />
+              <input class="edPres" value="${escapar(p.pres)}" placeholder="${base ? "Presentación en " + base + " (ej. 1.5)" : "Presentación (ej. 1.5 kg)"}" style="flex:1.4;min-width:0" />
               <input class="edSkuP" value="${escapar(skuVal)}" placeholder="SKU" style="flex:1;min-width:0" />
             </div>
           </div>`;
