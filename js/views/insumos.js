@@ -201,17 +201,13 @@ function renderPrecios(el) {
         ${provs.length ? `<div class="titulo-seccion" style="margin-top:16px">📦 Comparativa por proveedor${base ? " · costo por " + base : ""}</div>
         <div class="sub" style="font-size:11px;margin:-4px 0 6px">Se compara por <b>costo por ${base || "unidad"}</b> (normalizado con la presentación). Escribe la presentación con su cantidad, ej. <b>1.5 kg</b>, para que compare bien.</div>
         ${provs.map((p) => {
-          const barato = p.costoBase != null && minCB !== Infinity && Math.abs(p.costoBase - minCB) < 0.01 && provs.filter((x) => x.costoBase != null).length > 1;
-          const dif = (p.costoBase != null && minCB !== Infinity) ? p.costoBase - minCB : 0;
           const skuVal = store.skuProvDe(item.nombre, p.proveedor) || p.codigo;
-          return `<div class="prov-row" data-prov="${escapar(p.proveedor)}" style="border:1px solid ${barato ? "var(--verde)" : "var(--linea)"};border-radius:10px;padding:10px;margin-top:6px;background:${barato ? "#eafaf0" : "#fff"}">
+          return `<div class="prov-row" data-prov="${escapar(p.proveedor)}" data-precio="${p.precio}" data-unidad="${escapar(p.unidad || "")}" style="border:1px solid var(--linea);border-radius:10px;padding:10px;margin-top:6px;background:#fff">
             <div class="fila" style="justify-content:space-between;align-items:baseline;gap:8px">
-              <b style="font-size:13.5px;flex:1;min-width:0">${escapar(p.label)}${barato ? ` <span class="sub" style="color:var(--verde);font-weight:600">· más barato</span>` : ""}</b>
-              <span style="white-space:nowrap">${p.costoBase != null
-                ? `<b style="font-size:15px">${money(p.costoBase)}</b><span class="sub">/${base}</span>${dif > 0.01 ? ` <span class="sub" style="color:var(--rojo)">+${money(dif)}</span>` : ""}`
-                : `<b>${money(p.precio)}</b><span class="sub">/${escapar(p.unidad || "u")}</span>`}</span>
+              <b style="font-size:13.5px;flex:1;min-width:0">${escapar(p.label)} <span class="barato-tag" style="color:var(--verde);font-weight:600;font-size:11px"></span></b>
+              <span class="cost-out" style="white-space:nowrap"></span>
             </div>
-            <div class="sub" style="font-size:10.5px;margin-top:2px">Compra: ${money(p.precio)}/${escapar(p.unidad || "u")}${p.costoBase == null && base ? ` · <span style="color:var(--amber-osc,#b06a00)">agrega la presentación (ej. 1.5 ${base}) para comparar</span>` : ""}</div>
+            <div class="cost-compra sub" style="font-size:10.5px;margin-top:2px">Compra: ${money(p.precio)}/${escapar(p.unidad || "u")}</div>
             <div class="fila" style="gap:8px;margin-top:8px">
               <input class="edPres" value="${escapar(p.pres)}" placeholder="${base ? "Presentación en " + base + " (ej. 1.5)" : "Presentación (ej. 1.5 kg)"}" style="flex:1.4;min-width:0" />
               <input class="edSkuP" value="${escapar(skuVal)}" placeholder="SKU" style="flex:1;min-width:0" />
@@ -232,6 +228,36 @@ function renderPrecios(el) {
     const cerrar = () => bg.remove();
     bg.addEventListener("click", (e) => { if (e.target === bg) cerrar(); });
     bg.querySelector("[data-cerrar]").addEventListener("click", cerrar);
+    // Recalcula el costo por unidad base EN VIVO al escribir la presentación (sin guardar/reabrir).
+    function recompara() {
+      const data = [...bg.querySelectorAll(".prov-row")].map((r) => {
+        const precio = store.num(r.dataset.precio), unidad = r.dataset.unidad;
+        const txt = r.querySelector(".edPres").value;
+        const pp = parsePres(txt), pn = parseNum(txt);
+        let cb = null;
+        if (base && pp && pp.qty > 0 && store.unidadesCompatibles(pp.unit, base)) cb = precio / (pp.qty * store.factorConversion(pp.unit, base));
+        else if (base && pn && pn > 0) cb = precio / pn;
+        else if (base && unidad && store.unidadesCompatibles(unidad, base)) cb = precio * store.factorConversion(base, unidad);
+        return { r, precio, unidad, cb };
+      });
+      const minCB = data.reduce((m, d) => (d.cb != null && d.cb < m ? d.cb : m), Infinity);
+      const conCB = data.filter((d) => d.cb != null).length;
+      for (const d of data) {
+        const barato = d.cb != null && minCB !== Infinity && Math.abs(d.cb - minCB) < 0.01 && conCB > 1;
+        const dif = (d.cb != null && minCB !== Infinity) ? d.cb - minCB : 0;
+        d.r.querySelector(".cost-out").innerHTML = d.cb != null
+          ? `<b style="font-size:15px">${money(d.cb)}</b><span class="sub">/${base}</span>${dif > 0.01 ? ` <span class="sub" style="color:var(--rojo)">+${money(dif)}</span>` : ""}`
+          : `<b>${money(d.precio)}</b><span class="sub">/${escapar(d.unidad || "u")}</span>`;
+        d.r.querySelector(".barato-tag").textContent = barato ? "· más barato" : "";
+        d.r.style.border = "1px solid " + (barato ? "var(--verde)" : "var(--linea)");
+        d.r.style.background = barato ? "#eafaf0" : "#fff";
+        const cc = d.r.querySelector(".cost-compra");
+        if (cc) cc.innerHTML = `Compra: ${money(d.precio)}/${escapar(d.unidad || "u")}${d.cb == null && base ? ` · <span style="color:#b06a00">agrega la presentación (ej. 1.5 ${base}) para comparar</span>` : ""}`;
+      }
+    }
+    bg.querySelectorAll(".edPres").forEach((inp) => inp.addEventListener("input", recompara));
+    recompara();
+
     bg.querySelector("#edSave").addEventListener("click", async () => {
       const nn = bg.querySelector("#edN").value.trim();
       const nu = bg.querySelector("#edU").value.trim();
