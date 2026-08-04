@@ -157,8 +157,10 @@ function renderPrecios(el) {
     let base = ""; for (const fam of ["kg", "L", "pza"]) { if (cand.some((u) => store.unidadesCompatibles(u, fam))) { base = fam; break; } }
     provs.forEach((p) => {
       let cb = null;
-      if (base && p.unidad && store.unidadesCompatibles(p.unidad, base)) cb = p.precio * store.factorConversion(base, p.unidad);
-      else if (base && p.presP && p.presP.qty > 0 && store.unidadesCompatibles(p.presP.unit, base)) cb = p.precio / (p.presP.qty * store.factorConversion(p.presP.unit, base));
+      // La PRESENTACIÓN manda: "1.5 kg" ⇒ precio de compra ÷ 1.5. Si no hay presentación,
+      // se cae a la conversión por la unidad del ticket (sirve si ya viene en kg/g/L/ml).
+      if (base && p.presP && p.presP.qty > 0 && store.unidadesCompatibles(p.presP.unit, base)) cb = p.precio / (p.presP.qty * store.factorConversion(p.presP.unit, base));
+      else if (base && p.unidad && store.unidadesCompatibles(p.unidad, base)) cb = p.precio * store.factorConversion(base, p.unidad);
       p.costoBase = cb;   // precio por unidad base (kg/L/pza), o null si falta info
     });
     provs.sort((a, b) => (a.costoBase == null ? Infinity : a.costoBase) - (b.costoBase == null ? Infinity : b.costoBase) || a.precio - b.precio);
