@@ -349,6 +349,43 @@ export function maestroDe(nombre) {
   const k = normIns(nombre);
   return (state.ingredientesMaestro || []).find((x) => normIns(x.nombre) === k) || null;
 }
+
+// ── Variantes de un platillo (del grupo modificador del POS) ──
+// Igual criterio que el Margen: elige el grupo principal (ignora leche/temperatura,
+// prefiere "Tipo"/sabores) y devuelve las opciones que se venden.
+const _ES_CORTESIA = /pan de cortes[íi]a/i;
+const _ES_SECUNDARIO = /leche|fr[íi]o|caliente|shot|cold foam|temperatura/i;
+const _ES_SABOR_NOMBRE = /sabor|saboriz|jarabe|syrup|flavor|esencia/i;
+const _ES_SABOR_OPCION = /vainilla|avellana|caramelo|cremina|chocolate|mo[ck]a|canela|amaretto|hazelnut|vanilla|caramel|coco|fresa|matcha|chai|lavanda|menta|calabaza|pumpkin|maple|pistache|cajeta/i;
+function _elegirGrupoVar(grupos) {
+  const unidades = (g) => grupos[g].reduce((a, r) => a + num(r.unidades), 0);
+  const pool = Object.keys(grupos).filter((n) => !_ES_SECUNDARIO.test(n));
+  const base = pool.length ? pool : Object.keys(grupos);
+  let cand = base.filter((n) => n.toLowerCase().startsWith("tipo"));
+  if (!cand.length) cand = base.filter((n) => _ES_SABOR_NOMBRE.test(n));
+  if (!cand.length) cand = base.filter((n) => grupos[n].some((r) => _ES_SABOR_OPCION.test(r.opcion || "")));
+  if (!cand.length) cand = base;
+  return cand.sort((a, b) => unidades(b) - unidades(a))[0];
+}
+export function variantesDe(producto) {
+  if (!usaVariantes || !usaVariantes()) return [];
+  const vars = (state.variantes || []).filter((v) =>
+    v.producto === producto && !_ES_CORTESIA.test(v.producto || "") && !_ES_CORTESIA.test(v.opcion || ""));
+  if (!vars.length) return [];
+  const grupos = {};
+  for (const v of vars) (grupos[v.grupo] = grupos[v.grupo] || []).push(v);
+  const gname = _elegirGrupoVar(grupos);
+  const seen = new Map();
+  for (const r of (grupos[gname] || [])) {
+    const op = (r.opcion || "").trim();
+    if (!op) continue;
+    const o = seen.get(op) || { opcion: op, unidades: 0, venta: 0 };
+    o.unidades += num(r.unidades); o.venta += num(r.venta); seen.set(op, o);
+  }
+  return [...seen.values()]
+    .map((o) => ({ ...o, precio: o.unidades > 0 ? o.venta / o.unidades : 0 }))
+    .sort((a, b) => b.venta - a.venta);
+}
 export function precioGMaestro(nombre) { const m = maestroDe(nombre); return m ? num(m.precio_g) : 0; }
 export async function guardarIngredienteMaestro(row) {
   const r = {

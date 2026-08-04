@@ -49,10 +49,22 @@ function platillos() {
     const nom = (r.producto || "").trim();
     if (nom && !m.has(nom)) m.set(nom, { producto: nom, categoria: "", venta: 0, cantidad: 0 });
   }
-  return [...m.values()].map((o) => {
+  const base = [...m.values()].map((o) => {
     const fcat = (store.fichaDe(o.producto) || {}).categoria;   // la categoría de la ficha tiene prioridad
     return { ...o, categoria: fcat || o.categoria || "", precio: o.cantidad > 0 ? o.venta / o.cantidad : 0 };
-  }).sort((a, b) => b.venta - a.venta);
+  });
+  // Variantes (del grupo modificador del POS): una entrada por opción → "Platillo · Opción".
+  const variantes = [];
+  for (const p of base) {
+    for (const v of store.variantesDe(p.producto)) {
+      variantes.push({
+        producto: `${p.producto} · ${v.opcion}`, categoria: p.categoria,
+        venta: v.venta, cantidad: v.unidades, precio: v.precio,
+        esVariante: true, base: p.producto, opcion: v.opcion,
+      });
+    }
+  }
+  return [...base, ...variantes].sort((a, b) => b.venta - a.venta);
 }
 // Categorías distintas de los platillos (para el filtro).
 function categoriasPlatillos() {
@@ -213,7 +225,7 @@ export function render(el) {
           <button class="fila-item" data-p="${esc(p.producto)}" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--linea);padding:12px 2px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">
             <span style="min-width:0">
               <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.producto)}</b>
-              <span class="sub" style="font-size:12px">${esc(p.categoria || "")}${p.precio ? " · vende " + money(p.precio) : ""}</span>
+              <span class="sub" style="font-size:12px">${p.esVariante ? "🔸 variante · " : ""}${esc(p.categoria || "")}${p.precio ? " · vende " + money(p.precio) : ""}</span>
             </span>
             <span style="text-align:right;white-space:nowrap">
               ${tiene && costo != null
