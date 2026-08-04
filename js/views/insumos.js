@@ -142,20 +142,31 @@ function renderPrecios(el) {
     const varTot = prim ? (ult - prim) / prim : 0;
     const gastoTot = asc.reduce((a, r) => a + store.num(r.monto), 0);
 
-    // Proveedores distintos con su ÚLTIMO precio, código y unidad (registros recientes primero).
-    const provMap = new Map();
-    for (const r of item.registros) {
+    // Proveedores: último precio + tendencia (vs su compra anterior con precio distinto).
+    const provReg = new Map();
+    for (const r of item.registros) {   // registros vienen recientes primero
       const p = (r.proveedor || "").trim();
-      if (provMap.has(p)) continue;
-      provMap.set(p, { proveedor: p, label: p || "Sin proveedor", precio: store.num(r.precio), unidad: r.unidad || item.unidad || "", codigo: (r.codigo || "").toString().trim() });
+      if (!provReg.has(p)) provReg.set(p, []);
+      provReg.get(p).push(r);
     }
-    const provs = [...provMap.values()];
+    const provs = [...provReg.entries()].map(([p, regs]) => {
+      const ult = regs[0];
+      const prev = regs.find((r) => store.num(r.precio) !== store.num(ult.precio));
+      return {
+        proveedor: p, label: p || "Sin proveedor",
+        precio: store.num(ult.precio), unidad: ult.unidad || item.unidad || "",
+        codigo: (ult.codigo || "").toString().trim(),
+        cambio: prev ? store.num(ult.precio) - store.num(prev.precio) : 0, veces: regs.length,
+      };
+    });
     // Normaliza a una unidad BASE (kg / L / pza) para comparar de a de veras.
     const parsePres = (txt) => { const m = String(txt || "").match(/(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|g|gr|grs|gramos?|lts?|l|litros?|ml|pzas?|pz|piezas?)/i); return m ? { qty: parseFloat(m[1].replace(",", ".")), unit: m[2].toLowerCase() } : null; };
     const parseNum = (txt) => { const m = String(txt || "").match(/(\d+(?:[.,]\d+)?)/); return m ? parseFloat(m[1].replace(",", ".")) : null; };
     provs.forEach((p) => { p.pres = store.presentacionDe(item.nombre, p.proveedor); p.presP = parsePres(p.pres); p.presNum = parseNum(p.pres); });
     const cand = provs.flatMap((p) => [p.unidad, p.presP && p.presP.unit]).filter(Boolean);
     let base = ""; for (const fam of ["kg", "L", "pza"]) { if (cand.some((u) => store.unidadesCompatibles(u, fam))) { base = fam; break; } }
+    // Si no hay unidad de peso/volumen pero sí presentación (ej. huevo "300"), compara por PIEZA.
+    if (!base && provs.some((p) => p.presP || p.presNum)) base = "pza";
     provs.forEach((p) => {
       let cb = null;
       // La PRESENTACIÓN manda: "1.5 kg" ⇒ precio de compra ÷ 1.5. Un número solo ("1.5")
@@ -203,7 +214,7 @@ function renderPrecios(el) {
             </div>`).join("")}
         </div>
         ${provs.length ? `<div class="titulo-seccion" style="margin-top:16px">📦 Comparativa por proveedor${base ? " · costo por " + base : ""}</div>
-        <div class="sub" style="font-size:11px;margin:-4px 0 6px">Se compara por <b>costo por ${base || "unidad"}</b> (normalizado con la presentación). Escribe la presentación con su cantidad, ej. <b>1.5 kg</b>, para que compare bien.</div>
+        <div class="sub" style="font-size:11px;margin:-4px 0 6px">Se compara por <b>costo por ${base || "unidad"}</b> (normalizado con la presentación). Pon la presentación con su cantidad: ej. <b>1.5 kg</b>, <b>4 kg</b>, o para huevo la caja/cartera como <b>300</b> o <b>12</b> (piezas). Así compara aunque cada proveedor traiga distinta presentación.</div>
         ${provs.map((p) => {
           const skuVal = store.skuProvDe(item.nombre, p.proveedor) || p.codigo;
           return `<div class="prov-row" data-prov="${escapar(p.proveedor)}" data-precio="${p.precio}" data-unidad="${escapar(p.unidad || "")}" style="border:1px solid var(--linea);border-radius:10px;padding:10px;margin-top:6px;background:#fff">
@@ -212,6 +223,7 @@ function renderPrecios(el) {
               <span class="cost-out" style="white-space:nowrap"></span>
             </div>
             <div class="cost-compra sub" style="font-size:10.5px;margin-top:2px">Compra: ${money(p.precio)}/${escapar(p.unidad || "u")}</div>
+            ${p.veces > 1 ? `<div class="sub" style="font-size:10.5px;margin-top:1px">${p.cambio >= 1 ? `<span style="color:var(--rojo)">▲ subió ${money(p.cambio)} vs su compra anterior</span>` : p.cambio <= -1 ? `<span style="color:var(--verde)">▼ bajó ${money(Math.abs(p.cambio))} vs su compra anterior</span>` : `<span>= mismo precio que antes</span>`} · ${p.veces} compras</div>` : `<div class="sub" style="font-size:10.5px;margin-top:1px">1ª compra registrada</div>`}
             <div class="fila" style="gap:8px;margin-top:8px">
               <input class="edPres" value="${escapar(p.pres)}" placeholder="${base ? "Presentación en " + base + " (ej. 1.5)" : "Presentación (ej. 1.5 kg)"}" style="flex:1.4;min-width:0" />
               <input class="edSkuP" value="${escapar(skuVal)}" placeholder="SKU" style="flex:1;min-width:0" />
