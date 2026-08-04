@@ -299,6 +299,8 @@ export function render(el) {
     const precioVenta = plat ? plat.precio : 0;
     const insumosLista = store.preciosPorInsumo();
     const datalist = `<datalist id="dl-insumos">${insumosLista.map((i) => `<option value="${esc(i.nombre)}">`).join("")}</datalist>`;
+    // Unidades medibles sugeridas (peso, volumen, conteo). Se convierten al costear.
+    const dlUnidades = `<datalist id="dl-unidades">${["g", "kg", "mg", "oz", "lb", "ml", "l", "taza", "cda", "cdta", "fl oz", "pza", "docena"].map((u) => `<option value="${u}">`).join("")}</datalist>`;
     // Componentes que se pueden agregar como subreceta: preparaciones + platillos que ya tienen receta.
     const prepsDisp = () => {
       const set = new Set(preparaciones());
@@ -319,7 +321,7 @@ export function render(el) {
       const sugConIva = (num(objetivo) > 0 ? costoPorcion / (num(objetivo) / 100) : 0) * (1 + IVA);
 
       cont.innerHTML = `
-        ${datalist}
+        ${datalist}${dlUnidades}
         <div class="card">
           <button class="btn sec chico" id="volver" style="margin-bottom:10px">← Volver</button>
 
@@ -410,7 +412,7 @@ export function render(el) {
             </div>
             <div class="fila" style="gap:8px;margin-top:8px">
               <label class="campo" style="flex:1.2;margin:0"><span>Cantidad bruta</span><input class="rc" type="number" inputmode="decimal" min="0" step="any" placeholder="0" value="${esc(String(it.cantidad))}" /></label>
-              <label class="campo" style="flex:.8;margin:0"><span>Unidad</span><input class="ru" placeholder="g, ml, pza" value="${esc(uLinea)}" /></label>
+              <label class="campo" style="flex:.8;margin:0"><span>Unidad</span><input class="ru" list="dl-unidades" placeholder="g, kg, oz, lb, ml, taza…" value="${esc(uLinea)}" /></label>
               <label class="campo" style="flex:.8;margin:0"><span>Merma %</span><input class="rm" type="number" min="0" max="99" placeholder="0" value="${esc(String(it.merma || ""))}" /></label>
             </div>
             <div class="fila" style="justify-content:space-between;align-items:center;margin-top:8px">

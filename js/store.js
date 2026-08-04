@@ -215,13 +215,26 @@ export async function guardarFicha(producto, f) {
 const round2 = (n) => Math.round((num(n) || 0) * 100) / 100;
 
 // Conversión de unidades para costear como tu hoja: cantidad en g/ml, precio por kg/L.
+// Familias: peso (base g), volumen (base ml), conteo (base pza). Solo convierte dentro
+// de la misma familia. La ONZA aquí es de PESO (28.35 g); para onza líquida usa "fl oz".
 const _uBase = {
+  // ── Peso (base g) ──
+  mg: ["g", 0.001],
   g: ["g", 1], gr: ["g", 1], grs: ["g", 1], gramo: ["g", 1], gramos: ["g", 1],
-  kg: ["g", 1000], kgs: ["g", 1000], kilo: ["g", 1000], kilos: ["g", 1000], mg: ["g", 0.001],
-  ml: ["ml", 1], cc: ["ml", 1], l: ["ml", 1000], lt: ["ml", 1000], lts: ["ml", 1000], litro: ["ml", 1000], litros: ["ml", 1000],
-  gal: ["ml", 3785], galon: ["ml", 3785], "galón": ["ml", 3785], galones: ["ml", 3785],
-  oz: ["ml", 29.57], onza: ["ml", 29.57], onzas: ["ml", 29.57], cda: ["ml", 15], cucharada: ["ml", 15], cucharadas: ["ml", 15], cdta: ["ml", 5], cucharadita: ["ml", 5],
-  pza: ["pza", 1], pz: ["pza", 1], pzas: ["pza", 1], pieza: ["pza", 1], piezas: ["pza", 1], u: ["pza", 1], un: ["pza", 1], unidad: ["pza", 1],
+  kg: ["g", 1000], kgs: ["g", 1000], kilo: ["g", 1000], kilos: ["g", 1000], kilogramo: ["g", 1000], kilogramos: ["g", 1000],
+  oz: ["g", 28.3495], onza: ["g", 28.3495], onzas: ["g", 28.3495], "oz peso": ["g", 28.3495],
+  lb: ["g", 453.592], lbs: ["g", 453.592], libra: ["g", 453.592], libras: ["g", 453.592],
+  // ── Volumen (base ml) ──
+  ml: ["ml", 1], cc: ["ml", 1],
+  l: ["ml", 1000], lt: ["ml", 1000], lts: ["ml", 1000], litro: ["ml", 1000], litros: ["ml", 1000],
+  gal: ["ml", 3785.41], galon: ["ml", 3785.41], "galón": ["ml", 3785.41], galones: ["ml", 3785.41],
+  "fl oz": ["ml", 29.5735], floz: ["ml", 29.5735], "onza liquida": ["ml", 29.5735], "onza líquida": ["ml", 29.5735],
+  taza: ["ml", 240], tazas: ["ml", 240], cup: ["ml", 240], cups: ["ml", 240],
+  cda: ["ml", 15], cucharada: ["ml", 15], cucharadas: ["ml", 15], cdta: ["ml", 5], cucharadita: ["ml", 5], cucharaditas: ["ml", 5],
+  // ── Conteo (base pza) ──
+  pza: ["pza", 1], pz: ["pza", 1], pzas: ["pza", 1], pieza: ["pza", 1], piezas: ["pza", 1],
+  u: ["pza", 1], un: ["pza", 1], unidad: ["pza", 1], unidades: ["pza", 1],
+  docena: ["pza", 12], docenas: ["pza", 12],
 };
 const normU = (u) => String(u || "").trim().toLowerCase().replace(/[.\s]+$/, "");
 // Factor para pasar de 'desde' a 'hacia' (misma familia). Si no se puede, 1 (asume misma unidad).
