@@ -42,7 +42,7 @@ function renderPrecios(el) {
 
   el.innerHTML = `
     <p class="sub" style="margin:2px 2px 12px">Precio más reciente de cada insumo y cómo cambió. Toca uno para ver su historial.</p>
-    <input id="buscar" placeholder="Buscar insumo…" style="margin-bottom:10px" />
+    <input id="buscar" placeholder="Buscar insumo o SKU…" style="margin-bottom:10px" />
     <div class="fila" style="margin-bottom:14px">
       <select id="area">
         <option value="todas">Todas las áreas</option>
@@ -97,7 +97,7 @@ function renderPrecios(el) {
     const q = st.q.trim().toLowerCase();
     let items = store.preciosPorInsumo();
     if (st.area !== "todas") items = items.filter((i) => (i.area || "otro") === st.area);
-    if (q) items = items.filter((i) => i.nombre.toLowerCase().includes(q));
+    if (q) items = items.filter((i) => i.nombre.toLowerCase().includes(q) || (i.codigo || "").toLowerCase().includes(q));
     items = ordenar(items);
 
     conteo.textContent = `${items.length} insumo(s)`;
@@ -120,7 +120,7 @@ function renderPrecios(el) {
             <span class="monto" style="font-size:14px">${money(i.precioActual)}${i.unidad ? `<span class="sub" style="font-weight:400">/${i.unidad}</span>` : ""}</span>
           </div>
           <div class="meta" style="display:flex;justify-content:space-between;align-items:center">
-            <span><span class="chip" style="background:${COLOR_AREA[i.area] || "#9c9482"}">${i.area || "otro"}</span> · ${i.veces} compra(s)</span>
+            <span><span class="chip" style="background:${COLOR_AREA[i.area] || "#9c9482"}">${i.area || "otro"}</span> · ${i.veces} compra(s)${i.codigo ? ` · <span class="sub">SKU ${escapar(i.codigo)}</span>` : ""}</span>
             <span>${flecha}</span>
           </div>
         </div>`;
@@ -177,7 +177,8 @@ function renderPrecios(el) {
           <input id="edN" value="${escapar(item.nombre)}" placeholder="Nombre" style="flex:2" />
           <input id="edU" value="${escapar(item.unidad || "")}" placeholder="Unidad" style="flex:1" />
         </div>
-        <div class="sub" style="font-size:11px;margin-top:4px">Cambia el nombre o la unidad (L, kg, g, ml, pza…). Se corrigen todos los tickets de este insumo y las recetas se recalculan solas.</div>
+        <input id="edC" value="${escapar(item.codigo || "")}" placeholder="Código / SKU del proveedor" style="margin-top:8px" />
+        <div class="sub" style="font-size:11px;margin-top:4px">Cambia el nombre, la unidad (L, kg, g, ml, pza…) o el SKU. Se corrigen todos los tickets de este insumo y las recetas se recalculan solas.</div>
         <button class="btn" id="edSave" style="margin-top:8px">💾 Guardar cambios</button>
         <button class="btn sec" data-cerrar style="margin-top:8px">Cerrar</button>
       </div>`;
@@ -188,10 +189,11 @@ function renderPrecios(el) {
     bg.querySelector("#edSave").addEventListener("click", async () => {
       const nn = bg.querySelector("#edN").value.trim();
       const nu = bg.querySelector("#edU").value.trim();
+      const nc = bg.querySelector("#edC").value.trim();
       if (!nn) { alert("El nombre no puede quedar vacío."); return; }
       const b = bg.querySelector("#edSave"); b.disabled = true; b.textContent = "Guardando…";
       try {
-        const n = await store.renombrarInsumo(item.nombre, nn, nu);
+        const n = await store.renombrarInsumo(item.nombre, nn, nu, nc);
         cerrar(); pintar();
         alert(`Listo: se corrigieron ${n} ticket(s). Las recetas se recalculan solas.`);
       } catch (e) { b.disabled = false; b.textContent = "💾 Guardar cambios"; alert("Error: " + ((e && e.message) || e)); }

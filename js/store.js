@@ -822,7 +822,7 @@ export async function actualizarTicket(id, datos) {
 
 // Corrige el NOMBRE y/o UNIDAD de un insumo en TODOS sus tickets (arregla el costeo).
 // Devuelve cuántos tickets se tocaron.
-export async function renombrarInsumo(viejo, nuevoNombre, nuevaUnidad) {
+export async function renombrarInsumo(viejo, nuevoNombre, nuevaUnidad, nuevoCodigo) {
   const vk = String(viejo || "").trim().toLowerCase();
   const nombre = String(nuevoNombre || "").trim();
   const unidad = nuevaUnidad == null ? "" : String(nuevaUnidad).trim();
@@ -835,6 +835,7 @@ export async function renombrarInsumo(viejo, nuevoNombre, nuevaUnidad) {
         const nl = { ...l };
         if (nombre) nl.descripcion = nombre;
         if (unidad) nl.unidad = unidad;
+        if (nuevoCodigo !== undefined) nl.codigo = String(nuevoCodigo || "").trim();   // set/limpia el SKU
         return nl;
       }
       return l;
@@ -1527,6 +1528,7 @@ export function preciosPorInsumo() {
       const pu = num(l.precio_unitario) || (num(l.cantidad) ? num(l.monto) / num(l.cantidad) : num(l.monto));
       map.get(key).registros.push({
         fecha: t.fecha, precio: pu, unidad: l.unidad, proveedor: canonProv(t.proveedor), monto: num(l.monto),
+        codigo: (l.codigo || "").toString().trim(),
         tipo: TIPOS.includes(l.tipo) ? l.tipo : "operativo"
       });
     }
@@ -1542,6 +1544,8 @@ export function preciosPorInsumo() {
     v.unidad = ultimo.unidad;
     v.variacion = previo && previo.precio ? (ultimo.precio - previo.precio) / previo.precio : 0;
     v.veces = v.registros.length;
+    // Código/SKU del proveedor: el más reciente que lo tenga.
+    v.codigo = (v.registros.find((r) => r.codigo) || {}).codigo || "";
     // Clasificación del insumo: "costo de venta" u "operativo" (la de su registro más reciente).
     v.tipo = (ultimo && ultimo.tipo) || "operativo";
     arr.push(v);
