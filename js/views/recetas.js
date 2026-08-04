@@ -347,7 +347,7 @@ export function render(el) {
     let rendimiento = filaPrep ? filaPrep.rendimiento : 1;
     let unidadRinde = esPrep && nombre ? store.unidadPreparacion(nombre) : "";
     let porciones = !esPrep && nombre ? store.porcionesDe(nombre) : 1;
-    let objetivo = 30;
+    let objetivo = 70;   // % de margen deseado (sobre precio neto)
     let categoria = fichaAct.categoria || (plat ? plat.categoria : "");
     let tiempo = fichaAct.tiempo || "";
     let pasos = Array.isArray(fichaAct.pasos) && fichaAct.pasos.length
@@ -382,7 +382,9 @@ export function render(el) {
       const margen = precioNeto - costoPorcion;
       const margPct = precioNeto > 0 ? margen / precioNeto * 100 : null;
       const foodPct = precioNeto > 0 ? costoPorcion / precioNeto * 100 : null;
-      const sugConIva = (num(objetivo) > 0 ? costoPorcion / (num(objetivo) / 100) : 0) * (1 + IVA);
+      // Precio sugerido por % de MARGEN (sobre precio neto): precio_neto = costo / (1 − margen%).
+      const mgObj = num(objetivo);
+      const sugConIva = (mgObj > 0 && mgObj < 100 ? costoPorcion / (1 - mgObj / 100) : 0) * (1 + IVA);
 
       cont.innerHTML = `
         ${datalist}${dlUnidades}
@@ -422,7 +424,7 @@ export function render(el) {
                  <div class="fila" style="justify-content:space-between"><span class="sub">Food cost</span><b style="color:${colorFood(foodPct)}">${foodPct != null ? foodPct.toFixed(0) + "%" : "—"}</b></div>
                  <div class="fila" style="justify-content:space-between"><span class="sub">Margen por porción</span><b style="color:${colorMargen(margPct)}">${money(margen)}${margPct != null ? " · " + margPct.toFixed(0) + "%" : ""}</b></div>
                  <div class="fila" style="justify-content:space-between;align-items:center;margin-top:6px;border-top:1px dashed var(--linea);padding-top:8px">
-                   <span class="sub">Precio sugerido a <input id="obj" type="number" min="1" max="99" value="${esc(String(objetivo))}" style="width:42px;padding:2px 4px;text-align:center;font-size:12px" />% food cost</span>
+                   <span class="sub">Precio sugerido a <input id="obj" type="number" min="1" max="95" value="${esc(String(objetivo))}" style="width:42px;padding:2px 4px;text-align:center;font-size:12px" />% de margen</span>
                    <b style="color:var(--verde)">${money(sugConIva)}<span class="sub" style="font-weight:400"> c/IVA</span></b>
                  </div>`}
           </div>
