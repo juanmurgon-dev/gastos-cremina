@@ -336,7 +336,12 @@ export function costoLinea(insumo, cantidad, unidad, merma, seen) {
     const u = normU(unidad || bu);
     if (unidadesCompatibles(u, bu)) return num(cantidad) * factorConversion(u, bu) * num(m.precio_g);
   }
-  return num(cantidad) * factorConversion(unidad, unidadInsumo(insumo)) * costoInsumo(insumo, seen);
+  const ui = unidadInsumo(insumo);
+  // Si receta y compra son de familias distintas (ej. receta en g, compra en L/pza),
+  // NO se puede convertir → no inflar el costo con números absurdos: lo dejamos en $0
+  // hasta que ese insumo tenga unidad compatible o entre al Registro Maestro (en gramos).
+  if (unidad && ui && !unidadesCompatibles(unidad, ui)) return 0;
+  return num(cantidad) * factorConversion(unidad, ui) * costoInsumo(insumo, seen);
 }
 
 // ── Registro Maestro de Ingredientes (precio por gramo, fuente para recetas) ──

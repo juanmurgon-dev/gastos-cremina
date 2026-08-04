@@ -191,16 +191,51 @@ export function render(el) {
 
   // ───────────── Lista de platillos ─────────────
   function listaPlatillos(cont) {
-    const st = { q: "", cat: "todas" };
+    const st = { q: "", cat: "todas", filtro: "todas", orden: "venta" };
+    // Métricas de un platillo: costo por porción, food cost, margen y ALERTA de datos dudosos.
+    function metrica(p, costos) {
+      const tiene = store.recetasDe(p.producto).length > 0;
+      const costo = costos.has(p.producto) ? costos.get(p.producto) : null;   // costo por porción (recalcularTodos)
+      const neto = p.precio > 0 ? p.precio / (1 + IVA) : 0;
+      const foodPct = tiene && costo != null && costo > 0 && neto > 0 ? costo / neto * 100 : null;
+      const margPct = tiene && costo != null && neto > 0 ? (neto - costo) / neto * 100 : null;
+      let nSin = 0, nTot = 0;
+      if (tiene) for (const rr of store.recetasDe(p.producto)) { nTot++; if (!store.costoLinea(rr.insumo, rr.cantidad, rr.unidad)) nSin++; }
+      let alerta = null;
+      if (tiene) {
+        if (costo == null || costo <= 0) alerta = "Sin costo: ningún ingrediente tiene precio";
+        else if (margPct != null && margPct < 0) alerta = "Margen negativo — revisa unidades o precios";
+        else if (foodPct != null && foodPct > 60) alerta = `Food cost ${foodPct.toFixed(0)}% — muy alto, probable error`;
+        else if (nSin > 0) alerta = `Faltan ${nSin} de ${nTot} ingredientes por costear`;
+      }
+      return { tiene, costo, neto, foodPct, margPct, alerta };
+    }
     function draw() {
       const costos = store.mapaCostos();
       const q = st.q.trim().toLowerCase();
-      const arr = platillos().filter((p) => (!q || p.producto.toLowerCase().includes(q)) && (st.cat === "todas" || (p.categoria || "") === st.cat));
-      const conReceta = arr.filter((p) => store.recetasDe(p.producto).length).length;
+      let arr = platillos()
+        .filter((p) => (!q || p.producto.toLowerCase().includes(q)) && (st.cat === "todas" || (p.categoria || "") === st.cat))
+        .map((p) => ({ p, m: metrica(p, costos) }));
+      const totAll = arr.length;
+      const totCon = arr.filter((x) => x.m.tiene).length;
+      const totSin = totAll - totCon;
+      const totRev = arr.filter((x) => x.m.alerta).length;
+      // Filtro
+      if (st.filtro === "con") arr = arr.filter((x) => x.m.tiene);
+      else if (st.filtro === "sin") arr = arr.filter((x) => !x.m.tiene);
+      else if (st.filtro === "revisar") arr = arr.filter((x) => x.m.alerta);
+      // Orden
+      if (st.orden === "costo") arr.sort((a, b) => (b.m.costo == null ? -Infinity : b.m.costo) - (a.m.costo == null ? -Infinity : a.m.costo));
+      else if (st.orden === "margen") arr.sort((a, b) => (b.m.margPct == null ? -Infinity : b.m.margPct) - (a.m.margPct == null ? -Infinity : a.m.margPct));
+      else if (st.orden === "margenPeor") arr.sort((a, b) => (a.m.margPct == null ? Infinity : a.m.margPct) - (b.m.margPct == null ? Infinity : b.m.margPct));
+      else arr.sort((a, b) => (b.p.venta || 0) - (a.p.venta || 0));
+
+      const chip = (id, txt) => `<button class="fchip" data-f="${id}" style="border:1px solid var(--linea);background:${st.filtro === id ? "var(--verde)" : "#fff"};color:${st.filtro === id ? "#fff" : "var(--txt,#222)"};border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex:0 0 auto">${txt}</button>`;
+
       cont.innerHTML = `
         <div class="card">
           <h2 style="margin-bottom:2px">Fichas técnicas</h2>
-          <p class="sub" style="margin-top:0">Con receta: <b>${conReceta}</b> de ${arr.length}. Captura la receta y el costo/margen salen solos de tus compras.</p>
+          <p class="sub" style="margin-top:0">✅ Con receta: <b>${totCon}</b> · ➕ Falta: <b>${totSin}</b> · <span style="color:var(--rojo)">⚠️ Revisar: <b>${totRev}</b></span></p>
           <div class="fila" style="gap:8px;margin:8px 0 4px;flex-wrap:wrap">
             <button class="btn sec chico" id="impcsv" style="flex:1">⬆ Importar CSV</button>
             <button class="btn sec chico" id="plantilla" style="flex:1">⬇ Formato vacío</button>
@@ -208,24 +243,33 @@ export function render(el) {
           </div>
           <input type="file" id="fcsv" accept=".csv,text/csv" style="display:none" />
           <input id="bq" placeholder="Buscar platillo…" style="margin:6px 0 8px" value="${esc(st.q)}" />
-          <select id="fcat" style="width:100%;margin-bottom:12px">
-            <option value="todas"${st.cat === "todas" ? " selected" : ""}>Todas las categorías</option>
-            ${categoriasPlatillos().map((c) => `<option value="${esc(c)}"${st.cat === c ? " selected" : ""}>${esc(c)}</option>`).join("")}
-          </select>
+          <div class="fila" style="gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px">
+            ${chip("todas", `Todas (${totAll})`)}${chip("con", `✅ Con receta (${totCon})`)}${chip("sin", `➕ Falta (${totSin})`)}${chip("revisar", `⚠️ Revisar (${totRev})`)}
+          </div>
+          <div class="fila" style="gap:8px">
+            <select id="fcat" style="flex:1;margin-bottom:12px">
+              <option value="todas"${st.cat === "todas" ? " selected" : ""}>Todas las categorías</option>
+              ${categoriasPlatillos().map((c) => `<option value="${esc(c)}"${st.cat === c ? " selected" : ""}>${esc(c)}</option>`).join("")}
+            </select>
+            <select id="forden" style="flex:1;margin-bottom:12px">
+              <option value="venta"${st.orden === "venta" ? " selected" : ""}>↕ Más vendido</option>
+              <option value="costo"${st.orden === "costo" ? " selected" : ""}>💲 Más costoso</option>
+              <option value="margen"${st.orden === "margen" ? " selected" : ""}>📈 Mejor margen</option>
+              <option value="margenPeor"${st.orden === "margenPeor" ? " selected" : ""}>📉 Peor margen</option>
+            </select>
+          </div>
           <div id="lista"></div>
         </div>`;
       const lista = cont.querySelector("#lista");
-      if (!arr.length) lista.innerHTML = `<div class="vacio">No hay platillos. Importa tus ventas (productos_venta) primero.</div>`;
-      else lista.innerHTML = arr.map((p) => {
-        const tiene = store.recetasDe(p.producto).length > 0;
-        const costo = costos.has(p.producto) ? costos.get(p.producto) : null;
-        const neto = p.precio / (1 + IVA);
-        const margPct = tiene && costo != null && neto > 0 ? (neto - costo / store.porcionesDe(p.producto)) / neto * 100 : null;
+      if (!arr.length) lista.innerHTML = `<div class="vacio">No hay platillos con ese filtro.</div>`;
+      else lista.innerHTML = arr.map(({ p, m }) => {
+        const tiene = m.tiene, costo = m.costo, margPct = m.margPct;
         return `
           <button class="fila-item" data-p="${esc(p.producto)}" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--linea);padding:12px 2px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">
             <span style="min-width:0">
-              <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.producto)}</b>
+              <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.alerta ? "⚠️ " : ""}${esc(p.producto)}</b>
               <span class="sub" style="font-size:12px">${p.esVariante ? "🔸 variante · " : ""}${esc(p.categoria || "")}${p.precio ? " · vende " + money(p.precio) : ""}</span>
+              ${m.alerta ? `<span class="sub" style="font-size:11px;color:var(--rojo);display:block;white-space:normal">${esc(m.alerta)}</span>` : ""}
             </span>
             <span style="text-align:right;white-space:nowrap">
               ${tiene && costo != null
@@ -239,6 +283,9 @@ export function render(el) {
       bq.addEventListener("input", () => { st.q = bq.value; const s = bq.selectionStart; draw(); const nb = cont.querySelector("#bq"); nb.focus(); nb.setSelectionRange(s, s); });
       const fcat = cont.querySelector("#fcat");
       fcat.addEventListener("change", () => { st.cat = fcat.value; draw(); });
+      const forden = cont.querySelector("#forden");
+      forden.addEventListener("change", () => { st.orden = forden.value; draw(); });
+      cont.querySelectorAll(".fchip").forEach((c) => c.addEventListener("click", () => { st.filtro = c.dataset.f; draw(); }));
       cont.querySelector("#plantilla").addEventListener("click", descargarPlantilla);
       cont.querySelector("#exptabla").addEventListener("click", descargarTablaRecetas);
       const fcsv = cont.querySelector("#fcsv");
