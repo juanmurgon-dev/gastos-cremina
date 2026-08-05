@@ -349,6 +349,17 @@ function parseVariantesSimple(rows, mapa, hdr) {
   return out;
 }
 
+// ¿Ya existe la columna 'fecha' en modificadores/combos? La agrega
+// supabase/fecha-modificadores-combos.sql. Si el cliente todavía no la corre,
+// seguimos guardando por semana como antes en vez de romper la importación.
+let _mcPorDia = null;
+async function modCombosPorDia() {
+  if (_mcPorDia !== null) return _mcPorDia;
+  const { error } = await supabase.from("modificadores_venta").select("fecha").limit(1);
+  _mcPorDia = !error;
+  return _mcPorDia;
+}
+
 // ── Insertar en Supabase (borra y recarga para no duplicar) ──
 async function importarCorte(c) {
   if (!c.corte || !c.fecha) throw new Error("el corte no trae número o fecha");
@@ -397,15 +408,21 @@ async function importarProducto(p) {
   let delP = supabase.from("productos_venta").delete().eq("desde", desde);
   delP = fechaDia ? delP.eq("fecha", fechaDia) : delP.is("fecha", null);
   await delP;
-  // modificadores/combos no tienen columna 'fecha': se reemplazan por semana.
-  await supabase.from("modificadores_venta").delete().eq("desde", desde);
-  await supabase.from("combos_venta").delete().eq("desde", desde);
+  // Modificadores y combos también se reemplazan POR DÍA. Antes se borraba la
+  // semana entera, así que subir el martes se llevaba lo del lunes.
+  const porDia = await modCombosPorDia();
+  for (const tabla of ["modificadores_venta", "combos_venta"]) {
+    let del = supabase.from(tabla).delete().eq("desde", desde);
+    if (porDia) del = fechaDia ? del.eq("fecha", fechaDia) : del.is("fecha", null);
+    await del;
+  }
+  const conDia = (o) => (porDia ? { ...o, fecha: fechaDia || null } : o);
   const prows = p.prods.map((x) => ({ periodo, desde, hasta, fecha: fechaDia || null, ...x }));
   const mrows = Object.entries(p.mods).map(([modificador, cantidad]) =>
-    ({ periodo, desde, hasta, modificador, cantidad }));
+    conDia({ periodo, desde, hasta, modificador, cantidad }));
   const crows = Object.entries(p.combos).map(([k, cantidad]) => {
     const [producto, modificador] = k.split("\u0001");
-    return { periodo, desde, hasta, producto, modificador, cantidad };
+    return conDia({ periodo, desde, hasta, producto, modificador, cantidad });
   });
   const e1 = await supabase.from("productos_venta").insert(prows);
   if (e1.error) throw new Error(e1.error.message);
@@ -566,11 +583,17 @@ async function cargarProductos(prows, wk, fechaDia) {
 }
 
 // Guarda el resumen de extras/modificadores de la semana.
-async function importarModificadores(mods, wk) {
+async function importarModificadores(mods, wk, fechaDia) {
   const { desde, hasta, periodo } = wk;
-  const { error: ed } = await supabase.from("modificadores_venta").delete().eq("desde", desde);
+  const porDia = await modCombosPorDia();
+  let del = supabase.from("modificadores_venta").delete().eq("desde", desde);
+  if (porDia) del = fechaDia ? del.eq("fecha", fechaDia) : del.is("fecha", null);
+  const { error: ed } = await del;
   if (ed) throw new Error(ed.message);
-  const rows = mods.map((m) => ({ periodo, desde, hasta, modificador: m.modificador, cantidad: m.cantidad }));
+  const rows = mods.map((m) => {
+    const r = { periodo, desde, hasta, modificador: m.modificador, cantidad: m.cantidad };
+    return porDia ? { ...r, fecha: fechaDia || null } : r;
+  });
   const { error: ei } = await supabase.from("modificadores_venta").insert(rows);
   if (ei) throw new Error(ei.message);
   return { periodo, filas: rows.length };
@@ -860,7 +883,7 @@ export function montar(el) {
             if (!mods.length) throw new Error("no encontré modificadores en ese reporte");
             const wk = semanaDeLote(diaRef, semanaRef);
             if (!wk) throw new Error("ese reporte no trae fechas: súbelo junto con el reporte de ventas por día");
-            const r = await importarModificadores(mods, wk);
+            const r = await importarModificadores(mods, wk, diaRef);
             logs.push(`✅ Modificadores ${r.periodo} · ${r.filas} extras`);
           }
         } else if (it.tipo === "gen-variantes") {
