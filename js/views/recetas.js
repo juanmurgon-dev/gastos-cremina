@@ -194,6 +194,7 @@ export function render(el) {
   const st = { q: "", cat: "todas", filtro: "todas", orden: "venta" };
   const stPrep = { filtro: "todas", area: "todas" };
   let verFaltantes = false;   // barrido de ingredientes sin costear
+  const stBar = { grupo: "todas" };   // área elegida dentro del barrido
 
   function shell() {
     el.innerHTML = `
@@ -470,16 +471,37 @@ export function render(el) {
     return [...m.values()].sort((a, b) => a.producto.localeCompare(b.producto, "es"));
   }
 
+  // Área de una receta: la categoría del platillo (Desayunos, Comida, Barra de
+  // Café…) y, para las preparaciones, si son de cocina o de barra.
+  function grupoDeReceta(g, catPlatillo) {
+    if (g.esPrep) return areaDePrep(g.producto, catPlatillo) === "Barra"
+      ? "☕ Preparaciones de barra" : "🍳 Preparaciones de cocina";
+    return catPlatillo.get(g.producto) || "Sin categoría";
+  }
+
   function reporteFaltantes(cont) {
+    const catPlatillo = new Map(platillos().map((x) => [x.producto, x.categoria || ""]));
     const recetas = recetasAgrupadas().map((g) => {
       const items = g.items.map((r) => {
         const falta = motivoFaltante(r.insumo, r.cantidad, r.unidad);
         return { ...r, falta, costo: falta ? 0 : store.costoLinea(r.insumo, r.cantidad, r.unidad) };
       });
-      return { ...g, items, nFalta: items.filter((i) => i.falta).length };
+      return { ...g, items, nFalta: items.filter((i) => i.falta).length, grupo: grupoDeReceta(g, catPlatillo) };
     });
-    const conFalta = recetas.filter((r) => r.nFalta > 0);
-    const completas = recetas.length - conFalta.length;
+
+    // Áreas presentes, con cuántas recetas tiene cada una y cuántas fallan.
+    const areas = new Map();
+    for (const r of recetas) {
+      if (!areas.has(r.grupo)) areas.set(r.grupo, { n: 0, mal: 0 });
+      const a = areas.get(r.grupo); a.n++; if (r.nFalta) a.mal++;
+    }
+    const listaAreas = [...areas.entries()].sort((a, b) => b[1].mal - a[1].mal || a[0].localeCompare(b[0], "es"));
+    if (stBar.grupo !== "todas" && !areas.has(stBar.grupo)) stBar.grupo = "todas";
+
+    const todas = recetas;
+    const vistas = stBar.grupo === "todas" ? todas : todas.filter((r) => r.grupo === stBar.grupo);
+    const conFalta = vistas.filter((r) => r.nFalta > 0);
+    const completas = vistas.length - conFalta.length;
 
     // Causa raíz: qué insumos rompen más recetas. Arreglar estos es lo que rinde.
     const porInsumo = new Map();
@@ -497,16 +519,20 @@ export function render(el) {
         <h2 style="margin-bottom:2px">Barrido de recetas</h2>
         <p class="sub" style="margin-top:0">Todo lo que está en rojo no se puede costear todavía, así que el costo del platillo sale incompleto.</p>
         <div class="row-stats" style="margin-top:10px">
-          <div class="stat"><div class="n">${recetas.length}</div><div class="l">Recetas</div></div>
+          <div class="stat"><div class="n">${vistas.length}</div><div class="l">Recetas</div></div>
           <div class="stat"><div class="n" style="color:${conFalta.length ? "var(--rojo)" : "var(--verde)"}">${conFalta.length}</div><div class="l">Con faltantes</div></div>
           <div class="stat"><div class="n" style="color:var(--verde)">${completas}</div><div class="l">Completas</div></div>
         </div>
-        <button class="btn sec chico" id="csvF" style="margin-top:12px">⬇ Exportar el barrido (CSV)</button>
+        <select id="fbar" style="margin-top:12px">
+          <option value="todas"${stBar.grupo === "todas" ? " selected" : ""}>Todas las áreas (${todas.length})</option>
+          ${listaAreas.map(([g, c]) => `<option value="${esc(g)}"${stBar.grupo === g ? " selected" : ""}>${esc(g)} — ${c.n} receta${c.n === 1 ? "" : "s"}${c.mal ? ", " + c.mal + " con faltantes" : ""}</option>`).join("")}
+        </select>
+        <button class="btn sec chico" id="csvF" style="margin-top:10px">⬇ Exportar el barrido (CSV)</button>
       </div>
 
       ${culpables.length ? `<div class="card">
         <h2 style="margin-bottom:2px">Insumos que rompen el costeo</h2>
-        <p class="sub" style="margin-top:0">Ordenados por cuántas recetas arreglas al resolverlos.</p>
+        <p class="sub" style="margin-top:0">Ordenados por cuántas recetas arreglas al resolverlos${stBar.grupo === "todas" ? "" : " · solo " + esc(stBar.grupo)}.</p>
         ${culpables.map((c) => `<div class="barra-row" style="padding:8px 0;border-bottom:1px solid var(--linea);gap:8px">
           <span class="etq" style="flex:1;min-width:0;width:auto;color:var(--rojo);font-weight:700;white-space:normal">${esc(c.insumo)}</span>
           <span class="sub" style="font-size:11.5px;white-space:nowrap">${esc(c.motivo)}</span>
@@ -514,13 +540,14 @@ export function render(el) {
         </div>`).join("")}
       </div>` : `<div class="card"><div class="ok-box">✅ Ninguna receta tiene ingredientes sin costear.</div></div>`}
 
-      ${recetas.map((r) => `<div class="card">
+      ${vistas.map((r) => `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
           <button class="linkbtn abrirR" data-p="${esc(r.producto)}" data-prep="${r.esPrep ? "1" : ""}" style="text-align:left;font-weight:800;font-size:15px;color:var(--verde);background:none;border:none;padding:0;cursor:pointer">
             ${r.nFalta ? "⚠️ " : "✅ "}${esc(r.producto)}${r.esPrep ? " <span class=\"sub\" style=\"font-weight:600\">(preparación)</span>" : ""}
           </button>
           <span class="sub" style="white-space:nowrap;font-size:12px;${r.nFalta ? "color:var(--rojo);font-weight:700" : ""}">${r.nFalta ? r.nFalta + " de " + r.items.length + " sin costear" : r.items.length + " ingredientes"}</span>
         </div>
+        <div class="sub" style="font-size:11.5px;margin-top:1px">${esc(r.grupo)}</div>
         <div style="margin-top:8px">
           ${r.items.map((i) => `<div style="display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px dashed var(--linea)">
             <span style="flex:1;min-width:0;${i.falta ? "color:var(--rojo);font-weight:700" : ""}">${i.falta ? "🔴 " : ""}${esc(i.insumo)}</span>
@@ -530,18 +557,19 @@ export function render(el) {
         </div>
       </div>`).join("")}`;
 
+    cont.querySelector("#fbar").addEventListener("change", (e) => { stBar.grupo = e.target.value; reporteFaltantes(cont); });
     cont.querySelector("#volverF").addEventListener("click", () => { verFaltantes = false; pintar(); });
     cont.querySelectorAll(".abrirR").forEach((b) => b.addEventListener("click", () => {
       verFaltantes = false; editando = { nombre: b.dataset.p, esPrep: !!b.dataset.prep }; pintar();
     }));
     cont.querySelector("#csvF").addEventListener("click", () => {
       const filas = [];
-      for (const r of recetas) for (const i of r.items)
-        filas.push([r.producto, r.esPrep ? "preparación" : "platillo", i.insumo, i.cantidad, i.unidad || "",
+      for (const r of vistas) for (const i of r.items)
+        filas.push([r.producto, r.grupo, r.esPrep ? "preparación" : "platillo", i.insumo, i.cantidad, i.unidad || "",
                     i.falta ? "FALTA" : "ok", i.falta ? i.falta.corto : "", i.falta ? i.falta.largo : "",
                     i.falta ? "" : Math.round(i.costo * 100) / 100]);
       descargarCSV("barrido-recetas",
-        ["Receta", "Tipo", "Ingrediente", "Cantidad", "Unidad", "Estado", "Motivo", "Detalle", "Costo"], filas);
+        ["Receta", "Área", "Tipo", "Ingrediente", "Cantidad", "Unidad", "Estado", "Motivo", "Detalle", "Costo"], filas);
     });
   }
 
