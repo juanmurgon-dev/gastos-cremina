@@ -7,6 +7,7 @@ import * as tickets from "./tickets.js";
 import * as proveedores from "./proveedores.js";
 import * as ritmo from "./ritmo.js";
 import * as requisicion from "./requisicion.js";
+import { verFoto } from "../lightbox.js";
 
 // Comprime una foto (para que pese poco antes de guardarla en base64).
 function comprimirFoto(file, max = 640) {
@@ -333,7 +334,7 @@ function renderPrecios(el) {
       rows.forEach((row) => {
         const prov = row.dataset.prov;
         const file = row.querySelector(".foto-file"), lbl = row.querySelector(".foto-lbl"), quita = row.querySelector(".foto-quita");
-        row.querySelector(".foto-img").addEventListener("click", (e) => { const img = e.currentTarget; if (img.src) window.open(img.src, "_blank"); });
+        row.querySelector(".foto-img").addEventListener("click", (e) => { const img = e.currentTarget; if (img.src) verFoto(img.src, item.nombre + (row.dataset.prov ? " · " + row.dataset.prov : "")); });
         file.addEventListener("change", async () => {
           const f = file.files && file.files[0]; if (!f) return;
           const prev = lbl.textContent; lbl.textContent = "Subiendo…";

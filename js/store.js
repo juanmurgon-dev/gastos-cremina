@@ -992,6 +992,26 @@ export async function fotosDeInsumo(nombre) {
   if (!error && data) for (const r of data) m.set(r.proveedor_norm || "", r.foto || "");
   return m;
 }
+// Igual que fotosDeInsumo pero para MUCHOS insumos de un jalón (una sola
+// consulta, no una por renglón). Devuelve Map(insumo_norm → Map(prov_norm → foto)).
+export async function fotosDeInsumos(nombres) {
+  const claves = [...new Set((nombres || []).map((n) => normIns(n)).filter(Boolean))];
+  const out = new Map();
+  if (!claves.length) return out;
+  // Por lotes: una lista enorme en .in() puede pasarse del largo de la URL.
+  for (let i = 0; i < claves.length; i += 200) {
+    const { data, error } = await supabase.from("insumo_fotos")
+      .select("insumo_norm,proveedor_norm,foto").in("insumo_norm", claves.slice(i, i + 200));
+    if (error || !data) continue;
+    for (const r of data) {
+      if (!r.foto) continue;
+      if (!out.has(r.insumo_norm)) out.set(r.insumo_norm, new Map());
+      out.get(r.insumo_norm).set(r.proveedor_norm || "", r.foto);
+    }
+  }
+  return out;
+}
+
 export async function guardarFotoInsumo(nombre, proveedor, foto) {
   const row = {
     insumo_norm: normIns(nombre), proveedor_norm: proveedor ? normProv(proveedor) : "",

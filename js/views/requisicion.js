@@ -4,6 +4,7 @@
 import * as store from "../store.js";
 import { money, num, fechaBonita } from "../store.js";
 import { descargarCSV } from "../csv.js";
+import { verFoto } from "../lightbox.js";
 
 const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const ESTATUS = [
@@ -361,6 +362,34 @@ export function render(el) {
     return g;
   }
 
+  // Las fotos pesan: se piden UNA vez por lista (no en cada tecleo) y se
+  // pegan cuando llegan, sin frenar el pintado.
+  let fotosCache = null, fotosClave = "";
+  function ponerFotos(cont) {
+    const nombres = editing.items.map((i) => i.nombre).filter(Boolean);
+    if (!nombres.length) return;
+    const clave = [...new Set(nombres.map((n) => store.normIns(n)))].sort().join("|");
+    const pegar = (mapa) => {
+      cont.querySelectorAll("[data-foto]").forEach((b) => {
+        const porProv = mapa.get(store.normIns(b.dataset.n));
+        if (!porProv || !porProv.size) return;
+        const f = porProv.get(store.normProv(b.dataset.prov || "")) || porProv.values().next().value;
+        if (!f) return;
+        b.querySelector("img").src = f;
+        b.style.display = "";
+        b.addEventListener("click", (ev) => {
+          ev.preventDefault(); ev.stopPropagation();
+          verFoto(f, b.dataset.n + (b.dataset.prov ? " · " + b.dataset.prov : ""));
+        });
+      });
+    };
+    if (fotosCache && fotosClave === clave) { pegar(fotosCache); return; }
+    store.fotosDeInsumos(nombres).then((mapa) => {
+      fotosCache = mapa; fotosClave = clave;
+      pegar(mapa);
+    }).catch(() => {});
+  }
+
   function pintarItems() {
     const cont = el.querySelector("#rqLista");
     if (!editing.items.length) {
@@ -392,6 +421,7 @@ export function render(el) {
       <button class="btn sec" id="rqDel" style="margin-top:10px;color:var(--rojo)">Borrar esta requisición</button>
     </div>`;
     cont.innerHTML = html;
+    ponerFotos(cont);
 
     cont.querySelectorAll("[data-i]").forEach((row) => {
       const it = editing.items[Number(row.dataset.i)];
@@ -479,6 +509,9 @@ export function render(el) {
     return `<div class="barra-row" data-i="${idx}" style="gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--linea);padding:8px 0">
       <span class="etq" style="width:100%;display:flex;align-items:center;gap:8px">
         <button data-f="estat" class="chip" title="Toca para cambiar el estatus" style="background:${ie.c};border:none;cursor:pointer;flex:none;display:inline-flex;align-items:center;gap:5px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.28);padding:6px 11px">${ie.t} <span style="font-size:12px;opacity:.9">↻</span></button>
+        <button type="button" data-foto data-n="${esc(it.nombre)}" data-prov="${esc(it.proveedor || "")}" title="Ver la foto de la presentación" style="display:none;flex:0 0 auto;width:34px;height:34px;padding:0;border-radius:8px;border:1px solid var(--linea);background:#f6f4ee;overflow:hidden;cursor:pointer">
+          <img alt="" style="width:100%;height:100%;object-fit:cover;display:block" />
+        </button>
         <span style="position:relative;flex:1;min-width:0">
           <input data-f="nom" value="${esc(it.nombre)}" autocomplete="off" title="Editar nombre del insumo" style="width:100%;font-weight:600;font-size:14px;border:1px solid var(--linea);border-radius:8px;padding:6px 8px;background:#fff" />
           <div data-sug style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--blanco);border:1px solid var(--linea);border-radius:12px;box-shadow:var(--sombra);max-height:230px;overflow-y:auto;margin-top:4px;text-align:left"></div>
