@@ -248,7 +248,12 @@ function productos(cont) {
                  ${categorias.map((c) => `<option value="${escapar(c)}">${escapar(c)}</option>`).join("")}
                </select>
                <div id="plist"></div>`
-            : `<div class="aviso-box">Sube el <b>reporte de grupos de modificadores</b> de esta semana en <b>Importar</b> para ver el desglose por variante.</div>`)}
+            : (prodsAgg.length
+              // Sin variantes de esta semana NO escondas la venta por producto:
+              // los datos están, solo falta el desglose. Antes se veía vacío.
+              ? `<div class="aviso-box" style="margin-bottom:12px">Aún no subes el <b>reporte de grupos de modificadores</b> de esta semana, así que aquí va la venta por platillo <b>sin</b> el desglose por variante.</div>
+                 ${listaArticulos(prodsAgg)}`
+              : `<div class="aviso-box">Sube el <b>reporte de grupos de modificadores</b> de esta semana en <b>Importar</b> para ver el desglose por variante.</div>`))}
       </div>`;
 
     pc.querySelector("#expP").addEventListener("click", () => {
