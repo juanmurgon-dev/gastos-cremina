@@ -84,6 +84,24 @@ function preparaciones() {
   return [...set].sort();
 }
 
+// Área de una preparación: 🍳 cocina o ☕ barra. Se guarda en la categoría de
+// su ficha; si aún no la eliges, se deduce de los platillos que la usan (si
+// alguno es de Barra de Café o Bebidas, la preparación es de barra).
+function areaDePrep(nom, catPlatillo) {
+  const f = String((store.fichaDe(nom) || {}).categoria || "").trim();
+  if (/^barra$/i.test(f)) return "Barra";
+  if (/^cocina$/i.test(f)) return "Cocina";
+  let usada = false;
+  for (const r of store.state.recetas || []) {
+    if (r.insumo !== nom) continue;
+    const c = catPlatillo.get(r.producto) || "";
+    if (/barra|bebida|caf[eé]/i.test(c)) return "Barra";
+    if (c) usada = true;
+  }
+  return usada ? "Cocina" : "";
+}
+const etiquetaArea = (a) => a === "Barra" ? "☕ Barra" : a === "Cocina" ? "🍳 Cocina" : "sin área";
+
 // Agrupa las filas de un CSV en recetas. Una fila por ingrediente; se agrupan por 'platillo'.
 function gruposDesdeCSV(objs) {
   if (!objs.length) return [];
@@ -171,7 +189,10 @@ function descargarTablaRecetas() {
 export function render(el) {
   let sub = "platillos";   // platillos | preparaciones
   let editando = null;     // { nombre, esPrep }
-  const stPrep = { filtro: "todas" };   // filtro de la lista de preparaciones
+  // Los filtros viven aquí (no dentro de cada lista) para que al abrir una
+  // receta y volver atrás sigas viendo la misma selección.
+  const st = { q: "", cat: "todas", filtro: "todas", orden: "venta" };
+  const stPrep = { filtro: "todas", area: "todas" };
 
   function shell() {
     el.innerHTML = `
@@ -196,7 +217,6 @@ export function render(el) {
 
   // ───────────── Lista de platillos ─────────────
   function listaPlatillos(cont) {
-    const st = { q: "", cat: "todas", filtro: "todas", orden: "venta" };
     // Métricas de un platillo: costo por porción, food cost, margen y ALERTA de datos dudosos.
     function metrica(p, costos) {
       const tiene = store.recetasDe(p.producto).length > 0;
@@ -236,18 +256,18 @@ export function render(el) {
           <button class="btn sec chico" id="exptabla" style="flex:1 1 100%">⬇ Descargar recetas (tabla)</button>
         </div>
         <input type="file" id="fcsv" accept=".csv,text/csv" style="display:none" />
-        <input id="bq" placeholder="Buscar platillo…" style="margin:6px 0 8px" value="" />
+        <input id="bq" placeholder="Buscar platillo…" style="margin:6px 0 8px" value="${esc(st.q)}" />
         <div id="chips" class="fila" style="gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px"></div>
         <div class="fila" style="gap:8px">
           <select id="fcat" style="flex:1;margin-bottom:12px">
-            <option value="todas">Todas las categorías</option>
-            ${cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}
+            <option value="todas"${st.cat === "todas" ? " selected" : ""}>Todas las categorías</option>
+            ${cats.map((c) => `<option value="${esc(c)}"${st.cat === c ? " selected" : ""}>${esc(c)}</option>`).join("")}
           </select>
           <select id="forden" style="flex:1;margin-bottom:12px">
-            <option value="venta">↕ Más vendido</option>
-            <option value="costo">💲 Más costoso</option>
-            <option value="margen">📈 Mejor margen</option>
-            <option value="margenPeor">📉 Peor margen</option>
+            <option value="venta"${st.orden === "venta" ? " selected" : ""}>↕ Más vendido</option>
+            <option value="costo"${st.orden === "costo" ? " selected" : ""}>💲 Más costoso</option>
+            <option value="margen"${st.orden === "margen" ? " selected" : ""}>📈 Mejor margen</option>
+            <option value="margenPeor"${st.orden === "margenPeor" ? " selected" : ""}>📉 Peor margen</option>
           </select>
         </div>
         <div id="lista"></div>
@@ -319,9 +339,17 @@ export function render(el) {
   // ───────────── Lista de preparaciones ─────────────
   function listaPreparaciones(cont) {
     const preps = preparaciones();
-    const lista = preps.map((nom) => ({ nom, completa: !!(store.fichaDe(nom) || {}).completa }));
+    const catPlatillo = new Map(platillos().map((x) => [x.producto, x.categoria || ""]));
+    const lista = preps.map((nom) => ({
+      nom,
+      completa: !!(store.fichaDe(nom) || {}).completa,
+      area: areaDePrep(nom, catPlatillo),
+    }));
     const listas = lista.filter((x) => x.completa).length;
     const faltan = lista.length - listas;
+    const nCocina = lista.filter((x) => x.area === "Cocina").length;
+    const nBarra = lista.filter((x) => x.area === "Barra").length;
+    const nSin = lista.length - nCocina - nBarra;
 
     cont.innerHTML = `
       <div class="card">
@@ -329,6 +357,12 @@ export function render(el) {
         <p class="sub" style="margin-top:0">Salsas, masas, aderezos… que usas en varios platillos. Se costean una vez y se reutilizan como un insumo más.</p>
         ${lista.length ? `<p class="sub" style="margin:6px 0 0">✅ Terminadas: <b>${listas}</b> · ⏳ En proceso: <b>${faltan}</b></p>` : ""}
         <button class="btn" id="nueva" style="margin:8px 0 12px">＋ Nueva preparación</button>
+        ${lista.length ? `<select id="fareaP" style="margin-bottom:10px">
+          <option value="todas"${stPrep.area === "todas" ? " selected" : ""}>Todas las áreas (${lista.length})</option>
+          <option value="Cocina"${stPrep.area === "Cocina" ? " selected" : ""}>🍳 Cocina (${nCocina})</option>
+          <option value="Barra"${stPrep.area === "Barra" ? " selected" : ""}>☕ Barra de café y bebidas (${nBarra})</option>
+          ${nSin ? `<option value="sin"${stPrep.area === "sin" ? " selected" : ""}>Sin área (${nSin})</option>` : ""}
+        </select>` : ""}
         ${lista.length ? `<div id="chipsP" class="fila" style="gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px"></div>` : ""}
         <div id="lp"></div>
       </div>`;
@@ -345,13 +379,15 @@ export function render(el) {
 
     function pintarLista() {
       let arr = lista;
+      if (stPrep.area === "sin") arr = arr.filter((x) => !x.area);
+      else if (stPrep.area !== "todas") arr = arr.filter((x) => x.area === stPrep.area);
       if (stPrep.filtro === "ok") arr = arr.filter((x) => x.completa);
       else if (stPrep.filtro === "falta") arr = arr.filter((x) => !x.completa);
 
       if (!preps.length) { lp.innerHTML = `<div class="vacio">Aún no hay preparaciones. Crea una si tienes recetas base (ej. "Salsa verde").</div>`; return; }
       if (!arr.length) { lp.innerHTML = `<div class="vacio">Ninguna preparación con ese filtro.</div>`; return; }
 
-      lp.innerHTML = arr.map(({ nom, completa }) => {
+      lp.innerHTML = arr.map(({ nom, completa, area }) => {
         const fila = store.state.recetas.find((r) => r.producto === nom && r.es_preparacion) || {};
         const rend = fila.rendimiento || 1;
         const unidad = store.unidadPreparacion(nom);
@@ -366,7 +402,7 @@ export function render(el) {
             <button class="abrirPrep" data-p="${esc(nom)}" style="flex:1;min-width:0;text-align:left;background:none;border:none;padding:8px 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">
               <span style="min-width:0">
                 <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nom)}</b>
-                <span class="sub" style="font-size:12px">rinde ${esc(String(rend))} ${esc(unidad)}${completa ? "" : " · ⏳ en proceso"}</span>
+                <span class="sub" style="font-size:12px">${esc(etiquetaArea(area))} · rinde ${esc(String(rend))} ${esc(unidad)}${completa ? "" : " · ⏳ en proceso"}</span>
               </span>
               <span class="monto" style="font-size:14px;white-space:nowrap">${money(store.costoInsumo(nom))}${unidad ? `<span class="sub" style="font-weight:400">/${esc(unidad)}</span>` : ""}</span>
             </button>
@@ -393,6 +429,8 @@ export function render(el) {
     }
 
     cont.querySelector("#nueva").addEventListener("click", () => { editando = { nombre: "", esPrep: true }; pintar(); });
+    const fa = cont.querySelector("#fareaP");
+    if (fa) fa.addEventListener("change", (e) => { stPrep.area = e.target.value; pintarLista(); });
     pintarChips();
     pintarLista();
   }
@@ -459,6 +497,13 @@ export function render(el) {
           <label class="campo" style="margin-top:6px"><span>Nº de receta</span><input id="num" placeholder="Ej. S1" value="${esc(numero)}" style="max-width:160px" /></label>
           ${esPrep
             ? `<label class="campo"><span>Nombre de la preparación</span><input id="nom" placeholder="Ej. Salsa verde" value="${esc(nom)}" /></label>
+               <label class="campo"><span>Área</span>
+                 <select id="areaPrep">
+                   <option value=""${!/^(cocina|barra)$/i.test(categoria) ? " selected" : ""}>Deducir sola (por dónde se usa)</option>
+                   <option value="Cocina"${/^cocina$/i.test(categoria) ? " selected" : ""}>🍳 Cocina</option>
+                   <option value="Barra"${/^barra$/i.test(categoria) ? " selected" : ""}>☕ Barra de café y bebidas</option>
+                 </select>
+               </label>
                <div class="fila" style="gap:8px">
                  <label class="campo" style="flex:1;margin:0"><span>Rinde</span><input id="rend" type="number" inputmode="decimal" min="0" step="any" value="${esc(String(rendimiento))}" /></label>
                  <label class="campo" style="flex:1;margin:0"><span>Unidad</span><input id="urinde" placeholder="L, kg, pza" value="${esc(unidadRinde)}" /></label>
@@ -608,6 +653,7 @@ export function render(el) {
         cont.querySelector("#nom").addEventListener("input", (e) => { nom = e.target.value; });
         cont.querySelector("#rend").addEventListener("input", (e) => { rendimiento = e.target.value; });
         cont.querySelector("#urinde").addEventListener("input", (e) => { unidadRinde = e.target.value; });
+        cont.querySelector("#areaPrep").addEventListener("change", (e) => { categoria = e.target.value; });
       } else {
         cont.querySelector("#cat").addEventListener("input", (e) => { categoria = e.target.value; });
         cont.querySelector("#tiempo").addEventListener("input", (e) => { tiempo = e.target.value; });
