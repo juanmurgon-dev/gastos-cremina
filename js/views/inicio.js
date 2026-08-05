@@ -255,6 +255,17 @@ const areaDeCategoria = (cat) => CAT_A_AREA[String(cat || "").trim().toLowerCase
 const BARRA_KW = /latte|caf[eé]|americano|capuc|cappu|espresso|expresso|mocha|moka|\bchai\b|matcha|cortado|flat white|frapp|cold brew|\bt[eé]\b|tonic|spritz|limonada|jugo|\bagua\b|refresco|coca|fanta|sprite|mimosa|michelada|cerveza|\bvino\b|smoothie|malteada|soda|jamaica|horchata|kombucha|bebida/i;
 const areaDeProductoNombre = (nombre) => (BARRA_KW.test(String(nombre || "")) ? "barra" : "cocina");
 
+// ¿Esta fila de venta cae en el rango? Si trae 'fecha' es de un día concreto.
+// Si no la trae es el CONSOLIDADO de su semana, y solo cuenta cuando el rango
+// abarca la semana entera — si no, al ver un solo día le colgaríamos la venta
+// de toda la semana. Antes se filtraba por 'desde' (el lunes), así que al ver
+// el martes no entraba nada y el área salía "sin ingreso".
+function ventaEnRango(row, desde, hasta) {
+  if (row.fecha) return row.fecha >= desde && row.fecha <= hasta;
+  if (!row.desde) return false;
+  return row.desde >= desde && (row.hasta || row.desde) <= hasta;
+}
+
 const isoDe = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const parseFecha = (s) => new Date(s + "T00:00");
 function lunesDeInicio(d) { const x = new Date(d); const g = (x.getDay() + 6) % 7; x.setDate(x.getDate() - g); x.setHours(0, 0, 0, 0); return x; }
@@ -362,7 +373,7 @@ function renderOwner(el) {
     // ── Rentabilidad por área: ingreso (categorías de venta) vs insumo (líneas costo de venta) ──
     const ingArea = { cocina: 0, barra: 0 };
     for (const p of store.state.productos || []) {
-      if (!p.desde || p.desde < r.desde || p.desde > r.hasta) continue;
+      if (!ventaEnRango(p, r.desde, r.hasta)) continue;
       if (ES_CORTESIA.test(p.producto || "") || ES_CORTESIA.test(p.categoria || "")) continue;
       const a = areaDeCategoria(p.categoria);
       if (a) ingArea[a] += num(p.venta);
@@ -372,7 +383,7 @@ function renderOwner(el) {
     // clasificando cocina/barra por el NOMBRE del producto.
     if (!ingArea.cocina && !ingArea.barra) {
       for (const v of store.state.variantes || []) {
-        if (!v.desde || v.desde < r.desde || v.desde > r.hasta) continue;
+        if (!ventaEnRango(v, r.desde, r.hasta)) continue;
         if (ES_CORTESIA.test(v.producto || "") || ES_CORTESIA.test(v.opcion || "")) continue;
         ingArea[areaDeProductoNombre(v.producto)] += num(v.venta);
       }
