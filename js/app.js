@@ -15,8 +15,8 @@ import * as insumos from "./views/insumos.js";        // + Requisición adentro
 import * as inventario from "./views/inventario.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.153";
-export const APP_FECHA = "27 jul 2026";
+export const APP_VERSION = "v3.154";
+export const APP_FECHA = "4 ago 2026";
 
 const VISTAS = {
   inicio:      { mod: inicio,      ic: "🏠", txt: "Inicio" },

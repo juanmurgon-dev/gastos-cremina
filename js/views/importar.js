@@ -112,12 +112,278 @@ function parseProducto(wb, XLSX) {
   return { prods, mods, combos, desde: minF, hasta: maxF };
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+//  RECONOCIMIENTO POR CONTENIDO
+//  No dependemos del nombre de la hoja ni de la marca del punto de venta:
+//  miramos los ENCABEZADOS de columna y deducimos qué reporte es. Así un
+//  cliente nuevo sube su Excel tal como se lo entrega su sistema y funciona.
+// ═══════════════════════════════════════════════════════════════════════
+
+// "Categoría de Artículo " → "categoria de articulo"
+function norm(s) {
+  return String(s == null ? "" : s)
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+// Separador interno para las llaves compuestas (producto + categoría).
+const SEP = "\u0001";
+
+// Sinónimos por concepto. El orden del objeto ES la prioridad: los conceptos
+// más específicos reclaman su columna antes que los genéricos (así
+// "cantidad de ordenes" no se confunde con "cantidad").
+const CAMPOS = {
+  tipoLinea:  ["modificador producto cargo por servicio", "modificador producto", "tipo de linea"],
+  idLinea:    ["id del articulo de la orden", "id de linea", "id articulo orden"],
+  idPadre:    ["id padre", "articulo padre", "id del padre"],
+  ordenes:    ["cantidad de ordenes", "cantidad ordenes", "numero de ordenes", "ordenes", "tickets", "cuentas"],
+  comensales: ["cantidad comensales", "cantidad de comensales", "comensales", "personas"],
+  categoria:  ["categoria de articulo", "categoria del articulo", "categoria", "familia",
+               "grupo de menu", "clasificacion"],
+  grupoMod:   ["grupo modificador", "grupo de modificador", "grupo modificadores"],
+  cantidadOpc:["cantidad modificador", "cantidad de la opcion", "cantidad opcion"],
+  ventaOpc:   ["venta total de la opcion", "venta de la opcion", "total de la opcion"],
+  opcion:     ["opcion modificador", "opcion", "variante", "tipo variante", "tipo por platillo"],
+  fecha:      ["fecha hora", "fecha de venta", "fecha", "dia", "date"],
+  producto:   ["articulo de la orden", "nombre del articulo", "articulo", "producto", "platillo",
+               "descripcion", "nombre", "item"],
+  cantidad:   ["cantidad del articulo", "cantidad", "unidades", "uds", "piezas", "qty", "quantity", "vendidos"],
+  venta:      ["total de articulo", "total articulos", "venta total mxn", "venta total", "importe",
+               "total", "monto", "subtotal", "venta"],
+};
+
+// Asigna cada columna a UN concepto (una columna nunca se reclama dos veces).
+function mapaColumnas(hdr) {
+  const mapa = {};
+  const usadas = new Set();
+  // 1ª pasada: coincidencia exacta.
+  for (const [campo, alias] of Object.entries(CAMPOS)) {
+    for (const a of alias) {
+      const i = hdr.indexOf(a);
+      if (i >= 0 && !usadas.has(i)) { mapa[campo] = i; usadas.add(i); break; }
+    }
+  }
+  // 2ª pasada: el encabezado EMPIEZA con el alias (ej. "total de articulo mxn").
+  for (const [campo, alias] of Object.entries(CAMPOS)) {
+    if (mapa[campo] != null) continue;
+    for (const a of alias) {
+      const i = hdr.findIndex((h, j) => !usadas.has(j) && h && h.startsWith(a));
+      if (i >= 0) { mapa[campo] = i; usadas.add(i); break; }
+    }
+  }
+  return mapa;
+}
+
+// El encabezado no siempre es la primera fila (hay reportes con título arriba).
+// Probamos las primeras filas y nos quedamos con la que reconoce más columnas.
+function buscarEncabezado(rows) {
+  let mejor = { i: -1, mapa: {}, n: 0 };
+  for (let i = 0; i < Math.min(rows.length, 12); i++) {
+    const fila = rows[i];
+    if (!Array.isArray(fila)) continue;
+    const hdr = fila.map(norm);
+    if (hdr.filter(Boolean).length < 2) continue;
+    const mapa = mapaColumnas(hdr);
+    const n = Object.keys(mapa).length;
+    if (n > mejor.n) mejor = { i, mapa, n };
+  }
+  return mejor;
+}
+
+// ¿Qué reporte es esta hoja? null = no la reconocemos.
+function clasificarHoja(rows) {
+  const { i, mapa } = buscarEncabezado(rows);
+  if (i < 0) return null;
+  const hay = (c) => mapa[c] != null;
+  // Una línea por artículo vendido (la fuente más rica: trae fecha y categoría).
+  if (hay("producto") && hay("cantidad") && hay("fecha")) return { tipo: "lineas", mapa, hdr: i };
+  // Venta por día: fecha + importe, sin artículos.
+  if (hay("fecha") && hay("venta") && !hay("producto")) return { tipo: "ventasdia", mapa, hdr: i };
+  // Producto desglosado por variante / modificador.
+  if (hay("producto") && hay("opcion") && hay("cantidad")) return { tipo: "variantes", mapa, hdr: i };
+  // Producto agregado: cuántos se vendieron y cuánto dejaron.
+  if (hay("producto") && hay("cantidad") && hay("venta")) return { tipo: "productos", mapa, hdr: i };
+  // Resumen de modificadores: grupo + opción, sin columna de producto.
+  if (hay("grupoMod") && hay("opcion") && (hay("cantidadOpc") || hay("cantidad")))
+    return { tipo: "modificadores", mapa, hdr: i };
+  return null;
+}
+
+// Recorre TODAS las hojas del libro y se queda con el reporte más útil
+// (entre más detalle traiga, mejor).
+const RANGO_TIPO = { lineas: 5, variantes: 4, productos: 3, ventasdia: 2, modificadores: 1 };
+function clasificarLibro(wb, XLSX) {
+  let mejor = null;
+  for (const nombre of wb.SheetNames) {
+    let rows;
+    try { rows = XLSX.utils.sheet_to_json(wb.Sheets[nombre], { header: 1 }); }
+    catch { continue; }
+    if (!rows || rows.length < 2) continue;
+    const c = clasificarHoja(rows);
+    if (!c) continue;
+    const cand = { ...c, hoja: nombre, rows };
+    if (!mejor || RANGO_TIPO[cand.tipo] > RANGO_TIPO[mejor.tipo]) mejor = cand;
+  }
+  return mejor;
+}
+
+// Lee una celda de la fila por concepto.
+const cel = (r, mapa, campo) => (mapa[campo] != null ? r[mapa[campo]] : null);
+const texto = (v) => {
+  const s = String(v == null ? "" : v).trim();
+  return (s === "-" || s === "—") ? "" : s;   // los reportes usan "-" como vacío
+};
+
+// ── Venta por día ──
+function parseVentasDia(rows, mapa, hdr) {
+  const out = [];
+  for (let i = hdr + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const fecha = ddmmToISO(cel(r, mapa, "fecha"));
+    if (!fecha) continue;                       // se salta subtítulos y filas de total
+    out.push({
+      fecha,
+      ventas_total: N(cel(r, mapa, "venta")),
+      ordenes: N(cel(r, mapa, "ordenes")),
+      comensales: N(cel(r, mapa, "comensales")),
+    });
+  }
+  return out;
+}
+
+// ── Una línea por artículo vendido → productos + modificadores + combos ──
+function parseLineasOrden(rows, mapa, hdr) {
+  // Nombre de cada línea por su id, para saber de qué platillo cuelga cada modificador.
+  const nombrePorId = new Map();
+  if (mapa.idLinea != null) {
+    for (let i = hdr + 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (r && cel(r, mapa, "idLinea") != null)
+        nombrePorId.set(String(cel(r, mapa, "idLinea")), texto(cel(r, mapa, "producto")));
+    }
+  }
+  let minF = null, maxF = null;
+  const prods = new Map(), mods = {}, combos = {};
+  for (let i = hdr + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const nom = texto(cel(r, mapa, "producto"));
+    if (!nom) continue;
+    const f = ddmmToISO(cel(r, mapa, "fecha"));
+    if (f) { if (!minF || f < minF) minF = f; if (!maxF || f > maxF) maxF = f; }
+
+    const cant = mapa.cantidad != null ? N(cel(r, mapa, "cantidad")) : 1;
+    const tipo = norm(cel(r, mapa, "tipoLinea")) || "producto";
+    if (tipo === "modificador") {
+      mods[nom] = (mods[nom] || 0) + cant;
+      const padre = mapa.idPadre != null ? nombrePorId.get(String(cel(r, mapa, "idPadre") || "")) : null;
+      if (padre && padre !== nom) {
+        const k = padre + SEP + nom;
+        combos[k] = (combos[k] || 0) + cant;
+      }
+      continue;
+    }
+    if (tipo !== "producto") continue;          // cargos por servicio, propinas, etc.
+    const cat = texto(cel(r, mapa, "categoria"));
+    const k = nom + SEP + cat;
+    const o = prods.get(k) || { producto: nom, categoria: cat, cantidad: 0, venta: 0 };
+    o.cantidad += cant;
+    o.venta += N(cel(r, mapa, "venta"));
+    prods.set(k, o);
+  }
+  return { prods: [...prods.values()], mods, combos, desde: minF, hasta: maxF };
+}
+
+// ── Producto ya agregado (sin fecha): la fecha se toma del lote ──
+function parseProductosSimple(rows, mapa, hdr) {
+  const agg = new Map();
+  for (let i = hdr + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const nom = texto(cel(r, mapa, "producto"));
+    if (!nom) continue;
+    if (norm(cel(r, mapa, "tipoLinea")) === "modificador") continue;
+    const cat = texto(cel(r, mapa, "categoria"));
+    const k = nom + SEP + cat;
+    const o = agg.get(k) || { producto: nom, categoria: cat, cantidad: 0, venta: 0 };
+    o.cantidad += N(cel(r, mapa, "cantidad"));
+    o.venta += N(cel(r, mapa, "venta"));
+    agg.set(k, o);
+  }
+  return [...agg.values()];
+}
+
+// ── Resumen de modificadores vendidos (sin producto): qué extras se piden más ──
+function parseModificadores(rows, mapa, hdr) {
+  const agg = new Map();
+  for (let i = hdr + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const opcion = texto(cel(r, mapa, "opcion"));
+    if (!opcion) continue;
+    // Preferimos la cantidad de la OPCIÓN; la genérica suele ser el total del grupo.
+    const cant = N(mapa.cantidadOpc != null ? cel(r, mapa, "cantidadOpc") : cel(r, mapa, "cantidad"));
+    agg.set(opcion, (agg.get(opcion) || 0) + cant);
+  }
+  return [...agg.entries()].map(([modificador, cantidad]) => ({ modificador, cantidad }));
+}
+
+// ── Producto por variante (genérico) ──
+function parseVariantesSimple(rows, mapa, hdr) {
+  const out = [];
+  for (let i = hdr + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const prod = texto(cel(r, mapa, "producto"));
+    const opcion = texto(cel(r, mapa, "opcion"));
+    if (!prod || !opcion) continue;
+    out.push({
+      producto: prod,
+      grupo: texto(cel(r, mapa, "grupoMod")),
+      opcion,
+      unidades: N(cel(r, mapa, "cantidad")),
+      venta: N(cel(r, mapa, "venta")),
+    });
+  }
+  return out;
+}
+
 // ── Insertar en Supabase (borra y recarga para no duplicar) ──
 async function importarCorte(c) {
   if (!c.corte || !c.fecha) throw new Error("el corte no trae número o fecha");
   await supabase.from("cortes").delete().eq("corte", c.corte);
+  // Si ese día ya tenía la venta puesta por el reporte de ventas, quítala: el
+  // corte de caja es más completo (efectivo, tarjeta) y manda. Evita duplicar.
+  await supabase.from("cortes").delete().eq("fecha", c.fecha).is("corte", null);
   const { error } = await supabase.from("cortes").insert(c);
   if (error) throw new Error(error.message);
+}
+
+// Guarda la venta de cada día del reporte de ventas. Un día que YA tiene corte de
+// caja no se toca (el corte trae más detalle); y nunca se deja más de una fila por
+// día, para que la venta jamás se cuente doble.
+async function importarVentasDia(filas) {
+  if (!filas.length) throw new Error("no encontré días con venta en ese reporte");
+  let nuevos = 0, conCorte = 0, total = 0;
+  for (const f of filas) {
+    const { data: previos, error: e0 } = await supabase
+      .from("cortes").select("id, corte").eq("fecha", f.fecha);
+    if (e0) throw new Error(e0.message);
+    const auto = (previos || []).filter((c) => c.corte == null).map((c) => c.id);
+    if (auto.length) {
+      const { error: e1 } = await supabase.from("cortes").delete().in("id", auto);
+      if (e1) throw new Error(e1.message);
+    }
+    if ((previos || []).some((c) => c.corte != null)) { conCorte++; continue; }
+    const { error: e2 } = await supabase.from("cortes").insert({
+      corte: null, fecha: f.fecha, persona: "",
+      ventas_total: f.ventas_total, efectivo: 0, tarjeta: 0, transferencia: 0, diferencia: 0,
+    });
+    if (e2) throw new Error(e2.message);
+    nuevos++; total += f.ventas_total;
+  }
+  return { nuevos, conCorte, dias: filas.length, total };
 }
 
 async function importarProducto(p) {
@@ -255,6 +521,16 @@ async function importarVariantes(vrows, semana, fechaDia) {
   return { periodo: out.periodo, filas: out.filas, dia: fechaDia };
 }
 
+// Semana que le toca a un reporte SIN fechas propias: la del día detectado en
+// el mismo lote, o la del reporte que sí traía fechas, o la última ya cargada.
+function semanaDeLote(diaRef, semanaRef) {
+  if (diaRef) {
+    const w = semanaDe(diaRef);
+    return { desde: w.desde, hasta: w.hasta, periodo: labelRango(w.desde, w.hasta) };
+  }
+  return semanaRef || semanaMasReciente();
+}
+
 // Semana más reciente ya cargada (respaldo si suben el grupos sin el reporte de artículos).
 function semanaMasReciente() {
   const ps = store.state.productos || [];
@@ -285,6 +561,17 @@ async function cargarProductos(prows, wk, fechaDia) {
   const { error: ed } = await del;
   if (ed) throw new Error(ed.message);
   const { error: ei } = await supabase.from("productos_venta").insert(rows);
+  if (ei) throw new Error(ei.message);
+  return { periodo, filas: rows.length };
+}
+
+// Guarda el resumen de extras/modificadores de la semana.
+async function importarModificadores(mods, wk) {
+  const { desde, hasta, periodo } = wk;
+  const { error: ed } = await supabase.from("modificadores_venta").delete().eq("desde", desde);
+  if (ed) throw new Error(ed.message);
+  const rows = mods.map((m) => ({ periodo, desde, hasta, modificador: m.modificador, cantidad: m.cantidad }));
+  const { error: ei } = await supabase.from("modificadores_venta").insert(rows);
   if (ei) throw new Error(ei.message);
   return { periodo, filas: rows.length };
 }
@@ -377,10 +664,21 @@ export function montar(el) {
   el.innerHTML = `
     <div class="card">
       <h2>Importar de tu punto de venta</h2>
-      <p class="sub" style="margin-top:0">Sube los archivos que descargas de tu punto de venta:
-      los <b>cortes de caja</b> (diarios), y ${semanales}. Acepto <b>Excel</b> y también <b>PDF</b> de los reportes.
-      Puedes soltar varios de golpe; yo detecto cuál es cuál.</p>
-      <label class="btn"><input id="files" type="file" accept=".xlsx,.pdf" multiple hidden> ⬆ Elegir archivos</label>
+      <p class="sub" style="margin-top:0">Sube los <b>Excel tal como te los da tu punto de venta</b>
+      (o el PDF del reporte). No importa cómo se llame el archivo: leo las columnas
+      y detecto solo qué es cada uno. Puedes soltar varios de golpe.</p>
+      <label class="btn"><input id="files" type="file" accept=".xlsx,.xls,.csv,.pdf" multiple hidden> ⬆ Elegir archivos</label>
+      <details style="margin-top:12px">
+        <summary class="sub" style="cursor:pointer;font-size:12.5px">¿Qué reportes puedo subir?</summary>
+        <div class="sub" style="font-size:12.5px;line-height:1.6;margin-top:8px">
+          <b>Venta por día</b> — con columnas de fecha e importe. De aquí sale tu venta diaria.<br>
+          <b>Detalle de órdenes</b> — una línea por artículo vendido. El más completo: trae fecha, categoría y modificadores.<br>
+          <b>Productos vendidos</b> — artículo, cantidad e importe.<br>
+          <b>Variantes / modificadores</b> — platillo, opción y unidades.<br>
+          <b>Corte de caja</b> — el detalle de cierre con efectivo y tarjeta.<br>
+          <span style="opacity:.8">Si un archivo no entra, te digo qué hojas trae para poder agregarlo.</span>
+        </div>
+      </details>
       <div class="aviso-box" style="margin-top:12px;font-size:12.5px;line-height:1.5">
         📅 <b>Días y consolidados se suman en la semana.</b> Puedes mezclar un consolidado
         (ej. 27–29 jul) con días sueltos (ej. 30 jul) y se acumulan juntos.
@@ -444,16 +742,26 @@ export function montar(el) {
       if (!XLSX) { items.push({ f, err: new Error("no pude cargar el lector de Excel (revisa tu internet e intenta de nuevo)") }); continue; }
       try {
         const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
-        let tipo = "?";
+        // 1) Formatos ya conocidos: tienen parsers a la medida (más exactos).
+        let tipo = "?", gen = null;
         if (wb.SheetNames.includes("Detalle corte de caja")) tipo = "corte";
         else if (wb.SheetNames.includes("Productos Vendidos Agregados")) tipo = "producto";
         else if (wb.SheetNames.includes("Artículo - Grupo Modificador")) tipo = "variante";
-        items.push({ f, wb, tipo });
+        else {
+          // 2) Cualquier otro Excel: lo reconocemos por sus columnas.
+          gen = clasificarLibro(wb, XLSX);
+          if (gen) tipo = "gen-" + gen.tipo;
+        }
+        items.push({ f, wb, tipo, gen });
       } catch (err) { items.push({ f, err }); }
     }
     // PDFs al final: primero el Excel (que da semanaRef exacta para variantes).
-    const orden = { corte: 0, producto: 1, variante: 2, pdf: 3, "?": 4 };
-    items.sort((a, b) => (orden[a.tipo] ?? 4) - (orden[b.tipo] ?? 4));
+    const orden = {
+      corte: 0, "gen-ventasdia": 1, "gen-lineas": 2, producto: 3,
+      "gen-productos": 4, variante: 5, "gen-variantes": 6, "gen-modificadores": 7,
+      pdf: 8, "?": 9,
+    };
+    items.sort((a, b) => (orden[a.tipo] ?? 9) - (orden[b.tipo] ?? 9));
 
     // Spinner (una sola vez) para que se note que está trabajando.
     if (!document.getElementById("imp-spin-css")) {
@@ -466,6 +774,7 @@ export function montar(el) {
 
     const logs = [];
     let semanaRef = null;
+    let productosCargados = false;   // ¿ya entró un reporte de productos con detalle?
     let diaRef = null;   // día detectado en el lote (corte o reporte de 1 día) → acumula variantes por día
     const total = items.length;
     // Muestra spinner + barra + "procesando X de N" + los resultados que ya van.
@@ -496,6 +805,7 @@ export function montar(el) {
         } else if (it.tipo === "producto") {
           const p = parseProducto(it.wb, XLSX);
           const r = await importarProducto(p);
+          productosCargados = true;
           semanaRef = { desde: r.desde, hasta: r.hasta, periodo: r.periodo };
           if (r.dia) diaRef = r.dia;       // reporte de productos de un solo día
           logs.push(r.dia
@@ -508,10 +818,64 @@ export function montar(el) {
             : diaRef
               ? `✅ Variantes día ${diaRef} · ${r.filas} líneas (sumado a la semana ${r.periodo})`
               : `✅ Variantes ${r.periodo} · ${r.filas} líneas platillo/variante`);
+        } else if (it.tipo === "gen-ventasdia") {
+          const filas = parseVentasDia(it.gen.rows, it.gen.mapa, it.gen.hdr);
+          const r = await importarVentasDia(filas);
+          if (filas.length === 1) diaRef = filas[0].fecha;
+          const detalle = r.conCorte
+            ? ` (${r.conCorte} día(s) ya tenían corte de caja, no los toqué)`
+            : "";
+          logs.push(`✅ Venta por día · ${r.nuevos} día(s) · ${money(r.total)}${detalle}`);
+        } else if (it.tipo === "gen-lineas") {
+          const p = parseLineasOrden(it.gen.rows, it.gen.mapa, it.gen.hdr);
+          if (!p.prods.length) throw new Error("no encontré artículos vendidos en ese reporte");
+          const r = await importarProducto(p);
+          productosCargados = true;
+          semanaRef = { desde: r.desde, hasta: r.hasta, periodo: r.periodo };
+          if (r.dia) diaRef = r.dia;
+          logs.push(r.dia
+            ? `✅ Ventas del día ${r.dia} · ${r.prod} productos (sumado a la semana ${r.periodo})`
+            : `✅ Ventas ${r.periodo} · ${r.prod} productos, ${r.combos} combos`);
+        } else if (it.tipo === "gen-productos") {
+          // Este reporte es el más pobre (sin fecha ni categoría). Si en el mismo
+          // lote ya entró uno con más detalle, NO lo pises.
+          if (productosCargados) {
+            logs.push(`↩️ ${escF(it.f.name)}: me lo salté — ya cargué esos productos desde un reporte con más detalle.`);
+          } else {
+            const prods = parseProductosSimple(it.gen.rows, it.gen.mapa, it.gen.hdr);
+            if (!prods.length) throw new Error("no encontré productos en ese reporte");
+            const wk = semanaDeLote(diaRef, semanaRef);
+            if (!wk) throw new Error("ese reporte no trae fechas: súbelo junto con el reporte de ventas por día");
+            const out = await cargarProductos(prods, wk, diaRef);
+            productosCargados = true;
+            logs.push(diaRef
+              ? `✅ Productos del día ${diaRef} · ${out.filas} productos (sumado a la semana ${out.periodo})`
+              : `✅ Productos ${out.periodo} · ${out.filas} productos`);
+          }
+        } else if (it.tipo === "gen-modificadores") {
+          if (productosCargados) {
+            logs.push(`↩️ ${escF(it.f.name)}: me lo salté — los modificadores ya vinieron en un reporte más completo.`);
+          } else {
+            const mods = parseModificadores(it.gen.rows, it.gen.mapa, it.gen.hdr);
+            if (!mods.length) throw new Error("no encontré modificadores en ese reporte");
+            const wk = semanaDeLote(diaRef, semanaRef);
+            if (!wk) throw new Error("ese reporte no trae fechas: súbelo junto con el reporte de ventas por día");
+            const r = await importarModificadores(mods, wk);
+            logs.push(`✅ Modificadores ${r.periodo} · ${r.filas} extras`);
+          }
+        } else if (it.tipo === "gen-variantes") {
+          const vrows = parseVariantesSimple(it.gen.rows, it.gen.mapa, it.gen.hdr);
+          if (!vrows.length) throw new Error("no encontré variantes en ese reporte");
+          const r = await importarVariantes(vrows, semanaRef || semanaMasReciente(), diaRef);
+          logs.push(r.comoProductos
+            ? `✅ Venta por producto ${r.periodo} · ${r.filas} productos`
+            : `✅ Variantes ${r.periodo} · ${r.filas} líneas platillo/variante`);
         } else if (it.tipo === "pdf") {
           logs.push(...await procesarPDF(it.f, semanaRef || semanaMasReciente()));
         } else {
-          logs.push(`⚠️ ${escF(it.f.name)}: no reconocí el formato (¿es un export de tu punto de venta?)`);
+          const hojas = (it.wb && it.wb.SheetNames || []).join(", ");
+          logs.push(`⚠️ ${escF(it.f.name)}: no reconocí el formato. Hojas que trae: ${hojas || "—"}. ` +
+            `Necesito columnas de artículo + cantidad + importe, o de fecha + venta.`);
         }
       } catch (err) {
         logs.push(`❌ ${escF(it.f.name)}: ${(err && err.message) || err}`);
