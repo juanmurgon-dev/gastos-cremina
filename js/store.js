@@ -65,9 +65,29 @@ function rowToTicket(r) {
   };
 }
 
+// Supabase corta CADA consulta en 1000 filas. Con varios meses de historial eso
+// hace que semanas enteras desaparezcan sin aviso (variantes_venta ya pasó ese
+// tope). Pedimos de mil en mil hasta que llegue una página incompleta.
+async function traerTodo(tabla, orden = "id") {
+  const PAGINA = 1000, MAX_PAGINAS = 60;
+  const filas = [];
+  for (let i = 0; i < MAX_PAGINAS; i++) {
+    const { data, error } = await supabase.from(tabla).select("*")
+      .order(orden, { ascending: true })
+      .range(i * PAGINA, i * PAGINA + PAGINA - 1);
+    if (error) return { filas, error };
+    filas.push(...(data || []));
+    if (!data || data.length < PAGINA) break;   // última página
+  }
+  return { filas, error: null };
+}
+
+// Más reciente primero (las vistas lo esperan así).
+const porFechaDesc = (a, b) => String(b.fecha || "").localeCompare(String(a.fecha || ""));
+
 async function cargarTickets() {
-  const { data, error } = await supabase
-    .from("tickets").select("*").order("fecha", { ascending: false });
+  const { filas: data, error } = await traerTodo("tickets");
+  data.sort(porFechaDesc);
   if (error) { console.error("cargarTickets:", error); state.listo = true; notify(); return; }
   state.tickets = (data || []).map(rowToTicket);
   state.listo = true;
@@ -104,8 +124,8 @@ export async function crearOrg(nombre) {
 
 async function cargarCortes() {
   // La tabla puede no existir todavía (si aún no corren el import de ventas).
-  const { data, error } = await supabase.from("cortes").select("*").order("fecha", { ascending: false });
-  if (!error && data) { state.cortes = data; notify(); }
+  const { filas: data, error } = await traerTodo("cortes");
+  if (!error && data) { state.cortes = data.sort(porFechaDesc); notify(); }
 }
 
 // KPIs por día (comensales, cuentas, venta) que vienen en el encabezado del reporte.
@@ -137,14 +157,16 @@ export function kpisEnRango(desdeISO, hastaISO, soloUnDia = false) {
 }
 
 async function cargarProductos() {
-  const p = await supabase.from("productos_venta").select("*");
-  if (!p.error && p.data) state.productos = p.data;
-  const m = await supabase.from("modificadores_venta").select("*");
-  if (!m.error && m.data) state.modificadores = m.data;
-  const c = await supabase.from("combos_venta").select("*");
-  if (!c.error && c.data) state.combos = c.data;
-  const v = await supabase.from("variantes_venta").select("*");
-  if (!v.error && v.data) state.variantes = v.data;
+  const p = await traerTodo("productos_venta");
+  if (!p.error) state.productos = p.filas;
+  const m = await traerTodo("modificadores_venta");
+  if (!m.error) state.modificadores = m.filas;
+  const c = await traerTodo("combos_venta");
+  if (!c.error) state.combos = c.filas;
+  const v = await traerTodo("variantes_venta");
+  if (!v.error) state.variantes = v.filas;
+  // Si una consulta falló, que no se vea como "no hay ventas": se avisa en pantalla.
+  state.errorVentas = [p, m, c, v].map((r) => r.error && r.error.message).filter(Boolean).join(" · ") || null;
   notify();
 }
 
@@ -607,8 +629,9 @@ export async function exportarRespaldo() {
     "costos_platillo", "config", "perfiles"];
   const out = { app: "Cifra", exportado: new Date().toISOString(), tablas: {} };
   for (const t of tablas) {
-    const { data, error } = await supabase.from(t).select("*");
-    out.tablas[t] = error ? { error: error.message } : (data || []);
+    const orden = t === "config" ? "id" : (t === "costos_platillo" ? "producto" : "id");
+    const { filas, error } = await traerTodo(t, orden);
+    out.tablas[t] = error ? { error: error.message } : filas;
   }
   return out;
 }

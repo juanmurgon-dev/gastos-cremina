@@ -140,7 +140,12 @@ function productos(cont) {
     prodCatGlobal.get(p.producto).add(p.categoria || "Otros");
   }
   if (!prodAll.length && !varAll.length) {
-    cont.innerHTML = `<div class="card"><div class="aviso-box">Aún no hay ventas por producto. Corre <b>importar-productos.sql</b> e <b>importar-variantes.sql</b> en Supabase.</div></div>`;
+    // Distinguir "no hay datos" de "no pude leerlos": antes ambos se veían igual
+    // y parecía que la importación no había servido.
+    cont.innerHTML = store.state.errorVentas
+      ? `<div class="card"><div class="error-box">No pude leer tus ventas de la base: ${escapar(store.state.errorVentas)}.<br>
+         Tus datos siguen ahí; es la lectura la que falló. Recarga la app e intenta de nuevo.</div></div>`
+      : `<div class="card"><div class="aviso-box">Aún no hay ventas por producto. Súbelas en <b>Importar</b>.</div></div>`;
     return;
   }
   const pmap = new Map();
