@@ -171,6 +171,7 @@ function descargarTablaRecetas() {
 export function render(el) {
   let sub = "platillos";   // platillos | preparaciones
   let editando = null;     // { nombre, esPrep }
+  const stPrep = { filtro: "todas" };   // filtro de la lista de preparaciones
 
   function shell() {
     el.innerHTML = `
@@ -318,27 +319,82 @@ export function render(el) {
   // ───────────── Lista de preparaciones ─────────────
   function listaPreparaciones(cont) {
     const preps = preparaciones();
+    const lista = preps.map((nom) => ({ nom, completa: !!(store.fichaDe(nom) || {}).completa }));
+    const listas = lista.filter((x) => x.completa).length;
+    const faltan = lista.length - listas;
+
     cont.innerHTML = `
       <div class="card">
         <h2 style="margin-bottom:2px">Preparaciones base</h2>
         <p class="sub" style="margin-top:0">Salsas, masas, aderezos… que usas en varios platillos. Se costean una vez y se reutilizan como un insumo más.</p>
+        ${lista.length ? `<p class="sub" style="margin:6px 0 0">✅ Terminadas: <b>${listas}</b> · ⏳ En proceso: <b>${faltan}</b></p>` : ""}
         <button class="btn" id="nueva" style="margin:8px 0 12px">＋ Nueva preparación</button>
+        ${lista.length ? `<div id="chipsP" class="fila" style="gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px"></div>` : ""}
         <div id="lp"></div>
       </div>`;
+
     const lp = cont.querySelector("#lp");
-    if (!preps.length) lp.innerHTML = `<div class="vacio">Aún no hay preparaciones. Crea una si tienes recetas base (ej. "Salsa verde").</div>`;
-    else lp.innerHTML = preps.map((nom) => {
-      const fila = store.state.recetas.find((r) => r.producto === nom && r.es_preparacion) || {};
-      const rend = fila.rendimiento || 1;
-      const unidad = store.unidadPreparacion(nom);
-      return `
-        <button class="fila-item" data-p="${esc(nom)}" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--linea);padding:12px 2px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
-          <span><b>${esc(nom)}</b><br><span class="sub" style="font-size:12px">rinde ${esc(String(rend))} ${esc(unidad)}</span></span>
-          <span class="monto" style="font-size:14px">${money(store.costoInsumo(nom))}${unidad ? `<span class="sub" style="font-weight:400">/${esc(unidad)}</span>` : ""}</span>
-        </button>`;
-    }).join("");
+    const chipsEl = cont.querySelector("#chipsP");
+    const chip = (id, txt) => `<button class="pchip" data-f="${id}" style="border:1px solid var(--linea);background:${stPrep.filtro === id ? "var(--verde)" : "#fff"};color:${stPrep.filtro === id ? "#fff" : "var(--txt,#222)"};border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex:0 0 auto">${txt}</button>`;
+
+    function pintarChips() {
+      if (!chipsEl) return;
+      chipsEl.innerHTML = chip("todas", `Todas (${lista.length})`) + chip("ok", `✅ Terminadas (${listas})`) + chip("falta", `⏳ En proceso (${faltan})`);
+      chipsEl.querySelectorAll(".pchip").forEach((c) => c.addEventListener("click", () => { stPrep.filtro = c.dataset.f; pintarChips(); pintarLista(); }));
+    }
+
+    function pintarLista() {
+      let arr = lista;
+      if (stPrep.filtro === "ok") arr = arr.filter((x) => x.completa);
+      else if (stPrep.filtro === "falta") arr = arr.filter((x) => !x.completa);
+
+      if (!preps.length) { lp.innerHTML = `<div class="vacio">Aún no hay preparaciones. Crea una si tienes recetas base (ej. "Salsa verde").</div>`; return; }
+      if (!arr.length) { lp.innerHTML = `<div class="vacio">Ninguna preparación con ese filtro.</div>`; return; }
+
+      lp.innerHTML = arr.map(({ nom, completa }) => {
+        const fila = store.state.recetas.find((r) => r.producto === nom && r.es_preparacion) || {};
+        const rend = fila.rendimiento || 1;
+        const unidad = store.unidadPreparacion(nom);
+        // La casilla marca terminada/en proceso sin abrir la receta; el resto de
+        // la fila sigue abriendo la ficha. Son dos botones para no anidarlos.
+        return `
+          <div style="display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--linea);padding:6px 2px">
+            <button class="chkPrep" data-p="${esc(nom)}" aria-pressed="${completa}"
+              title="${completa ? "Terminada — toca para marcarla en proceso" : "En proceso — toca para marcarla terminada"}"
+              style="flex:0 0 auto;width:26px;height:26px;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;padding:0;
+                     border:1.5px solid ${completa ? "var(--verde)" : "var(--linea)"};background:${completa ? "var(--verde)" : "#fff"};color:#fff">${completa ? "✓" : ""}</button>
+            <button class="abrirPrep" data-p="${esc(nom)}" style="flex:1;min-width:0;text-align:left;background:none;border:none;padding:8px 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">
+              <span style="min-width:0">
+                <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nom)}</b>
+                <span class="sub" style="font-size:12px">rinde ${esc(String(rend))} ${esc(unidad)}${completa ? "" : " · ⏳ en proceso"}</span>
+              </span>
+              <span class="monto" style="font-size:14px;white-space:nowrap">${money(store.costoInsumo(nom))}${unidad ? `<span class="sub" style="font-weight:400">/${esc(unidad)}</span>` : ""}</span>
+            </button>
+          </div>`;
+      }).join("");
+
+      lp.querySelectorAll(".abrirPrep").forEach((b) =>
+        b.addEventListener("click", () => { editando = { nombre: b.dataset.p, esPrep: true }; pintar(); }));
+
+      lp.querySelectorAll(".chkPrep").forEach((b) => b.addEventListener("click", async () => {
+        const nom = b.dataset.p;
+        b.disabled = true;
+        try {
+          // guardarFicha reemplaza la fila entera: hay que mandar la ficha
+          // completa con el flag volteado, o se borrarían pasos y foto.
+          const f = store.fichaDe(nom);
+          await store.guardarFicha(nom, { ...f, completa: !f.completa });
+          pintar();
+        } catch (e) {
+          b.disabled = false;
+          alert("No pude guardarlo: " + ((e && e.message) || e));
+        }
+      }));
+    }
+
     cont.querySelector("#nueva").addEventListener("click", () => { editando = { nombre: "", esPrep: true }; pintar(); });
-    cont.querySelectorAll(".fila-item").forEach((b) => b.addEventListener("click", () => { editando = { nombre: b.dataset.p, esPrep: true }; pintar(); }));
+    pintarChips();
+    pintarLista();
   }
 
   // ───────────── Ficha técnica (editor) ─────────────
