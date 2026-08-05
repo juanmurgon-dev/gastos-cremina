@@ -193,6 +193,7 @@ export function render(el) {
   // receta y volver atrás sigas viendo la misma selección.
   const st = { q: "", cat: "todas", filtro: "todas", orden: "venta" };
   const stPrep = { filtro: "todas", area: "todas" };
+  let verFaltantes = false;   // barrido de ingredientes sin costear
 
   function shell() {
     el.innerHTML = `
@@ -211,6 +212,7 @@ export function render(el) {
   function pintar() {
     const cont = el.querySelector("#rsub");
     if (editando) return editor(cont, editando.nombre, editando.esPrep);
+    if (verFaltantes) return reporteFaltantes(cont);
     if (sub === "platillos") return listaPlatillos(cont);
     return listaPreparaciones(cont);
   }
@@ -254,6 +256,7 @@ export function render(el) {
           <button class="btn sec chico" id="impcsv" style="flex:1">⬆ Importar CSV</button>
           <button class="btn sec chico" id="plantilla" style="flex:1">⬇ Formato vacío</button>
           <button class="btn sec chico" id="exptabla" style="flex:1 1 100%">⬇ Descargar recetas (tabla)</button>
+          <button class="btn sec chico" id="faltantes" style="flex:1 1 100%">🔎 Barrido: ingredientes sin costear</button>
         </div>
         <input type="file" id="fcsv" accept=".csv,text/csv" style="display:none" />
         <input id="bq" placeholder="Buscar platillo…" style="margin:6px 0 8px" value="${esc(st.q)}" />
@@ -317,6 +320,7 @@ export function render(el) {
     bq.addEventListener("input", () => { st.q = bq.value; pintarLista(); });
     cont.querySelector("#fcat").addEventListener("change", (e) => { st.cat = e.target.value; pintarLista(); });
     cont.querySelector("#forden").addEventListener("change", (e) => { st.orden = e.target.value; pintarLista(); });
+    cont.querySelector("#faltantes").addEventListener("click", () => { verFaltantes = true; pintar(); });
     cont.querySelector("#plantilla").addEventListener("click", descargarPlantilla);
     cont.querySelector("#exptabla").addEventListener("click", descargarTablaRecetas);
     const fcsv = cont.querySelector("#fcsv");
@@ -433,6 +437,112 @@ export function render(el) {
     if (fa) fa.addEventListener("change", (e) => { stPrep.area = e.target.value; pintarLista(); });
     pintarChips();
     pintarLista();
+  }
+
+  // ───────────── Barrido: qué ingredientes no costean ─────────────
+  // Un ingrediente "no costea" cuando costoLinea() da 0. Puede ser por tres
+  // razones muy distintas, y decir cuál es lo que hace accionable el reporte.
+  function motivoFaltante(insumo, cantidad, unidad) {
+    if (store.costoLinea(insumo, cantidad, unidad)) return null;      // sí costea
+    if (!num(cantidad)) return { corto: "cantidad en 0", largo: "La receta no dice cuánto se usa" };
+    const esSub = store.esPreparacion(insumo) || store.tieneReceta(insumo);
+    const costo = store.costoInsumo(insumo);
+    if (esSub) return costo
+      ? { corto: "no cuadra la unidad", largo: "La subreceta cuesta, pero su unidad no convierte con la de esta línea" }
+      : { corto: "la subreceta no cuesta", largo: "Esa preparación tampoco tiene costo todavía" };
+    const ui = store.unidadInsumo(insumo);
+    if (!costo) return { corto: "sin precio", largo: "Ningún ticket registra la compra de este insumo" };
+    if (unidad && ui && !store.unidadesCompatibles(unidad, ui))
+      return { corto: "unidad incompatible", largo: `La receta pide ${unidad} y el insumo se compra en ${ui}` };
+    return { corto: "sin costo", largo: "No se pudo calcular el costo de esta línea" };
+  }
+
+  // Todas las recetas del sistema (platillos y preparaciones) con sus renglones.
+  function recetasAgrupadas() {
+    const m = new Map();
+    for (const r of store.state.recetas || []) {
+      if (!r.producto || !r.insumo) continue;
+      if (!m.has(r.producto)) m.set(r.producto, { producto: r.producto, esPrep: false, items: [] });
+      const g = m.get(r.producto);
+      if (r.es_preparacion) g.esPrep = true;
+      g.items.push(r);
+    }
+    return [...m.values()].sort((a, b) => a.producto.localeCompare(b.producto, "es"));
+  }
+
+  function reporteFaltantes(cont) {
+    const recetas = recetasAgrupadas().map((g) => {
+      const items = g.items.map((r) => {
+        const falta = motivoFaltante(r.insumo, r.cantidad, r.unidad);
+        return { ...r, falta, costo: falta ? 0 : store.costoLinea(r.insumo, r.cantidad, r.unidad) };
+      });
+      return { ...g, items, nFalta: items.filter((i) => i.falta).length };
+    });
+    const conFalta = recetas.filter((r) => r.nFalta > 0);
+    const completas = recetas.length - conFalta.length;
+
+    // Causa raíz: qué insumos rompen más recetas. Arreglar estos es lo que rinde.
+    const porInsumo = new Map();
+    for (const r of conFalta) for (const i of r.items) {
+      if (!i.falta) continue;
+      const k = i.insumo;
+      if (!porInsumo.has(k)) porInsumo.set(k, { insumo: k, motivo: i.falta.corto, recetas: new Set() });
+      porInsumo.get(k).recetas.add(r.producto);
+    }
+    const culpables = [...porInsumo.values()].sort((a, b) => b.recetas.size - a.recetas.size);
+
+    cont.innerHTML = `
+      <div class="card">
+        <button class="btn sec chico" id="volverF" style="margin-bottom:10px">← Volver</button>
+        <h2 style="margin-bottom:2px">Barrido de recetas</h2>
+        <p class="sub" style="margin-top:0">Todo lo que está en rojo no se puede costear todavía, así que el costo del platillo sale incompleto.</p>
+        <div class="row-stats" style="margin-top:10px">
+          <div class="stat"><div class="n">${recetas.length}</div><div class="l">Recetas</div></div>
+          <div class="stat"><div class="n" style="color:${conFalta.length ? "var(--rojo)" : "var(--verde)"}">${conFalta.length}</div><div class="l">Con faltantes</div></div>
+          <div class="stat"><div class="n" style="color:var(--verde)">${completas}</div><div class="l">Completas</div></div>
+        </div>
+        <button class="btn sec chico" id="csvF" style="margin-top:12px">⬇ Exportar el barrido (CSV)</button>
+      </div>
+
+      ${culpables.length ? `<div class="card">
+        <h2 style="margin-bottom:2px">Insumos que rompen el costeo</h2>
+        <p class="sub" style="margin-top:0">Ordenados por cuántas recetas arreglas al resolverlos.</p>
+        ${culpables.map((c) => `<div class="barra-row" style="padding:8px 0;border-bottom:1px solid var(--linea);gap:8px">
+          <span class="etq" style="flex:1;min-width:0;width:auto;color:var(--rojo);font-weight:700;white-space:normal">${esc(c.insumo)}</span>
+          <span class="sub" style="font-size:11.5px;white-space:nowrap">${esc(c.motivo)}</span>
+          <span class="val" style="width:auto;white-space:nowrap">${c.recetas.size} receta${c.recetas.size === 1 ? "" : "s"}</span>
+        </div>`).join("")}
+      </div>` : `<div class="card"><div class="ok-box">✅ Ninguna receta tiene ingredientes sin costear.</div></div>`}
+
+      ${recetas.map((r) => `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <button class="linkbtn abrirR" data-p="${esc(r.producto)}" data-prep="${r.esPrep ? "1" : ""}" style="text-align:left;font-weight:800;font-size:15px;color:var(--verde);background:none;border:none;padding:0;cursor:pointer">
+            ${r.nFalta ? "⚠️ " : "✅ "}${esc(r.producto)}${r.esPrep ? " <span class=\"sub\" style=\"font-weight:600\">(preparación)</span>" : ""}
+          </button>
+          <span class="sub" style="white-space:nowrap;font-size:12px;${r.nFalta ? "color:var(--rojo);font-weight:700" : ""}">${r.nFalta ? r.nFalta + " de " + r.items.length + " sin costear" : r.items.length + " ingredientes"}</span>
+        </div>
+        <div style="margin-top:8px">
+          ${r.items.map((i) => `<div style="display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px dashed var(--linea)">
+            <span style="flex:1;min-width:0;${i.falta ? "color:var(--rojo);font-weight:700" : ""}">${i.falta ? "🔴 " : ""}${esc(i.insumo)}</span>
+            <span class="sub" style="white-space:nowrap;font-size:12px">${esc(String(i.cantidad ?? ""))} ${esc(i.unidad || "")}</span>
+            <span class="val" style="width:96px;text-align:right;white-space:nowrap;${i.falta ? "color:var(--rojo)" : ""}">${i.falta ? esc(i.falta.corto) : money(i.costo)}</span>
+          </div>`).join("")}
+        </div>
+      </div>`).join("")}`;
+
+    cont.querySelector("#volverF").addEventListener("click", () => { verFaltantes = false; pintar(); });
+    cont.querySelectorAll(".abrirR").forEach((b) => b.addEventListener("click", () => {
+      verFaltantes = false; editando = { nombre: b.dataset.p, esPrep: !!b.dataset.prep }; pintar();
+    }));
+    cont.querySelector("#csvF").addEventListener("click", () => {
+      const filas = [];
+      for (const r of recetas) for (const i of r.items)
+        filas.push([r.producto, r.esPrep ? "preparación" : "platillo", i.insumo, i.cantidad, i.unidad || "",
+                    i.falta ? "FALTA" : "ok", i.falta ? i.falta.corto : "", i.falta ? i.falta.largo : "",
+                    i.falta ? "" : Math.round(i.costo * 100) / 100]);
+      descargarCSV("barrido-recetas",
+        ["Receta", "Tipo", "Ingrediente", "Cantidad", "Unidad", "Estado", "Motivo", "Detalle", "Costo"], filas);
+    });
   }
 
   // ───────────── Ficha técnica (editor) ─────────────

@@ -624,12 +624,16 @@ export function itemsPendientesRequis() {
 // Respaldo: descarga TODO el historial del restaurante en un solo archivo JSON.
 // El usuario está autenticado, así que RLS le devuelve solo sus datos.
 export async function exportarRespaldo() {
+  // Ojo: las RECETAS y sus fichas también son trabajo del restaurante y antes
+  // no se respaldaban. Las fotos (insumo_fotos) siguen fuera: pesan demasiado.
   const tablas = ["tickets", "cortes", "gastos_fijos", "productos_venta",
     "modificadores_venta", "combos_venta", "variantes_venta", "requisiciones",
-    "costos_platillo", "config", "perfiles"];
+    "costos_platillo", "recetas", "recetas_ficha", "ingredientes_maestro",
+    "config", "perfiles"];
   const out = { app: "Cifra", exportado: new Date().toISOString(), tablas: {} };
   for (const t of tablas) {
-    const orden = t === "config" ? "id" : (t === "costos_platillo" ? "producto" : "id");
+    const SIN_ID = { costos_platillo: "producto", recetas_ficha: "producto", ingredientes_maestro: "nombre" };
+    const orden = SIN_ID[t] || "id";
     const { filas, error } = await traerTodo(t, orden);
     out.tablas[t] = error ? { error: error.message } : filas;
   }
