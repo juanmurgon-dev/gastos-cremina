@@ -2,7 +2,7 @@
 // proveedor (de tu historial), lo agrupa por proveedor, le pones estatus y lo
 // exportas para mandarlo a quien compra. Guarda historial en Supabase.
 import * as store from "../store.js";
-import { money, num, fechaBonita } from "../store.js";
+import { money, num, fechaBonita, AREAS, COLOR_AREA } from "../store.js";
 import { descargarCSV } from "../csv.js";
 import { verFoto } from "../lightbox.js";
 
@@ -179,6 +179,8 @@ export function render(el) {
             <input id="rqCant" type="number" step="any" inputmode="decimal" placeholder="0" /></label>
           <label class="campo" style="width:96px"><span>Unidad</span>
             <input id="rqUni" placeholder="kg" /></label>
+          <label class="campo" style="width:112px"><span>Área</span>
+            <select id="rqArea">${AREAS.map((a) => `<option value="${a}">${a}</option>`).join("")}</select></label>
         </div>
         <button class="btn" id="rqAdd">Agregar a la lista</button>
       </div>
@@ -204,6 +206,9 @@ export function render(el) {
       const nom = $("#rqNom").value.trim();
       const hit = byName.get(nom.toLowerCase());
       if (hit && !$("#rqUni").value) $("#rqUni").value = hit.unidad || "";
+      // Propone el área con la que ya se compra ese insumo; se puede cambiar.
+      const sa = $("#rqArea");
+      if (sa && hit) { sa.value = areaDe(nom); sa.style.background = colorArea(sa.value); sa.style.color = "#fff"; }
       if (!$("#rqSku").value.trim()) { const cod = store.codigoDeInsumo(nom); if (cod) $("#rqSku").value = cod; }
     });
     // SKU → insumo: al escribir un código conocido, llena el insumo y la unidad.
@@ -250,7 +255,8 @@ export function render(el) {
       const proveedor = hit && hit.registros[0] ? (hit.registros[0].proveedor || "") : "";
       const unidad = $("#rqUni").value.trim() || (hit && hit.unidad) || "pz";
       const codigo = $("#rqSku").value.trim() || store.codigoDeInsumo(nombre);
-      editing.items.push({ nombre, cantidad, unidad, precio, proveedor, codigo, estatus: "pendiente" });
+      const area = $("#rqArea") ? $("#rqArea").value : areaDe(nombre);
+      editing.items.push({ nombre, cantidad, unidad, precio, proveedor, codigo, area, estatus: "pendiente" });
       $("#rqNom").value = ""; $("#rqCant").value = ""; $("#rqUni").value = ""; $("#rqSku").value = "";
       $("#rqNom").focus();
       pintarItems(); guardar();
@@ -266,7 +272,7 @@ export function render(el) {
     const precio = hit ? num(hit.precioActual) : 0;
     const proveedor = hit && hit.registros[0] ? (hit.registros[0].proveedor || "") : "";
     const uni = unidad || (hit && hit.unidad) || "pz";
-    return { nombre, cantidad: num(cantidad) || 1, unidad: uni, precio, proveedor, codigo: store.codigoDeInsumo(nombre), estatus: "pendiente" };
+    return { nombre, cantidad: num(cantidad) || 1, unidad: uni, precio, proveedor, codigo: store.codigoDeInsumo(nombre), area: areaDe(nombre), estatus: "pendiente" };
   }
 
   // Autocompletar reutilizable para un input de insumo. Si se pasa proveedorPref,
@@ -390,6 +396,26 @@ export function render(el) {
     }).catch(() => {});
   }
 
+  // jsPDF pide el color en 0-255, no en hexadecimal.
+  const hexRgb = (h) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(h || ""));
+    const n = m ? parseInt(m[1], 16) : 0x7ea8a2;
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  };
+
+  // Área de un insumo: la que ya trae de su historial de compras; si nunca se
+  // ha comprado, "otro". El color es el MISMO que usan tickets, insumos y
+  // reportes (COLOR_AREA), para que barra siempre se vea igual en toda la app.
+  function areaDe(nombre) {
+    const hit = byName.get((nombre || "").toLowerCase());
+    const a = hit && hit.area;
+    return AREAS.includes(a) ? a : "otro";
+  }
+  const colorArea = (a) => COLOR_AREA[a] || COLOR_AREA.otro;
+  const selArea = (attrs, sel) =>
+    `<select ${attrs} title="Área a la que va este insumo" style="flex:0 0 auto;width:104px;font-weight:600;color:#fff;border:none;background:${colorArea(sel)}">${
+      AREAS.map((a) => `<option value="${a}"${a === sel ? " selected" : ""} style="background:#fff;color:#22201a">${a}</option>`).join("")}</select>`;
+
   function pintarItems() {
     const cont = el.querySelector("#rqLista");
     if (!editing.items.length) {
@@ -437,6 +463,7 @@ export function render(el) {
         pintarItems(); guardar();
       });
       row.querySelector("[data-f='uni']").addEventListener("change", (ev) => { it.unidad = ev.target.value.trim(); pintarItems(); guardar(); });
+      row.querySelector("[data-f='area']").addEventListener("change", (ev) => { it.area = ev.target.value; pintarItems(); guardar(); });
       // Autocompletar del nombre, con preferencia por el proveedor de este renglón.
       const nomInp = row.querySelector("[data-f='nom']"), sugInp = row.querySelector("[data-sug]");
       if (nomInp && sugInp) montarAutocomplete(nomInp, sugInp, (picked) => {
@@ -506,7 +533,10 @@ export function render(el) {
       : `<input data-f="prov" value="${esc(it.proveedor)}" placeholder="Proveedor" style="flex:1 1 100px;min-width:0" />`;
     const ie = estatusInfo(it.estatus);
     const sku = it.codigo || store.codigoDeInsumo(it.nombre);
-    return `<div class="barra-row" data-i="${idx}" style="gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--linea);padding:8px 0">
+    const area = AREAS.includes(it.area) ? it.area : areaDe(it.nombre);
+    // Franja de color a la izquierda: se distingue el área de un vistazo sin
+    // tener que leer nada, y es el mismo color que en tickets y reportes.
+    return `<div class="barra-row" data-i="${idx}" style="gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--linea);border-left:4px solid ${colorArea(area)};padding:8px 0 8px 8px;margin-left:-8px">
       <span class="etq" style="width:100%;display:flex;align-items:center;gap:8px">
         <button data-f="estat" class="chip" title="Toca para cambiar el estatus" style="background:${ie.c};border:none;cursor:pointer;flex:none;display:inline-flex;align-items:center;gap:5px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.28);padding:6px 11px">${ie.t} <span style="font-size:12px;opacity:.9">↻</span></button>
         <button type="button" data-foto data-n="${esc(it.nombre)}" data-prov="${esc(it.proveedor || "")}" title="Ver la foto de la presentación" style="display:none;flex:0 0 auto;width:34px;height:34px;padding:0;border-radius:8px;border:1px solid var(--linea);background:#f6f4ee;overflow:hidden;cursor:pointer">
@@ -523,6 +553,7 @@ export function render(el) {
       <span class="sub" style="align-self:center">×</span>
       <input data-f="precio" type="number" step="any" inputmode="decimal" value="${it.precio}" style="width:80px" title="Precio" />
       ${provCampo}
+      ${selArea('data-f="area"', area)}
       <button class="linkbtn" data-del style="color:var(--rojo);padding:0 6px;font-size:16px">✕</button>
     </div>`;
   }
@@ -541,7 +572,8 @@ export function render(el) {
     for (const [prov, list] of grupos()) {
       t += `\n🏪 *${prov}*\n`;
       for (const it of list) {
-        t += `${it.estatus === "pedido" ? "✅" : "•"} ${it.nombre} — ${num(it.cantidad)} ${it.unidad}${num(it.precio) ? ` — ${money(montoDe(it))}` : ""}\n`;
+        const ar = AREAS.includes(it.area) ? it.area : areaDe(it.nombre);
+        t += `${it.estatus === "pedido" ? "✅" : "•"} ${it.nombre} (${ar}) — ${num(it.cantidad)} ${it.unidad}${num(it.precio) ? ` — ${money(montoDe(it))}` : ""}\n`;
       }
       t += `   Subtotal: ${money(totalDe(list))}\n`;
     }
@@ -560,9 +592,10 @@ export function render(el) {
     const filas = [];
     for (const [prov, list] of grupos())
       for (const it of list)
-        filas.push([prov, it.nombre, num(it.cantidad), it.unidad, num(it.precio), montoDe(it)]);
+        filas.push([prov, AREAS.includes(it.area) ? it.area : areaDe(it.nombre), it.nombre,
+                    num(it.cantidad), it.unidad, num(it.precio), montoDe(it)]);
     descargarCSV("requisicion-" + hoyTxt().replace(" ", "-"),
-      ["Proveedor", "Insumo", "Cantidad", "Unidad", "Precio unit.", "Monto"], filas);
+      ["Proveedor", "Área", "Insumo", "Cantidad", "Unidad", "Precio unit.", "Monto"], filas);
   }
 
   // Genera un PDF REAL y lo descarga (no depende del diálogo de impresión).
@@ -592,7 +625,7 @@ export function render(el) {
         // surtir o al recibir, y leerlo pegado al margen es mucho más rápido
         // que cazarlo a media hoja.
         doc.text("CANTIDAD", M, y);
-        doc.text("INSUMO", M + 34, y);
+        doc.text("INSUMO", M + 38.5, y);
         if (conPrecios) {
           doc.text("PRECIO", RIGHT - 32, y, { align: "right" });
           doc.text("MONTO", RIGHT, y, { align: "right" });
@@ -617,7 +650,12 @@ export function render(el) {
           // Casilla para ir palomeando en papel. Separada del nombre para que
           // no se lea como parte del insumo.
           doc.text(it.estatus === "pedido" ? "[X]" : "[ ]", M + 27, y);
-          doc.text(String(it.nombre || "").slice(0, conPrecios ? 58 : 88), M + 34, y);
+          // Punto del color del área: el mismo que en pantalla y en tickets.
+          const ar = AREAS.includes(it.area) ? it.area : areaDe(it.nombre);
+          const rgb = hexRgb(colorArea(ar));
+          doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+          doc.circle(M + 35.4, y - 1, 1.35, "F");
+          doc.text(String(it.nombre || "").slice(0, conPrecios ? 56 : 86), M + 38.5, y);
           if (conPrecios) {
             doc.text(num(it.precio) ? money(num(it.precio)) : "-", RIGHT - 32, y, { align: "right" });
             doc.text(num(it.precio) ? money(montoDe(it)) : "-", RIGHT, y, { align: "right" });
@@ -671,7 +709,7 @@ export function render(el) {
         filas += `<tr>
           <td class="cant">${num(it.cantidad)} ${esc(it.unidad || "")}</td>
           <td class="c">${it.estatus === "pedido" ? "✔" : "○"}</td>
-          <td>${esc(it.nombre)}</td>
+          <td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${colorArea(AREAS.includes(it.area) ? it.area : areaDe(it.nombre))};margin-right:7px;vertical-align:middle" title="${esc(AREAS.includes(it.area) ? it.area : areaDe(it.nombre))}"></span>${esc(it.nombre)}</td>
           ${conPrecios ? `<td class="r">${num(it.precio) ? money(num(it.precio)) : "—"}</td><td class="r">${num(it.precio) ? money(montoDe(it)) : "—"}</td>` : ""}
         </tr>`;
       }

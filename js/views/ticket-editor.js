@@ -1,6 +1,6 @@
 // Editor de un ticket (proveedor, fecha y líneas). Se reutiliza al
 // capturar un ticket nuevo y al corregir uno existente.
-import { AREAS, TIPOS, UNIDADES, num, money, proveedoresConocidos, sugerirProveedor, proveedoresDir, emparejarProveedorDir, mejorMatchProveedor, normProv } from "../store.js";
+import { AREAS, COLOR_AREA, TIPOS, UNIDADES, num, money, proveedoresConocidos, sugerirProveedor, proveedoresDir, emparejarProveedorDir, mejorMatchProveedor, normProv } from "../store.js";
 
 function opciones(lista, sel) {
   return lista.map((o) => `<option value="${o}"${o === sel ? " selected" : ""}>${o}</option>`).join("");
@@ -24,7 +24,8 @@ function lineaHTML(l = {}) {
     </div>
     <div class="fila">
       <label class="campo"><span>Área</span>
-        <select data-f="area">${opciones(AREAS, l.area || "otro")}</select></label>
+        <select data-f="area" data-area style="font-weight:600;color:#fff;border:none;background:${COLOR_AREA[AREAS.includes(l.area) ? l.area : "otro"]}">${
+          AREAS.map((a) => `<option value="${a}"${a === (l.area || "otro") ? " selected" : ""} style="background:#fff;color:#22201a">${a}</option>`).join("")}</select></label>
       <label class="campo"><span>Tipo</span>
         <select data-f="tipo">${opciones(TIPOS, l.tipo || "operativo")}</select></label>
       <label class="campo"><span>Monto total</span>
@@ -113,6 +114,12 @@ export function crearEditor(contenedor, ticket = {}) {
     }
   });
   contenedor.addEventListener("input", (e) => { if (e.target.matches("[data-monto]")) recalc(); });
+  // El selector de área se recolorea al cambiarlo, con el mismo color que usan
+  // la requisición, los tickets y los reportes.
+  contenedor.addEventListener("change", (e) => {
+    if (!e.target.matches("[data-area]")) return;
+    e.target.style.background = COLOR_AREA[e.target.value] || COLOR_AREA.otro;
+  });
   recalc();
 
   return {

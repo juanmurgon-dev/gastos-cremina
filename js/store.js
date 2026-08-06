@@ -9,9 +9,17 @@ export const AREAS = ["cocina", "barra", "piso", "limpieza", "otro"];
 export const TIPOS = ["costo de venta", "operativo"];
 export const UNIDADES = ["kg", "pz", "L", "caja", "paq", "manojo", "lt", "gal", "gr", "otro"];
 
+// Un color por área, y que se distingan de verdad. Antes barra (#ff9f1c) y
+// piso (#ffbf69) eran casi el mismo naranja, y cocina y limpieza los dos
+// turquesa: a simple vista no se sabía cuál era cuál. Ahora son cinco tonos
+// separados. Este mismo mapa lo usan requisiciones, tickets, insumos,
+// presupuesto y reportes, así que "barra" se ve igual en toda la app.
 export const COLOR_AREA = {
-  cocina: "#2ec4b6", barra: "#ff9f1c", piso: "#ffbf69",
-  limpieza: "#148b7f", otro: "#7ea8a2"
+  cocina: "#0f8a7d",     // turquesa
+  barra: "#c2670f",      // ámbar
+  piso: "#3560a8",       // azul
+  limpieza: "#7a4f9e",   // morado
+  otro: "#78736c"        // gris
 };
 
 // ── Estado en memoria ───────────────────────────────────────
