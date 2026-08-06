@@ -87,7 +87,7 @@ function parsearPedido(texto, byName) {
     if (hit) { nombre = hit.nombre; if (!unidad) unidad = hit.unidad || ""; }
     else if (!unidad) {
       const alt = [...byName.values()].find((i) =>
-        i.nombre.toLowerCase().includes(nombre.toLowerCase()) || nombre.toLowerCase().includes(i.nombre.toLowerCase()));
+        store.normIns(i.nombre).includes(store.normIns(nombre)) || store.normIns(nombre).includes(store.normIns(i.nombre)));
       if (alt) unidad = alt.unidad || "";
     }
     nombre = nombre.charAt(0).toUpperCase() + nombre.slice(1);

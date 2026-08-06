@@ -17,7 +17,7 @@ export function render(el) {
   function lista() {
     const arr = (store.state.ingredientesMaestro || []).slice();
     const f = q.trim().toLowerCase();
-    return (f ? arr.filter((x) => (x.nombre || "").toLowerCase().includes(f)) : arr)
+    return (f ? arr.filter((x) => store.coincide(x.nombre, f)) : arr)
       .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es"));
   }
 

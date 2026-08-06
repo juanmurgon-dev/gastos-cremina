@@ -62,7 +62,7 @@ export function render(el, ctx) {
     if (!store.state.listo) { cont.innerHTML = `<div class="vacio">Cargando…</div>`; return; }
     const q = st.q.trim().toLowerCase();
     let dir = store.proveedoresDir().slice().sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-    if (q) dir = dir.filter((p) => (p.nombre + " " + p.telefono + " " + p.correo + " " + p.direccion).toLowerCase().includes(q));
+    if (q) dir = dir.filter((p) => store.coincide(p.nombre + " " + p.telefono + " " + p.correo + " " + p.direccion, q));
     conteo.textContent = `${dir.length} proveedor(es)`;
     if (!dir.length) {
       cont.innerHTML = `<div class="vacio">${q ? "Sin resultados." : "Aún no hay proveedores. Agrega el primero o sube un CSV."}</div>`;
@@ -190,7 +190,7 @@ export function render(el, ctx) {
     const buscar = bg.querySelector("#uBuscar");
     function pintarLista() {
       const q = (buscar.value || "").trim().toLowerCase();
-      const vis = q ? otros.filter((p) => p.nombre.toLowerCase().includes(q)) : otros;
+      const vis = q ? otros.filter((p) => store.coincide(p.nombre, q)) : otros;
       lista.innerHTML = vis.length
         ? vis.map((p) => `<button type="button" class="barra-row" data-uid="${esc(p.id)}"
             style="width:100%;gap:8px;border:none;border-bottom:1px solid var(--linea);padding:10px;margin:0;background:none;text-align:left;cursor:pointer">

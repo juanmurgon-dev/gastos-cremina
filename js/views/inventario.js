@@ -297,7 +297,7 @@ function screenCatalogo(cont) {
   function render() {
     const arts = store.state.invArticulos || [];
     const cats = [...new Set(arts.map((a) => a.categoria))];
-    let vis = arts.filter((a) => (!catF || a.categoria === catF) && (!filtro || a.nombre.toLowerCase().includes(filtro.toLowerCase())));
+    let vis = arts.filter((a) => (!catF || a.categoria === catF) && store.coincide(a.nombre, filtro));
     // agrupar por categoría, respetando orden
     const grupos = [];
     const mapa = new Map();

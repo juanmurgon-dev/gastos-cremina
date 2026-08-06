@@ -287,7 +287,7 @@ export function render(el) {
     }
     function pintarLista() {
       const q = st.q.trim().toLowerCase();
-      let arr = filas0.filter(({ p }) => (!q || p.producto.toLowerCase().includes(q)) && (st.cat === "todas" || (p.categoria || "") === st.cat));
+      let arr = filas0.filter(({ p }) => store.coincide(p.producto, q) && (st.cat === "todas" || (p.categoria || "") === st.cat));
       if (st.filtro === "con") arr = arr.filter((x) => x.m.tiene);
       else if (st.filtro === "ok") arr = arr.filter((x) => x.m.completa);
       else if (st.filtro === "sin") arr = arr.filter((x) => !x.m.tiene);

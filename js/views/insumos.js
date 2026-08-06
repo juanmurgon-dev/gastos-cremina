@@ -114,10 +114,10 @@ function renderPrecios(el) {
     const conteo = el.querySelector("#conteo");
     if (!store.state.listo) { lista.innerHTML = `<div class="vacio">Cargando…</div>`; return; }
 
-    const q = st.q.trim().toLowerCase();
+    const q = st.q.trim();
     let items = store.preciosPorInsumo();
     if (st.area !== "todas") items = items.filter((i) => (i.area || "otro") === st.area);
-    if (q) items = items.filter((i) => i.nombre.toLowerCase().includes(q) || (i.codigo || "").toLowerCase().includes(q));
+    if (q) items = items.filter((i) => store.coincide(i.nombre + " " + (i.codigo || ""), q));
     items = ordenar(items);
 
     conteo.textContent = `${items.length} insumo(s)`;

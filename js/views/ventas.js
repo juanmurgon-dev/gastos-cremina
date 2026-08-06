@@ -276,7 +276,7 @@ function productos(cont) {
     function pintarList() {
       let lista = platillos;
       if (cat !== "todas") lista = lista.filter((x) => prodCatGlobal.get(x.prod) && prodCatGlobal.get(x.prod).has(cat));
-      if (q) lista = lista.filter((x) => x.prod.toLowerCase().includes(q));
+      if (q) lista = lista.filter((x) => store.coincide(x.prod, q));
       pc.querySelector("#plist").innerHTML = lista.map(cardPlatillo).join("") || `<div class="sub">Sin resultados.</div>`;
     }
   }

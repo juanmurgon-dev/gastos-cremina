@@ -1657,6 +1657,17 @@ export function emparejarProveedorDir(nombre) {
 // TODOS los proveedores CONOCIDOS: los del directorio + los que ya aparecen en
 // tus tickets (ya canonizados por los alias de "unificar"), sin repetir.
 // Devuelve [{ key, nombre }]. Es la base para emparejar bien y no duplicar.
+// Búsqueda tolerante para TODOS los buscadores de la app.
+// Ignora acentos y mayúsculas, y pide que aparezcan todas las palabras en
+// cualquier orden: "jamon kirkland" encuentra "Jamón Kirkland" y también
+// "Kirkland Jamón Serrano". Sin consulta, todo pasa.
+export function coincide(texto, consulta) {
+  const q = normIns(consulta);
+  if (!q) return true;
+  const t = normIns(texto);
+  return q.split(" ").every((palabra) => t.includes(palabra));
+}
+
 export function proveedoresTodos() {
   const map = new Map();   // clave normalizada → nombre a usar
   for (const p of proveedoresDir()) {

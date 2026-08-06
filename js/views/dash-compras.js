@@ -52,7 +52,7 @@ export function render(el) {
     const bq = el.querySelector("#bq");
     bq.addEventListener("input", () => {
       const q = bq.value.trim().toLowerCase();
-      el.querySelector("#lst").innerHTML = filaLista(lista.filter((i) => i.nombre.toLowerCase().includes(q)));
+      el.querySelector("#lst").innerHTML = filaLista(lista.filter((i) => store.coincide(i.nombre, q)));
     });
   }
 

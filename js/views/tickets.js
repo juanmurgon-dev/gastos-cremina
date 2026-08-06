@@ -58,8 +58,8 @@ export function render(el) {
     let ts = store.state.tickets;
     if (q) {
       ts = ts.filter((t) =>
-        (t.proveedor || "").toLowerCase().includes(q) ||
-        (t.lineas || []).some((l) => (l.descripcion || "").toLowerCase().includes(q)));
+        store.coincide(t.proveedor, q) ||
+        (t.lineas || []).some((l) => store.coincide(l.descripcion, q)));
     }
     if (!ts.length) {
       lista.innerHTML = `<div class="vacio">${q ? "Sin resultados." : "Aún no hay tickets. Captura el primero en 📸."}</div>`;
