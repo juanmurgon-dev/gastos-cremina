@@ -588,8 +588,11 @@ export function render(el) {
       const encabezado = () => {
         doc.setDrawColor(14, 58, 57); doc.setLineWidth(0.5); doc.line(M, y, RIGHT, y); y += 4;
         doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(14, 58, 57);
-        doc.text("INSUMO", M + 5, y);
-        doc.text("CANTIDAD", M + 96, y);
+        // La cantidad va en la PRIMERA columna: es el dato que se busca al
+        // surtir o al recibir, y leerlo pegado al margen es mucho más rápido
+        // que cazarlo a media hoja.
+        doc.text("CANTIDAD", M, y);
+        doc.text("INSUMO", M + 34, y);
         if (conPrecios) {
           doc.text("PRECIO", RIGHT - 32, y, { align: "right" });
           doc.text("MONTO", RIGHT, y, { align: "right" });
@@ -608,9 +611,13 @@ export function render(el) {
         doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(34, 32, 26);
         for (const it of list) {
           salto();
-          doc.text(it.estatus === "pedido" ? "OK" : "-", M, y);
-          doc.text(String(it.nombre || "").slice(0, 44), M + 5, y);
-          doc.text(`${num(it.cantidad)} ${it.unidad || ""}`.trim(), M + 96, y);
+          doc.setFont("helvetica", "bold");
+          doc.text(`${num(it.cantidad)} ${it.unidad || ""}`.trim().slice(0, 11), M, y);
+          doc.setFont("helvetica", "normal");
+          // Casilla para ir palomeando en papel. Separada del nombre para que
+          // no se lea como parte del insumo.
+          doc.text(it.estatus === "pedido" ? "[X]" : "[ ]", M + 27, y);
+          doc.text(String(it.nombre || "").slice(0, conPrecios ? 58 : 88), M + 34, y);
           if (conPrecios) {
             doc.text(num(it.precio) ? money(num(it.precio)) : "-", RIGHT - 32, y, { align: "right" });
             doc.text(num(it.precio) ? money(montoDe(it)) : "-", RIGHT, y, { align: "right" });
@@ -662,9 +669,9 @@ export function render(el) {
       filas += `<tr class="prov"><td colspan="${colspan}">${esc(prov)}</td></tr>`;
       for (const it of list) {
         filas += `<tr>
+          <td class="cant">${num(it.cantidad)} ${esc(it.unidad || "")}</td>
           <td class="c">${it.estatus === "pedido" ? "✔" : "○"}</td>
           <td>${esc(it.nombre)}</td>
-          <td class="c">${num(it.cantidad)} ${esc(it.unidad || "")}</td>
           ${conPrecios ? `<td class="r">${num(it.precio) ? money(num(it.precio)) : "—"}</td><td class="r">${num(it.precio) ? money(montoDe(it)) : "—"}</td>` : ""}
         </tr>`;
       }
@@ -684,6 +691,10 @@ export function render(el) {
         tr.prov td{background:#f4efe2;font-weight:700;color:#0e3a39;padding-top:9px}
         tr.sub td{font-weight:700;border-bottom:2px solid #ddd;color:#6f6a5c}
         .c{text-align:center}.r{text-align:right}
+        /* La cantidad manda: primera columna, en negritas y con ancho fijo
+           para que todas queden alineadas y se lean de un barrido. */
+        .cant{width:88px;font-weight:700;white-space:nowrap}
+        td.cant{font-size:13px}
         .total{margin-top:16px;text-align:right;font-size:16px;font-weight:800;color:#0e3a39}
         .pie{margin-top:26px;color:#a8a296;font-size:10px;text-align:center}
         @media print{ body{margin:12mm} tr{page-break-inside:avoid} }
@@ -691,7 +702,7 @@ export function render(el) {
       <h1>${restaurante ? "Requisición · " + esc(restaurante) : "Requisición de compras"}</h1>
       <div class="meta">${esc(fecha)} · ${esc(e.t)} · ${editing.items.length} insumo${editing.items.length === 1 ? "" : "s"}</div>
       <table>
-        <thead><tr><th></th><th>Insumo</th><th class="c">Cantidad</th>${conPrecios ? `<th class="r">Precio</th><th class="r">Monto</th>` : ""}</tr></thead>
+        <thead><tr><th class="cant">Cantidad</th><th></th><th>Insumo</th>${conPrecios ? `<th class="r">Precio</th><th class="r">Monto</th>` : ""}</tr></thead>
         <tbody>${filas}</tbody>
       </table>
       ${conPrecios ? `<div class="total">TOTAL: ${money(totalDe(editing.items))}</div>` : ""}
