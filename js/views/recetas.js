@@ -50,16 +50,25 @@ function platillos() {
     if (nom && !m.has(nom)) m.set(nom, { producto: nom, categoria: "", venta: 0, cantidad: 0 });
   }
   const base = [...m.values()].map((o) => {
-    const fcat = (store.fichaDe(o.producto) || {}).categoria;   // la categoría de la ficha tiene prioridad
-    return { ...o, categoria: fcat || o.categoria || "", precio: o.cantidad > 0 ? o.venta / o.cantidad : 0 };
+    const f = store.fichaDe(o.producto) || {};
+    // El promedio (venta ÷ unidades) mezcla el platillo con sus versiones más
+    // caras: un Latte de $90 con los de la casa de $105 daba $97.01, un precio
+    // que no existe en la carta. Si capturaste el precio real, ése manda.
+    const carta = num(f.precio_venta);
+    const prom = o.cantidad > 0 ? o.venta / o.cantidad : 0;
+    return { ...o, categoria: f.categoria || o.categoria || "",
+      precio: carta > 0 ? carta : prom, precioProm: prom, deCarta: carta > 0 };
   });
   // Variantes (del grupo modificador del POS): una entrada por opción → "Platillo · Opción".
   const variantes = [];
   for (const p of base) {
     for (const v of store.variantesDe(p.producto)) {
+      const nomVar = `${p.producto} · ${v.opcion}`;
+      const cartaVar = num((store.fichaDe(nomVar) || {}).precio_venta);
       variantes.push({
-        producto: `${p.producto} · ${v.opcion}`, categoria: p.categoria,
-        venta: v.venta, cantidad: v.unidades, precio: v.precio,
+        producto: nomVar, categoria: p.categoria,
+        venta: v.venta, cantidad: v.unidades,
+        precio: cartaVar > 0 ? cartaVar : v.precio, precioProm: v.precio, deCarta: cartaVar > 0,
         esVariante: true, base: p.producto, opcion: v.opcion,
       });
     }
@@ -303,7 +312,7 @@ export function render(el) {
           <button class="fila-item" data-p="${esc(p.producto)}" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--linea);padding:12px 2px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">
             <span style="min-width:0">
               <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.completa ? "✅ " : (m.alerta ? "⚠️ " : "")}${esc(p.producto)}</b>
-              <span class="sub" style="font-size:12px">${p.esVariante ? "🔸 variante · " : ""}${esc(p.categoria || "")}${p.precio ? " · vende " + money(p.precio) : ""}</span>
+              <span class="sub" style="font-size:12px">${p.esVariante ? "🔸 variante · " : ""}${esc(p.categoria || "")}${p.precio ? " · vende " + money(p.precio) + (p.deCarta ? "" : " <span title=\"Promedio de lo vendido. Captura el precio de carta en la ficha.\" style=\"opacity:.65\">prom.</span>") : ""}</span>
               ${m.alerta ? `<span class="sub" style="font-size:11px;color:var(--rojo);display:block;white-space:normal">${esc(m.alerta)}</span>` : ""}
             </span>
             <span style="text-align:right;white-space:nowrap">
@@ -598,7 +607,7 @@ export function render(el) {
     let completa = !!fichaAct.completa;   // el usuario la marcó como terminada/verificada
     let pasoTmp = { descripcion: "", tiempo: "" };
 
-    const precioVenta = plat ? plat.precio : 0;
+    let precioCarta = num(fichaAct.precio_venta) || 0;   // el de la carta, capturado a mano
     const insumosLista = store.preciosPorInsumo();
     // El autocompletar incluye también los ingredientes del Registro Maestro.
     const nombresTodos = [...new Set([...insumosLista.map((i) => i.nombre), ...(store.state.ingredientesMaestro || []).map((x) => x.nombre)])];
@@ -618,6 +627,10 @@ export function render(el) {
       const costoUnit = esPrep && num(rendimiento) > 0 ? costoTotal / num(rendimiento) : costoTotal;
       const nPorc = num(porciones) > 0 ? num(porciones) : 1;
       const costoPorcion = costoTotal / nPorc;
+      // Promedio de lo vendido vs. precio de carta. El de carta manda porque el
+      // promedio mezcla el platillo con sus versiones más caras.
+      const promVendido = plat ? num(plat.precioProm) : 0;
+      const precioVenta = precioCarta > 0 ? precioCarta : promVendido;
       const precioNeto = precioVenta / (1 + IVA);
       const margen = precioNeto - costoPorcion;
       const margPct = precioNeto > 0 ? margen / precioNeto * 100 : null;
@@ -647,7 +660,15 @@ export function render(el) {
                  <label class="campo" style="flex:1;margin:0"><span>Unidad</span><input id="urinde" placeholder="L, kg, pza" value="${esc(unidadRinde)}" /></label>
                </div>`
             : `<h2 style="margin:2px 0 2px">${esc(nombre)}</h2>
-               <p class="sub" style="margin:0 0 8px">${precioVenta ? "Se vende en " + money(precioVenta) + " c/IVA" : "Sin precio de venta registrado"}</p>
+               <label class="campo" style="margin-top:6px"><span>Precio de carta (con IVA)</span>
+                 <input id="pcarta" type="number" inputmode="decimal" min="0" step="any" style="max-width:160px"
+                        placeholder="${promVendido ? Math.round(promVendido) : "0"}" value="${precioCarta > 0 ? esc(String(precioCarta)) : ""}" /></label>
+               <p class="sub" style="margin:0 0 8px;font-size:11.5px">${
+                 precioCarta > 0
+                   ? `Se usa <b>${money(precioCarta)}</b> para el margen.${promVendido ? ` El promedio de lo vendido es ${money(promVendido)} — la diferencia son las versiones más caras.` : ""}`
+                   : promVendido
+                     ? `Sin precio de carta: se usa el <b>promedio de lo vendido, ${money(promVendido)}</b>. Ese promedio mezcla este platillo con sus versiones más caras; captúralo arriba para que el margen sea el real.`
+                     : "Sin precio de venta: captúralo arriba para poder calcular el margen."}</p>
                <label class="campo"><span>Categoría</span><input id="cat" placeholder="Entrada / Plato fuerte / Postre…" value="${esc(categoria)}" /></label>
                <div class="fila" style="gap:8px">
                  <label class="campo" style="flex:1;margin:0"><span>Rinde (porciones)</span><input id="porc" type="number" min="1" step="any" value="${esc(String(porciones))}" /></label>
@@ -794,6 +815,8 @@ export function render(el) {
         cont.querySelector("#areaPrep").addEventListener("change", (e) => { categoria = e.target.value; });
       } else {
         cont.querySelector("#cat").addEventListener("input", (e) => { categoria = e.target.value; });
+        const pc = cont.querySelector("#pcarta");
+        if (pc) { pc.addEventListener("input", (e) => { precioCarta = num(e.target.value); }); pc.addEventListener("change", draw); }
         cont.querySelector("#tiempo").addEventListener("input", (e) => { tiempo = e.target.value; });
         const op = cont.querySelector("#porc"); op.addEventListener("input", (e) => { porciones = e.target.value; }); op.addEventListener("change", draw);
         const ob = cont.querySelector("#obj"); ob.addEventListener("input", (e) => { objetivo = e.target.value; }); ob.addEventListener("change", draw);
@@ -824,7 +847,7 @@ export function render(el) {
       if (!limpios.length) { msg.textContent = "Agrega al menos un ingrediente con cantidad."; return; }
       msg.textContent = "Guardando…";
       try {
-        const ficha = { categoria, tiempo: num(tiempo), pasos: pasos.filter((p) => p.descripcion.trim()), foto, numero, observaciones, completa };
+        const ficha = { categoria, tiempo: num(tiempo), pasos: pasos.filter((p) => p.descripcion.trim()), foto, numero, observaciones, completa, precio_venta: num(precioCarta) || 0 };
         await store.guardarReceta(
           destino,
           limpios.map((it) => ({ insumo: it.insumo.trim(), cantidad: num(it.cantidad), unidad: it.unidad || unidadDe(it.insumo), merma: num(it.merma) || 0 })),

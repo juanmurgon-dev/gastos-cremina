@@ -217,7 +217,7 @@ async function cargarRecetasFicha() {
 // Datos de ficha (categoría, tiempo, pasos, foto) de una receta.
 export function fichaDe(producto) {
   const f = (state.recetasFicha || []).find((x) => x.producto === producto);
-  return f || { producto, categoria: "", tiempo: 0, procedimiento: "", pasos: [], foto: "", completa: false };
+  return f || { producto, categoria: "", tiempo: 0, procedimiento: "", pasos: [], foto: "", completa: false, precio_venta: 0 };
 }
 export async function guardarFicha(producto, f) {
   const pasos = Array.isArray(f && f.pasos)
@@ -233,9 +233,18 @@ export async function guardarFicha(producto, f) {
     pasos,
     foto: String((f && f.foto) || "").slice(0, 800000),
     completa: !!(f && f.completa),   // el usuario marcó la receta como terminada/verificada
+    // Precio de carta CON IVA. Manda sobre el promedio de ventas, que mezcla
+    // el platillo con sus versiones más caras. 0 = usar el promedio.
+    precio_venta: num(f && f.precio_venta) || 0,
     actualizado: new Date().toISOString(),
   };
-  const { error } = await supabase.from("recetas_ficha").upsert(row);
+  let { error } = await supabase.from("recetas_ficha").upsert(row);
+  if (error && /precio_venta/i.test(error.message || "")) {
+    // Todavía no corren precio-carta.sql: guarda la ficha SIN el precio en vez
+    // de tirar todo el guardado por una columna que falta.
+    const { precio_venta, ...sinPrecio } = row;
+    ({ error } = await supabase.from("recetas_ficha").upsert(sinPrecio));
+  }
   if (error) throw error;
   await cargarRecetasFicha();
 }
