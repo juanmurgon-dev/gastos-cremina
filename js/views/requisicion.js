@@ -625,7 +625,8 @@ export function render(el) {
         // surtir o al recibir, y leerlo pegado al margen es mucho más rápido
         // que cazarlo a media hoja.
         doc.text("CANTIDAD", M, y);
-        doc.text("INSUMO", M + 38.5, y);
+        doc.text("ÁREA", M + 33, y);
+        doc.text("INSUMO", M + 53, y);
         if (conPrecios) {
           doc.text("PRECIO", RIGHT - 32, y, { align: "right" });
           doc.text("MONTO", RIGHT, y, { align: "right" });
@@ -649,13 +650,19 @@ export function render(el) {
           doc.setFont("helvetica", "normal");
           // Casilla para ir palomeando en papel. Separada del nombre para que
           // no se lea como parte del insumo.
-          doc.text(it.estatus === "pedido" ? "[X]" : "[ ]", M + 27, y);
-          // Punto del color del área: el mismo que en pantalla y en tickets.
+          doc.text(it.estatus === "pedido" ? "[X]" : "[ ]", M + 26, y);
+          // Etiqueta del área con su color Y su nombre. El color solo obliga a
+          // recordar la leyenda; con el nombre encima no hay que adivinar.
           const ar = AREAS.includes(it.area) ? it.area : areaDe(it.nombre);
           const rgb = hexRgb(colorArea(ar));
+          doc.setFont("helvetica", "bold"); doc.setFontSize(6.5);
+          const anchoTxt = doc.getTextWidth(ar);
           doc.setFillColor(rgb[0], rgb[1], rgb[2]);
-          doc.circle(M + 35.4, y - 1, 1.35, "F");
-          doc.text(String(it.nombre || "").slice(0, conPrecios ? 56 : 86), M + 38.5, y);
+          doc.roundedRect(M + 33, y - 3, Math.min(anchoTxt + 3, 19), 4.3, 1.4, 1.4, "F");
+          doc.setTextColor(255, 255, 255);
+          doc.text(ar, M + 34.5, y);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(34, 32, 26);
+          doc.text(String(it.nombre || "").slice(0, conPrecios ? 52 : 73), M + 53, y);
           if (conPrecios) {
             doc.text(num(it.precio) ? money(num(it.precio)) : "-", RIGHT - 32, y, { align: "right" });
             doc.text(num(it.precio) ? money(montoDe(it)) : "-", RIGHT, y, { align: "right" });
@@ -701,7 +708,7 @@ export function render(el) {
     const e = estatusInfo(derivar(editing.items));
     const fecha = hoyTxt();
     const restaurante = (store.state.config.marcaNombre || store.state.orgNombre || "").trim();
-    const colspan = conPrecios ? 5 : 3;
+    const colspan = conPrecios ? 6 : 4;
     let filas = "";
     for (const [prov, list] of grupos()) {
       filas += `<tr class="prov"><td colspan="${colspan}">${esc(prov)}</td></tr>`;
@@ -709,11 +716,12 @@ export function render(el) {
         filas += `<tr>
           <td class="cant">${num(it.cantidad)} ${esc(it.unidad || "")}</td>
           <td class="c">${it.estatus === "pedido" ? "✔" : "○"}</td>
-          <td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${colorArea(AREAS.includes(it.area) ? it.area : areaDe(it.nombre))};margin-right:7px;vertical-align:middle" title="${esc(AREAS.includes(it.area) ? it.area : areaDe(it.nombre))}"></span>${esc(it.nombre)}</td>
+          <td class="area"><span class="tag" style="background:${colorArea(AREAS.includes(it.area) ? it.area : areaDe(it.nombre))}">${esc(AREAS.includes(it.area) ? it.area : areaDe(it.nombre))}</span></td>
+          <td>${esc(it.nombre)}</td>
           ${conPrecios ? `<td class="r">${num(it.precio) ? money(num(it.precio)) : "—"}</td><td class="r">${num(it.precio) ? money(montoDe(it)) : "—"}</td>` : ""}
         </tr>`;
       }
-      if (conPrecios) filas += `<tr class="sub"><td colspan="4" class="r">Subtotal ${esc(prov)}</td><td class="r">${money(totalDe(list))}</td></tr>`;
+      if (conPrecios) filas += `<tr class="sub"><td colspan="5" class="r">Subtotal ${esc(prov)}</td><td class="r">${money(totalDe(list))}</td></tr>`;
     }
 
     const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
@@ -732,6 +740,8 @@ export function render(el) {
         /* La cantidad manda: primera columna, en negritas y con ancho fijo
            para que todas queden alineadas y se lean de un barrido. */
         .cant{width:88px;font-weight:700;white-space:nowrap}
+        .area{width:78px}
+        .tag{display:inline-block;color:#fff;font-weight:700;font-size:10px;padding:2px 7px;border-radius:999px;white-space:nowrap}
         td.cant{font-size:13px}
         .total{margin-top:16px;text-align:right;font-size:16px;font-weight:800;color:#0e3a39}
         .pie{margin-top:26px;color:#a8a296;font-size:10px;text-align:center}
@@ -740,7 +750,7 @@ export function render(el) {
       <h1>${restaurante ? "Requisición · " + esc(restaurante) : "Requisición de compras"}</h1>
       <div class="meta">${esc(fecha)} · ${esc(e.t)} · ${editing.items.length} insumo${editing.items.length === 1 ? "" : "s"}</div>
       <table>
-        <thead><tr><th class="cant">Cantidad</th><th></th><th>Insumo</th>${conPrecios ? `<th class="r">Precio</th><th class="r">Monto</th>` : ""}</tr></thead>
+        <thead><tr><th class="cant">Cantidad</th><th></th><th class="area">Área</th><th>Insumo</th>${conPrecios ? `<th class="r">Precio</th><th class="r">Monto</th>` : ""}</tr></thead>
         <tbody>${filas}</tbody>
       </table>
       ${conPrecios ? `<div class="total">TOTAL: ${money(totalDe(editing.items))}</div>` : ""}
