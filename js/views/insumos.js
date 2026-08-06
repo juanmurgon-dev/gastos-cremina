@@ -284,7 +284,6 @@ function renderPrecios(el) {
                 <button type="button" class="btn sec chico ecTicket" style="flex:0 0 auto;margin:0">Abrir ticket</button>
               </div>
             </div>` : ""}`; }).join("")}
-        </div>`; }).join("")}
         </div>
         ${provs.length ? `<div class="titulo-seccion" style="margin-top:16px">📦 Comparativa por proveedor${base ? " · costo por " + base : ""}</div>
         <div class="sub" style="font-size:11px;margin:-4px 0 6px">Se compara por <b>costo por ${base || "unidad"}</b> (normalizado con la presentación). Pon la presentación con su cantidad: ej. <b>1.5 kg</b>, <b>4 kg</b>, o para huevo la caja/cartera como <b>300</b> o <b>12</b> (piezas). Así compara aunque cada proveedor traiga distinta presentación.</div>
