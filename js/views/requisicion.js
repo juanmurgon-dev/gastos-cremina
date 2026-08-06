@@ -21,7 +21,7 @@ const derivar = (items) => store.estatusRequis(items);
 
 function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function hoyISO() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
-function hoyTxt() { const d = new Date(); return `${d.getDate()} ${MES[d.getMonth()]}`; }
+function hoyTxt() { return store.fechaDMA(new Date()); }
 function uuid() { return (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.round(Math.random() * 1e6)); }
 const montoDe = (it) => num(it.cantidad) * num(it.precio);
 const totalDe = (its) => (its || []).reduce((a, it) => a + montoDe(it), 0);

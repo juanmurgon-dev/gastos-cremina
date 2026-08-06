@@ -140,7 +140,7 @@ function renderPrecios(el) {
             <span class="monto" style="font-size:14px">${money(i.precioActual)}${i.unidad ? `<span class="sub" style="font-weight:400">/${i.unidad}</span>` : ""}</span>
           </div>
           <div class="meta" style="display:flex;justify-content:space-between;align-items:center">
-            <span><span class="chip" style="background:${COLOR_AREA[i.area] || "#9c9482"}">${i.area || "otro"}</span> · ${i.veces} compra(s)${i.codigo ? ` · <span class="sub">SKU ${escapar(i.codigo)}</span>` : ""}${i.presentacion ? ` · <span class="sub">📦 ${escapar(i.presentacion)}</span>` : ""}</span>
+            <span><span class="chip" style="background:${COLOR_AREA[i.area] || "#9c9482"}">${i.area || "otro"}</span> · ${i.veces} compra(s)${i.codigo ? ` · <span class="sub">SKU ${escapar(i.codigo)}</span>` : ""}${i.presentacion ? ` · <span class="sub">📦 ${escapar(i.presentacion)}</span>` : ""}${etiquetaCriterio(i)}${i.mezclado ? ` · <span class="sub" style="color:#b06a00" title="Hay compras en otra unidad que no se pueden comparar">⚠️ unidades</span>` : ""}</span>
             <span>${flecha}</span>
           </div>
         </div>`;
@@ -155,7 +155,13 @@ function renderPrecios(el) {
     if (!item) return;
     // orden ascendente por fecha para la gráfica
     const asc = item.registros.slice().sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
-    const precios = asc.map((r) => store.num(r.precio));
+    // preciosPorInsumo() ya llevó cada compra a una unidad base común
+    // (r.precioBase). Las estadísticas van sobre eso, NO sobre el número crudo
+    // del ticket: "6 L por $176.93" y "1 L por $29.49" son el mismo precio.
+    const uMuestra = item.unidad || "";
+    const valor = (r) => (r.precioBase != null ? r.precioBase : store.num(r.precio));
+    const compar = asc.filter((r) => r.precioBase != null);
+    const precios = (compar.length ? compar : asc).map(valor);
     const min = Math.min(...precios), max = Math.max(...precios);
     const prom = precios.reduce((a, b) => a + b, 0) / precios.length;
     const prim = precios[0], ult = precios[precios.length - 1];
@@ -210,7 +216,8 @@ function renderPrecios(el) {
     bg.innerHTML = `
       <div class="modal">
         <h2>${escapar(item.nombre)}</h2>
-        <p class="sub" style="margin-top:0">Análisis de precio ${item.unidad ? "(por " + escapar(item.unidad) + ")" : ""}</p>
+        <p class="sub" style="margin-top:0">Análisis de precio ${uMuestra ? "(por " + escapar(uMuestra) + ")" : ""}</p>
+        ${avisoPrecio(item, uMuestra)}
 
         <div class="row-stats" style="margin-bottom:12px">
           <div class="stat"><div class="n" style="font-size:19px">${money(ult)}</div><div class="l">Actual</div></div>
@@ -226,17 +233,58 @@ function renderPrecios(el) {
           <div class="stat"><div class="n" style="font-size:16px">${money(gastoTot)}</div><div class="l">Gasto total</div></div>
         </div>
 
-        <div class="titulo-seccion">Compras (${asc.length})</div>
+        <div class="titulo-seccion" style="margin-top:16px">⚖️ Precio que se usa para costear</div>
+        <div class="fila" style="gap:8px;align-items:flex-end">
+          <label class="campo" style="flex:1.5;margin:0"><span>Criterio</span>
+            <select id="crModo">
+              ${[["reciente", "El más reciente"], ["barato", "El más barato"], ["caro", "El más caro"],
+                 ["promedio", "Promedio de todas"], ["fijo", "Yo lo fijo"]].map(([k, l]) =>
+                `<option value="${k}"${item.criterio === k ? " selected" : ""}>${l}${k === "reciente" ? " · normal" : ""}</option>`).join("")}
+            </select>
+          </label>
+          <label class="campo" id="crFijoBox" style="flex:1;margin:0;${item.criterio === "fijo" ? "" : "display:none"}"><span>Precio${uMuestra ? " por " + escapar(uMuestra) : ""}</span>
+            <input id="crFijo" type="number" inputmode="decimal" step="any" min="0" value="${escapar(String(store.num(item.criterioValor) || store.num(item.precioActual) || ""))}" /></label>
+        </div>
+        <div class="sub" id="crOut" style="font-size:11.5px;margin:5px 0 2px"></div>
+        ${store.maestroDe(item.nombre) ? `<div class="sub" style="font-size:11px;color:#b06a00;margin-bottom:4px">Ojo: este insumo tiene <b>Registro Maestro</b> (más abajo), y ése manda sobre todo lo de aquí.</div>` : ""}
+
+        <div class="titulo-seccion" style="margin-top:16px">Compras (${asc.length})</div>
         <div>
-          ${item.registros.map((r) => `
+          ${item.registros.map((r, ix) => {
+            const vb = r.precioBase != null ? r.precioBase : null;
+            const dif = vb != null && Math.abs(vb - store.num(r.precio)) > 0.005;
+            return `
             <div class="barra-row" style="justify-content:space-between;gap:6px">
               <span class="etq" style="width:auto">${fechaBonita(r.fecha)}</span>
               <span class="sub" style="flex:1;text-align:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapar(r.proveedor || "—")}</span>
-              <span class="val">${money(r.precio)}${r.unidad ? "/" + r.unidad : ""}</span>
+              <span style="flex:0 0 auto;text-align:right">
+                <span class="val"${vb == null ? ' style="color:#b06a00"' : ""}>${money(vb != null ? vb : r.precio)}${vb != null && uMuestra ? "/" + escapar(uMuestra) : r.unidad ? "/" + escapar(r.unidad) : ""}</span>
+                ${dif ? `<div class="sub" style="font-size:10px;margin-top:-2px">ticket: ${store.num(r.cantidad) || "?"} ${escapar(r.unidad || "")} · ${money(r.monto)}</div>` : ""}
+                ${vb == null ? `<div class="sub" style="font-size:10px;margin-top:-2px;color:#b06a00">no compara${r.deducido ? ` · parece que trae ${r.deducido}` : ""}</div>` : ""}
+              </span>
+              ${r.ticketId
+                ? `<button type="button" class="edToggle" data-ix="${ix}" title="Corregir esta compra" style="flex:0 0 auto;background:none;border:none;cursor:pointer;font-size:15px;padding:0 2px;line-height:1">✏️</button>`
+                : `<span style="flex:0 0 auto;opacity:.28;font-size:15px">✏️</span>`}
               ${r.fotoTicket
                 ? `<a href="${escapar(r.fotoTicket)}" target="_blank" rel="noopener" title="Ver foto del ticket" style="flex:0 0 auto;text-decoration:none;font-size:16px" onclick="event.stopPropagation()">🧾</a>`
                 : `<span title="Este ticket no tiene foto" style="flex:0 0 auto;opacity:.28;font-size:16px">🧾</span>`}
-            </div>`).join("")}
+            </div>
+            ${r.ticketId ? `
+            <div class="edCompra" data-ix="${ix}" data-t="${escapar(r.ticketId)}" style="display:none;border:1px solid var(--linea);border-left:3px solid var(--verde);border-radius:8px;padding:9px 10px;margin:2px 0 8px;background:#fbfaf6">
+              <div class="sub" style="font-size:11px;margin-bottom:6px">Corrige lo que trae de verdad. <b>Lo pagado no se toca</b> salvo que lo cambies; el precio unitario se recalcula solo.</div>
+              <div class="fila" style="gap:6px">
+                <label class="campo" style="flex:1;margin:0"><span>Cantidad</span><input class="ecCant" type="number" inputmode="decimal" step="any" min="0" value="${escapar(String(store.num(r.cantidad) || ""))}" /></label>
+                <label class="campo" style="flex:.9;margin:0"><span>Unidad</span><input class="ecUni" value="${escapar(r.unidad || "")}" placeholder="L, kg, pza…" /></label>
+                <label class="campo" style="flex:1;margin:0"><span>Total pagado</span><input class="ecMonto" type="number" inputmode="decimal" step="any" min="0" value="${escapar(String(store.num(r.monto) || ""))}" /></label>
+              </div>
+              <div class="sub ecCalc" style="font-size:11.5px;margin:2px 0 7px"></div>
+              <div class="fila" style="gap:6px">
+                <button type="button" class="btn chico ecSave" style="flex:1;margin:0">💾 Guardar esta compra</button>
+                <button type="button" class="btn sec chico ecUsar" data-p="${vb != null ? vb : store.num(r.precio)}" style="flex:0 0 auto;margin:0" title="Costear con el precio de esta compra">Usar éste</button>
+                <button type="button" class="btn sec chico ecTicket" style="flex:0 0 auto;margin:0">Abrir ticket</button>
+              </div>
+            </div>` : ""}`; }).join("")}
+        </div>`; }).join("")}
         </div>
         ${provs.length ? `<div class="titulo-seccion" style="margin-top:16px">📦 Comparativa por proveedor${base ? " · costo por " + base : ""}</div>
         <div class="sub" style="font-size:11px;margin:-4px 0 6px">Se compara por <b>costo por ${base || "unidad"}</b> (normalizado con la presentación). Pon la presentación con su cantidad: ej. <b>1.5 kg</b>, <b>4 kg</b>, o para huevo la caja/cartera como <b>300</b> o <b>12</b> (piezas). Así compara aunque cada proveedor traiga distinta presentación.</div>
@@ -292,6 +340,86 @@ function renderPrecios(el) {
     const cerrar = () => bg.remove();
     bg.addEventListener("click", (e) => { if (e.target === bg) cerrar(); });
     bg.querySelector("[data-cerrar]").addEventListener("click", cerrar);
+    // ── Qué precio manda para costear ──────────────────────────────────
+    (function criterioPrecio() {
+      const sel = bg.querySelector("#crModo"), fijoBox = bg.querySelector("#crFijoBox");
+      const fijo = bg.querySelector("#crFijo"), out = bg.querySelector("#crOut");
+      const vals = asc.filter((r) => r.precioBase != null).map((r) => r.precioBase);
+      const serie = vals.length ? vals : precios;
+      const uTxt = uMuestra ? " por " + escapar(uMuestra) : "";
+      const calc = (modo) => {
+        if (!serie.length) return 0;
+        if (modo === "barato") return Math.min(...serie);
+        if (modo === "caro") return Math.max(...serie);
+        if (modo === "promedio") return serie.reduce((a, b) => a + b, 0) / serie.length;
+        if (modo === "fijo") return store.num(fijo.value);
+        return precios[precios.length - 1];
+      };
+      const pinta = () => {
+        const modo = sel.value;
+        fijoBox.style.display = modo === "fijo" ? "" : "none";
+        const v = calc(modo);
+        out.innerHTML = v > 0
+          ? `Las recetas van a costear con <b>${money(v)}</b>${uTxt}.`
+          : `<span style="color:#b06a00">Pon un precio para poder costear.</span>`;
+      };
+      const guarda = async () => {
+        try { await store.guardarCriterioPrecio(item.nombre, sel.value, fijo.value); }
+        catch (e) { alert("No se pudo guardar: " + ((e && e.message) || e)); }
+      };
+      sel.addEventListener("change", () => { pinta(); guarda(); });
+      fijo.addEventListener("input", pinta);
+      fijo.addEventListener("change", guarda);
+      // "Usar éste" en una compra = fijar ese precio.
+      bg.querySelectorAll(".ecUsar").forEach((b) => b.addEventListener("click", async () => {
+        sel.value = "fijo"; fijo.value = store.num(b.dataset.p); pinta(); await guarda();
+        cerrar(); pintar(); abrir(key);
+      }));
+      pinta();
+    })();
+
+    // ── Corregir una compra sin salir de aquí ──────────────────────────
+    bg.querySelectorAll(".edToggle").forEach((b) => b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const caja = bg.querySelector(`.edCompra[data-ix="${b.dataset.ix}"]`);
+      if (!caja) return;
+      const abierta = caja.style.display !== "none";
+      caja.style.display = abierta ? "none" : "block";
+      if (!abierta) { calcEd(caja); const c = caja.querySelector(".ecCant"); if (c) c.focus(); }
+    }));
+    // Muestra a cuánto sale la unidad mientras escribe, para que vea el efecto.
+    function calcEd(caja) {
+      const cant = store.num(caja.querySelector(".ecCant").value);
+      const uni = caja.querySelector(".ecUni").value.trim();
+      const monto = store.num(caja.querySelector(".ecMonto").value);
+      const out = caja.querySelector(".ecCalc");
+      out.innerHTML = cant > 0 && monto > 0
+        ? `Queda en <b>${money(monto / cant)}</b> por ${escapar(uni || "unidad")}.`
+        : `<span style="color:#b06a00">Pon cantidad y total para calcular el precio unitario.</span>`;
+    }
+    bg.querySelectorAll(".edCompra").forEach((caja) => {
+      caja.querySelectorAll(".ecCant, .ecUni, .ecMonto").forEach((i) => i.addEventListener("input", () => calcEd(caja)));
+      caja.querySelector(".ecTicket").addEventListener("click", () => {
+        cerrar(); location.hash = "#/tickets?t=" + encodeURIComponent(caja.dataset.t);
+      });
+      caja.querySelector(".ecSave").addEventListener("click", async () => {
+        const b = caja.querySelector(".ecSave");
+        const cant = store.num(caja.querySelector(".ecCant").value);
+        const monto = store.num(caja.querySelector(".ecMonto").value);
+        if (!(cant > 0)) { alert("La cantidad tiene que ser mayor que cero."); return; }
+        if (!(monto > 0)) { alert("El total pagado tiene que ser mayor que cero."); return; }
+        b.disabled = true; b.textContent = "Guardando…";
+        try {
+          await store.editarCompra(caja.dataset.t, item.nombre, {
+            cantidad: cant, unidad: caja.querySelector(".ecUni").value.trim(), monto,
+          });
+          cerrar(); pintar(); abrir(key);   // se reabre con los números ya recalculados
+        } catch (e) {
+          b.disabled = false; b.textContent = "💾 Guardar esta compra";
+          alert("No se pudo guardar: " + ((e && e.message) || e));
+        }
+      });
+    });
     // Recalcula el costo por unidad base EN VIVO al escribir la presentación (sin guardar/reabrir).
     function recompara() {
       const data = [...bg.querySelectorAll(".prov-row")].map((r) => {
@@ -385,7 +513,7 @@ const MESES_I = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", 
 function fechaCorta(iso) {
   const p = String(iso || "").split("-");
   if (p.length !== 3) return "";
-  return `${parseInt(p[2], 10)} ${MESES_I[parseInt(p[1], 10) - 1] || ""}`;
+  return store.fechaDMA(iso);
 }
 
 // Gráfica de línea: precio pagado a lo largo del tiempo.
@@ -409,6 +537,50 @@ function grafica(asc) {
       <text x="${padL + 2}" y="${H - 6}" font-size="8" fill="#3f827b">${fechaCorta(asc[0].fecha)}</text>
       <text x="${W - padR - 2}" y="${H - 6}" font-size="8" fill="#3f827b" text-anchor="end">${fechaCorta(asc[n - 1].fecha)}</text>
     </svg>`;
+}
+
+// El criterio por defecto (más reciente) no se anuncia; los demás sí, para que
+// no se te olvide que ese insumo tiene el precio amarrado a mano.
+const NOMBRE_CRITERIO = { barato: "más barato", caro: "más caro", promedio: "promedio", fijo: "precio fijo" };
+function etiquetaCriterio(i) {
+  const n = NOMBRE_CRITERIO[i.criterio];
+  return n ? ` · <span class="sub" title="Precio elegido para costear">⚖️ ${n}</span>` : "";
+}
+
+// Aviso arriba del análisis: por qué el precio se ve como se ve.
+// El caso que más confunde: la misma leche facturada "6 L por $176.93" y
+// "1 L por $29.49" es EXACTAMENTE el mismo precio, pero comparando los números
+// crudos del ticket parece que se desplomó.
+function avisoPrecio(item, uMuestra) {
+  const caja = "border-radius:10px;padding:9px 11px;margin:0 0 12px;font-size:12px;line-height:1.45";
+  const sin = item.sinNormalizar || [];
+  if (item.mezclado && sin.length) {
+    const lista = sin.slice(0, 4).map((r) =>
+      `<li>${fechaBonita(r.fecha)} · ${escapar(r.proveedor || "sin proveedor")} — ${money(r.precio)}${r.unidad ? "/" + escapar(r.unidad) : ""}${
+        r.deducido ? ` <b>(parece que trae ${r.deducido} ${escapar(uMuestra || "")})</b>` : ""}</li>`).join("");
+    return `<div style="${caja};background:#fff6e5;border:1px solid #f0d9a8;color:#7a4d00">
+      ⚠️ <b>Hay compras que no se pueden comparar</b> porque vienen en otra unidad.
+      El precio y la tendencia de arriba se calculan solo con las que sí están en <b>${escapar(uMuestra || "la misma unidad")}</b>,
+      para no marcar subidas ni bajadas falsas.
+      <ul style="margin:6px 0 0 16px;padding:0">${lista}${sin.length > 4 ? `<li>y ${sin.length - 4} más…</li>` : ""}</ul>
+      <div style="margin-top:6px">Toca <b>✏️</b> en esa compra y corrige la cantidad y la unidad (ej. 1 caja → <b>6 L</b>). Lo pagado no se mueve.</div></div>`;
+  }
+  if (item.normalizado && item.veces > 1) {
+    return `<div style="${caja};background:#eafaf0;border:1px solid #bfe6cd;color:#16514f">
+      ✅ Las ${item.veces} compras están comparadas <b>por ${escapar(uMuestra || "unidad")}</b>, sin importar si el proveedor facturó por caja o por pieza.</div>`;
+  }
+  const crudos = (item.registros || []).map((r) => store.num(r.precio)).filter((n) => n > 0);
+  if (crudos.length < 2) return "";
+  const min = Math.min(...crudos), max = Math.max(...crudos);
+  if (!(min > 0) || max / min < 3) return "";
+  const razon = max / min;
+  const cerca = [2, 3, 4, 6, 8, 10, 12, 20, 24, 30, 48, 60, 100].find((n) => Math.abs(razon - n) / n < 0.06);
+  return `<div style="${caja};background:#fff6e5;border:1px solid #f0d9a8;color:#7a4d00">
+    ⚠️ El precio unitario está brincando: de <b>${money(min)}</b> a <b>${money(max)}</b>${cerca ? `, justo <b>${cerca}×</b>` : ""}.
+    ${cerca
+      ? `Eso casi siempre es que un ticket registró la <b>caja de ${cerca}</b> y otro la pieza suelta.`
+      : `Suele ser que un ticket registró la caja o el bulto y otro la unidad suelta.`}
+    <br>Toca <b>✏️</b> en la compra que esté mal y pon la cantidad y unidad reales.</div>`;
 }
 
 function escapar(s) {

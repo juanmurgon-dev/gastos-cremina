@@ -290,6 +290,64 @@ export function precioInsumo(nombre) {
   return hit ? num(hit.precioActual) : 0;
 }
 
+// ── Precio por unidad respetando LO QUE CAPTURA EL USUARIO ──────────────
+// El problema que resuelve: un proveedor factura "10 caja $1,879" y otro
+// "60 pza $1,879". Es el mismo insumo y el mismo gasto, pero el precio
+// unitario del ticket brinca de $187.90 a $31.32 y el costeo se vuelve loco.
+// La presentación que el usuario escribió (ej. "6 pza") dice cuánto trae de
+// verdad cada caja, así que manda sobre lo que diga el ticket.
+//
+// Orden de autoridad, de más a menos:
+//   1. Registro Maestro (precio por gramo) — lo escribió a mano
+//   2. Presentación por proveedor          — la escribió a mano
+//   3. Precio crudo del ticket             — último recurso
+const RE_PRES_U = /(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|g|gr|grs|gramos?|lts?|l|litros?|ml|pzas?|pz|piezas?)/i;
+export function parsePresentacion(txt) {
+  const s = String(txt || "");
+  const m = s.match(RE_PRES_U);
+  if (m) return { qty: parseFloat(m[1].replace(",", ".")), unit: m[2].toLowerCase() };
+  const n = s.match(/(\d+(?:[.,]\d+)?)/);   // un número solo ("300") = cantidad en la unidad base
+  return n ? { qty: parseFloat(n[1].replace(",", ".")), unit: "" } : null;
+}
+
+// Unidad base (kg / L / pza) en la que tiene sentido medir este insumo.
+export function baseDeInsumo(item) {
+  if (!item) return "";
+  const cand = [];
+  for (const r of item.registros || []) {
+    if (r.unidad) cand.push(r.unidad);
+    const p = parsePresentacion(presentacionDe(item.nombre, r.proveedor));
+    if (p && p.unit) cand.push(p.unit);
+  }
+  for (const fam of ["kg", "L", "pza"]) if (cand.some((u) => unidadesCompatibles(u, fam))) return fam;
+  // Sin peso ni volumen pero con presentación (ej. huevo "300") → se compara por pieza.
+  return (item.registros || []).some((r) => parsePresentacion(presentacionDe(item.nombre, r.proveedor))) ? "pza" : "";
+}
+
+// Precio por unidad base de UNA compra. null si no hay con qué normalizarla.
+// `conPres` es true solo cuando el número salió de la presentación capturada.
+export function precioBaseCompra(nombre, r, base) {
+  if (!base || !r) return null;
+  const precio = num(r.precio);
+  if (!(precio > 0)) return null;
+  const p = parsePresentacion(presentacionDe(nombre, r.proveedor));
+  if (p && p.qty > 0) {
+    if (p.unit && unidadesCompatibles(p.unit, base)) return { precio: precio / (p.qty * factorConversion(p.unit, base)), conPres: true };
+    if (!p.unit) return { precio: precio / p.qty, conPres: true };
+  }
+  if (r.unidad && unidadesCompatibles(r.unidad, base)) return { precio: precio * factorConversion(base, r.unidad), conPres: false };
+  return null;
+}
+
+// Precio unitario ya normalizado de un insumo: { precio, unidad, normalizado }.
+// Lo resuelve preciosPorInsumo(); aquí solo se lee.
+export function precioNormalizado(nombre) {
+  const item = preciosIndex().get(String(nombre || "").trim().toLowerCase());
+  if (!item || !(num(item.precioActual) > 0)) return null;
+  return { precio: num(item.precioActual), unidad: item.unidad || "", normalizado: !!item.normalizado };
+}
+
+
 // Costo sugerido para un artículo de inventario, buscando el insumo más parecido
 // en tus tickets (emparejamiento difuso) y tomando su último precio de compra.
 // Devuelve { precio, insumo } — precio 0 si no encontró nada razonable.
@@ -334,7 +392,8 @@ export function costoInsumo(nombre, seen) {
   }
   const m = maestroDe(nombre);                 // Registro Maestro: precio por gramo tiene prioridad
   if (m && num(m.precio_g) > 0) return num(m.precio_g);   // $/g (unidad base = g)
-  return precioInsumo(nombre);                 // insumo comprado (de tickets)
+  return precioInsumo(nombre);   // del ticket, ya normalizado a su unidad base
+
 }
 
 // Unidad de compra de un insumo (o la unidad en que rinde, si es preparación).
@@ -426,7 +485,17 @@ export async function guardarIngredienteMaestro(row) {
     fecha: row.fecha || hoyISO(),
     updated_at: new Date().toISOString(),
   };
-  if (row.id) r.id = row.id;
+  // La tabla tiene índice único por lower(nombre). El upsert resuelve conflictos
+  // por id, así que insertar un nombre que YA existe truena por duplicado y se
+  // pierde el precio recién capturado (pasa al renombrar un insumo). Si no nos
+  // dieron id, buscamos el del registro que ya tiene ese nombre y lo actualizamos.
+  let id = row.id;
+  if (!id) {
+    const low = r.nombre.toLowerCase();
+    const ya = (state.ingredientesMaestro || []).find((x) => String(x.nombre || "").toLowerCase() === low);
+    if (ya) id = ya.id;
+  }
+  if (id) r.id = id;
   const { error } = await supabase.from("ingredientes_maestro").upsert(r);
   if (error) throw error;
   await cargarIngredientesMaestro();
@@ -954,6 +1023,55 @@ export async function actualizarTicket(id, datos) {
 
 // Corrige el NOMBRE y/o UNIDAD de un insumo en TODOS sus tickets (arregla el costeo).
 // Devuelve cuántos tickets se tocaron.
+// ── Qué precio manda para costear, por insumo ──────────────────────────
+// Por defecto el más reciente, que es lo que casi siempre quieres. Pero si un
+// proveedor te cobró de más una vez, o compras a dos precios y quieres costear
+// con el bajo, aquí se elige. Se guarda en config, no toca los tickets.
+export const CRITERIOS = ["reciente", "barato", "caro", "promedio", "fijo"];
+export function criterioPrecioDe(nombre) {
+  const m = state.config.criteriosPrecio || {};
+  const c = m[normIns(nombre)];
+  if (!c) return { modo: "reciente" };
+  if (typeof c === "string") return { modo: CRITERIOS.includes(c) ? c : "reciente" };
+  return { modo: CRITERIOS.includes(c.modo) ? c.modo : "reciente", valor: num(c.valor) };
+}
+export async function guardarCriterioPrecio(nombre, modo, valor) {
+  const m = { ...(state.config.criteriosPrecio || {}) };
+  const k = normIns(nombre);
+  if (!modo || modo === "reciente") delete m[k];               // el default no se guarda
+  else if (modo === "fijo") m[k] = { modo: "fijo", valor: num(valor) };
+  else m[k] = { modo };
+  await guardarConfig({ criteriosPrecio: m });
+}
+
+// Corrige UNA compra (el renglón de un ticket) desde la pantalla de Precios.
+// Lo que se paga (el monto) es el dato duro del ticket; lo que suele venir mal
+// es CUÁNTO trae: "1 caja $176.93" cuando en realidad son 6 L. Por eso se
+// editan cantidad y unidad, y el precio unitario se recalcula solo.
+export async function editarCompra(ticketId, insumo, cambios) {
+  const t = state.tickets.find((x) => x.id === ticketId);
+  if (!t) throw new Error("Ya no existe ese ticket.");
+  const k = normIns(insumo);
+  let toco = false;
+  const lineas = (t.lineas || []).map((l) => {
+    if (toco || normIns(l.descripcion) !== k) return l;
+    toco = true;
+    const nl = { ...l };
+    if (cambios.cantidad != null) nl.cantidad = num(cambios.cantidad);
+    if (cambios.unidad != null) nl.unidad = String(cambios.unidad).trim();
+    if (cambios.monto != null) nl.monto = num(cambios.monto);
+    const c = num(nl.cantidad);
+    nl.precio_unitario = c > 0 ? round2(num(nl.monto) / c) : num(nl.monto);
+    return nl;
+  });
+  if (!toco) throw new Error("Ese ticket ya no tiene este insumo.");
+  const { error } = await supabase.from("tickets").update({
+    lineas: lineas.map(limpiarLinea), editado_por: miNombre(), editado_en: new Date().toISOString(),
+  }).eq("id", ticketId);
+  if (error) throw error;
+  await cargarTickets();
+}
+
 // Presentación del insumo POR PROVEEDOR (ej. Prov A "Bote 5 kg", Prov B "Bidón 10 kg").
 // Metadato en config, indexado por nombre normalizado + proveedor — no toca los tickets.
 // Compat: si no hay por-proveedor, cae a la presentación a nivel insumo (versión vieja).
@@ -1167,22 +1285,22 @@ export function lunesDe(dateOrISO) {
 
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
-// "15–21 jul" para el lunes dado
+// TODA fecha que se muestra en la app pasa por aquí: DD/MM/YYYY.
+// Acepta ISO ("2026-08-05") o un Date.
+export function fechaDMA(f) {
+  const d = f instanceof Date ? f : parseISO(f);
+  if (!d || isNaN(d)) return "s/f";
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+// "03/08/2026 – 09/08/2026" para el lunes dado
 export function etiquetaSemana(lunes) {
   const dom = new Date(lunes);
   dom.setDate(lunes.getDate() + 6);
-  const mismoMes = lunes.getMonth() === dom.getMonth();
-  const a = lunes.getDate();
-  const b = dom.getDate();
-  if (mismoMes) return `${a}–${b} ${MESES[dom.getMonth()]}`;
-  return `${a} ${MESES[lunes.getMonth()]} – ${b} ${MESES[dom.getMonth()]}`;
+  return `${fechaDMA(lunes)} – ${fechaDMA(dom)}`;
 }
 
-export function fechaBonita(iso) {
-  const d = parseISO(iso);
-  if (!d) return "s/f";
-  return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
-}
+export function fechaBonita(iso) { return fechaDMA(iso); }
 
 // ── Agregados para reportes ─────────────────────────────────
 
@@ -1743,6 +1861,7 @@ export function preciosPorInsumo() {
       const pu = num(l.precio_unitario) || (num(l.cantidad) ? num(l.monto) / num(l.cantidad) : num(l.monto));
       map.get(key).registros.push({
         fecha: t.fecha, precio: pu, unidad: l.unidad, proveedor: canonProv(t.proveedor), monto: num(l.monto),
+        cantidad: num(l.cantidad),
         codigo: (l.codigo || "").toString().trim(),
         tipo: TIPOS.includes(l.tipo) ? l.tipo : "operativo",
         fotoTicket: t.fotoUrl || "", ticketId: t.id   // para ver la foto del ticket de origen
@@ -1752,13 +1871,63 @@ export function preciosPorInsumo() {
   const arr = [];
   for (const v of map.values()) {
     v.registros.sort((a, b) => (a.fecha < b.fecha ? 1 : -1)); // más reciente primero
-    const ultimo = v.registros[0];
-    const previo = v.registros.find((r) => r.precio !== ultimo.precio && r.fecha < ultimo.fecha);
-    v.precioActual = ultimo.precio;
-    v.precioPrevio = previo ? previo.precio : null;
-    v.cambio = previo ? (ultimo.precio - previo.precio) : 0;   // cambio absoluto en $ (para alertas de ±$1)
-    v.unidad = ultimo.unidad;
-    v.variacion = previo && previo.precio ? (ultimo.precio - previo.precio) / previo.precio : 0;
+
+    // El precio unitario del ticket NO es comparable entre compras: el mismo
+    // insumo viene "6 L a $29.49" en un ticket y "$176.93" suelto en otro, y
+    // son EXACTAMENTE el mismo precio por litro. Comparar los números crudos
+    // hacía ver bajones y subidas que nunca ocurrieron.
+    // Aquí se lleva cada compra a una misma unidad base (kg / L / pza) y todo
+    // —precio actual, tendencia, alertas— se compara ya normalizado.
+    v.base = baseDeInsumo(v);
+    for (const r of v.registros) {
+      const b = precioBaseCompra(v.nombre, r, v.base);
+      r.precioBase = b ? b.precio : null;
+      r.fuente = b ? (b.conPres ? "presentacion" : "ticket") : null;
+    }
+    // La tendencia se calcula SOLO con las compras que sí se pudieron llevar a
+    // la unidad base. Una compra que vino como "1 caja $176.93" sin saber qué
+    // trae la caja no puede compararse contra "1 L $29.49": mezclarlas es lo
+    // que hacía aparecer bajones falsos. Se queda listada y marcada, pero no
+    // mueve el precio ni dispara alertas.
+    const conBase = v.base ? v.registros.filter((r) => r.precioBase != null) : [];
+    const usaBase = conBase.length > 0;
+    const serie = usaBase ? conBase : v.registros;
+    v.mezclado = usaBase && conBase.length < v.registros.length;
+    v.sinNormalizar = v.registros.filter((r) => r.precioBase == null);
+    const val = (r) => (usaBase && r.precioBase != null ? r.precioBase : r.precio);
+
+    const ultimo = serie[0];
+    const previo = serie.find((r) => Math.abs(val(r) - val(ultimo)) > 0.0001 && r.fecha < ultimo.fecha);
+    v.precioActual = val(ultimo);
+    v.precioPrevio = previo ? val(previo) : null;
+    v.cambio = previo ? (val(ultimo) - val(previo)) : 0;   // cambio absoluto en $ (para alertas de ±$1)
+    v.unidad = usaBase ? v.base : ultimo.unidad;
+    v.normalizado = !!usaBase;
+    v.variacion = previo && val(previo) ? (val(ultimo) - val(previo)) / val(previo) : 0;
+
+    // La tendencia de arriba siempre es reciente-vs-anterior (así se movió el
+    // precio de verdad). Lo que se puede elegir es cuál de esos precios se usa
+    // para COSTEAR: por defecto el reciente, pero el usuario manda.
+    v.precioReciente = val(ultimo);
+    const cr = criterioPrecioDe(v.nombre);
+    v.criterio = cr.modo;
+    v.criterioValor = cr.valor;
+    const vals = serie.map(val).filter((n) => n > 0);
+    if (cr.modo === "fijo" && num(cr.valor) > 0) v.precioActual = num(cr.valor);
+    else if (vals.length) {
+      if (cr.modo === "barato") v.precioActual = Math.min(...vals);
+      else if (cr.modo === "caro") v.precioActual = Math.max(...vals);
+      else if (cr.modo === "promedio") v.precioActual = vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+    // Para las que no se pudieron normalizar, deducimos cuánto trae el empaque
+    // dividiendo lo que costó entre el precio por unidad base que sí conocemos.
+    // Si da un número redondo (6.00, no 5.73) es casi seguro el contenido.
+    for (const r of v.sinNormalizar) {
+      const u = num(r.precio) / (v.precioActual || 0);
+      if (!(u > 1.2) || !isFinite(u)) continue;
+      const ent = Math.round(u);
+      if (ent > 1 && Math.abs(u - ent) / ent < 0.02) r.deducido = ent;   // "trae ~6"
+    }
     v.veces = v.registros.length;
     // Código/SKU del proveedor: el más reciente que lo tenga.
     v.codigo = (v.registros.find((r) => r.codigo) || {}).codigo || "";

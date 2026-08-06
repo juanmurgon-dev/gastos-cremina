@@ -30,10 +30,7 @@ function ddmmToISO(s) {
 function labelRango(desde, hasta) {
   if (!desde) return "semana";
   const a = new Date(desde + "T00:00"), b = new Date((hasta || desde) + "T00:00");
-  const mismo = a.getMonth() === b.getMonth();
-  return mismo
-    ? `${a.getDate()}–${b.getDate()} ${MES[b.getMonth()]}`
-    : `${a.getDate()} ${MES[a.getMonth()]} – ${b.getDate()} ${MES[b.getMonth()]}`;
+  return `${store.fechaDMA(a)} – ${store.fechaDMA(b)}`;
 }
 
 // Semana (lunes–domingo) que contiene una fecha ISO. Así TODO se agrupa por
@@ -197,8 +194,19 @@ function clasificarHoja(rows) {
   const hay = (c) => mapa[c] != null;
   // Una línea por artículo vendido (la fuente más rica: trae fecha y categoría).
   if (hay("producto") && hay("cantidad") && hay("fecha")) return { tipo: "lineas", mapa, hdr: i };
-  // Venta por día: fecha + importe, sin artículos.
-  if (hay("fecha") && hay("venta") && !hay("producto")) return { tipo: "ventasdia", mapa, hdr: i };
+  // Detalle por orden (un renglón por cuenta, muchos del MISMO día). Se parece
+  // a "venta por día" pero NO lo es: si se lee renglón por renglón, el día
+  // termina con los comensales de una sola mesa. Se reconoce porque la fecha
+  // se repite, y se suma.
+  // Se exige la columna de comensales: un listado de PAGOS también repite fecha,
+  // y sumarlo daría un día con 0 comensales que pisaría el bueno.
+  if (hay("fecha") && !hay("producto") && hay("comensales") && fechasRepetidas(rows, mapa, i))
+    return { tipo: "ordenes", mapa, hdr: i };
+  // Venta por día: fecha + importe, sin artículos. Va UNA fila por día; si la
+  // fecha se repite es un detalle (pagos, órdenes) y leerlo renglón por renglón
+  // dejaba el día con la venta de una sola cuenta. Mejor no reconocerlo.
+  if (hay("fecha") && hay("venta") && !hay("producto") && !fechasRepetidas(rows, mapa, i))
+    return { tipo: "ventasdia", mapa, hdr: i };
   // Producto desglosado por variante / modificador.
   if (hay("producto") && hay("opcion") && hay("cantidad")) return { tipo: "variantes", mapa, hdr: i };
   // Producto agregado: cuántos se vendieron y cuánto dejaron.
@@ -211,9 +219,9 @@ function clasificarHoja(rows) {
 
 // Recorre TODAS las hojas del libro y se queda con el reporte más útil
 // (entre más detalle traiga, mejor).
-const RANGO_TIPO = { lineas: 5, variantes: 4, productos: 3, ventasdia: 2, modificadores: 1 };
+const RANGO_TIPO = { lineas: 5, variantes: 4, productos: 3, ordenes: 2.5, ventasdia: 2, modificadores: 1 };
 function clasificarLibro(wb, XLSX) {
-  let mejor = null;
+  let mejor = null, kpi = null;
   for (const nombre of wb.SheetNames) {
     let rows;
     try { rows = XLSX.utils.sheet_to_json(wb.Sheets[nombre], { header: 1 }); }
@@ -223,7 +231,14 @@ function clasificarLibro(wb, XLSX) {
     if (!c) continue;
     const cand = { ...c, hoja: nombre, rows };
     if (!mejor || RANGO_TIPO[cand.tipo] > RANGO_TIPO[mejor.tipo]) mejor = cand;
+    // Un mismo libro suele traer el detalle de artículos (más rico) Y el de
+    // órdenes. Si nos quedamos solo con el primero perdemos los comensales,
+    // así que la hoja de KPIs se aparta por separado.
+    if (cand.tipo === "ordenes" || cand.tipo === "ventasdia") {
+      if (!kpi || cand.tipo === "ordenes") kpi = cand;
+    }
   }
+  if (mejor && kpi && mejor.hoja !== kpi.hoja) mejor.kpi = kpi;
   return mejor;
 }
 
@@ -233,6 +248,39 @@ const texto = (v) => {
   const s = String(v == null ? "" : v).trim();
   return (s === "-" || s === "—") ? "" : s;   // los reportes usan "-" como vacío
 };
+
+// ¿La columna de fecha trae el mismo día varias veces? Entonces la hoja es
+// detalle (una fila por orden), no un resumen con una fila por día.
+function fechasRepetidas(rows, mapa, hdr) {
+  if (mapa.fecha == null) return false;
+  const vistas = new Set();
+  for (let i = hdr + 1; i < rows.length; i++) {
+    const f = ddmmToISO(cel(rows[i], mapa, "fecha"));
+    if (!f) continue;
+    if (vistas.has(f)) return true;
+    vistas.add(f);
+  }
+  return false;
+}
+
+// ── Detalle por orden → resumen por día ──
+// Cada fila es una cuenta cerrada. El día es la suma: cuántas órdenes, cuántos
+// comensales y cuánto se vendió. Da exactamente lo mismo que el reporte diario.
+function parseOrdenes(rows, mapa, hdr) {
+  const dias = new Map();
+  for (let i = hdr + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const fecha = ddmmToISO(cel(r, mapa, "fecha"));
+    if (!fecha) continue;
+    if (!dias.has(fecha)) dias.set(fecha, { fecha, ventas_total: 0, ordenes: 0, comensales: 0 });
+    const d = dias.get(fecha);
+    d.ordenes += 1;
+    d.comensales += N(cel(r, mapa, "comensales"));
+    d.ventas_total += N(cel(r, mapa, "venta"));
+  }
+  return [...dias.values()].sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
+}
 
 // ── Venta por día ──
 function parseVentasDia(rows, mapa, hdr) {
@@ -394,7 +442,17 @@ async function importarVentasDia(filas) {
     if (e2) throw new Error(e2.message);
     nuevos++; total += f.ventas_total;
   }
-  return { nuevos, conCorte, dias: filas.length, total };
+  // El corte solo guarda dinero. Comensales y órdenes viven en kpis_dia, que es
+  // de donde salen el ticket promedio y la ocupación — antes se leían del Excel
+  // y se tiraban aquí mismo, por eso el día quedaba sin comensales.
+  for (const f of filas) {
+    if (!f.comensales && !f.ordenes) continue;
+    try { await store.guardarKpiDia(f.fecha, { comensales: f.comensales, cuentas: f.ordenes, venta: f.ventas_total }); }
+    catch (_) { /* no bloquear la importación por un KPI */ }
+  }
+  const conKpi = filas.filter((f) => f.comensales || f.ordenes).length;
+  return { nuevos, conCorte, dias: filas.length, total, conKpi,
+    comensales: filas.reduce((a, f) => a + N(f.comensales), 0) };
 }
 
 async function importarProducto(p) {
@@ -780,7 +838,7 @@ export function montar(el) {
     }
     // PDFs al final: primero el Excel (que da semanaRef exacta para variantes).
     const orden = {
-      corte: 0, "gen-ventasdia": 1, "gen-lineas": 2, producto: 3,
+      corte: 0, "gen-ordenes": 0.5, "gen-ventasdia": 1, "gen-lineas": 2, producto: 3,
       "gen-productos": 4, variante: 5, "gen-variantes": 6, "gen-modificadores": 7,
       pdf: 8, "?": 9,
     };
@@ -820,6 +878,18 @@ export function montar(el) {
       await new Promise((r) => setTimeout(r, 20));   // deja que el navegador pinte antes del trabajo pesado
       try {
         if (it.err) throw it.err;
+        // Comensales/órdenes del día: van aparte del reporte principal, para que
+        // no se pierdan cuando el libro se importa por su hoja de artículos.
+        if (it.gen && it.gen.kpi && it.tipo !== "gen-ordenes" && it.tipo !== "gen-ventasdia") {
+          const k = it.gen.kpi;
+          const dias = k.tipo === "ordenes" ? parseOrdenes(k.rows, k.mapa, k.hdr) : parseVentasDia(k.rows, k.mapa, k.hdr);
+          let n = 0;
+          for (const d of dias) {
+            if (!d.comensales) continue;   // sin comensales no hay nada que rescatar
+            try { await store.guardarKpiDia(d.fecha, { comensales: d.comensales, cuentas: d.ordenes, venta: d.ventas_total }); n++; } catch (_) {}
+          }
+          if (n) logs.push(`👥 ${it.f.name}: ${dias.reduce((a, d) => a + N(d.comensales), 0)} comensales en ${n} día(s)`);
+        }
         if (it.tipo === "corte") {
           const c = parseCorte(XLSX.utils.sheet_to_json(it.wb.Sheets["Detalle corte de caja"], { header: 1 }));
           await importarCorte(c);
@@ -841,6 +911,11 @@ export function montar(el) {
             : diaRef
               ? `✅ Variantes día ${diaRef} · ${r.filas} líneas (sumado a la semana ${r.periodo})`
               : `✅ Variantes ${r.periodo} · ${r.filas} líneas platillo/variante`);
+        } else if (it.tipo === "gen-ordenes") {
+          const filas = parseOrdenes(it.gen.rows, it.gen.mapa, it.gen.hdr);
+          const r = await importarVentasDia(filas);
+          if (filas.length === 1) diaRef = filas[0].fecha;
+          logs.push(`✅ Detalle de órdenes · ${filas.length} día(s) · ${money(r.total)} · 👥 ${Math.round(r.comensales)} comensales`);
         } else if (it.tipo === "gen-ventasdia") {
           const filas = parseVentasDia(it.gen.rows, it.gen.mapa, it.gen.hdr);
           const r = await importarVentasDia(filas);
@@ -848,7 +923,8 @@ export function montar(el) {
           const detalle = r.conCorte
             ? ` (${r.conCorte} día(s) ya tenían corte de caja, no los toqué)`
             : "";
-          logs.push(`✅ Venta por día · ${r.nuevos} día(s) · ${money(r.total)}${detalle}`);
+          logs.push(`✅ Venta por día · ${r.nuevos} día(s) · ${money(r.total)}${detalle}` +
+            (r.conKpi ? ` · 👥 ${Math.round(r.comensales)} comensales` : " · ⚠️ sin comensales en el reporte"));
         } else if (it.tipo === "gen-lineas") {
           const p = parseLineasOrden(it.gen.rows, it.gen.mapa, it.gen.hdr);
           if (!p.prods.length) throw new Error("no encontré artículos vendidos en ese reporte");

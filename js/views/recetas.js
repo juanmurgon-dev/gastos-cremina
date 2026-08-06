@@ -881,7 +881,7 @@ async function fichaPDF(data) {
     });
   const total = filas.reduce((a, f) => a + f.importe, 0);
   const d = new Date();
-  const fechaTxt = `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
+  const fechaTxt = store.fechaDMA(d);
   const restaurante = (store.state.config.marcaNombre || store.state.orgNombre || "").trim();
 
   try {

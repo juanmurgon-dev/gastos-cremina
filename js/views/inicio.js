@@ -33,7 +33,7 @@ const DIAS_S = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 const MES_S = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 function fechaCorta(iso) {
   const d = new Date(iso + "T00:00");
-  return `${DIAS_S[d.getDay()]} ${d.getDate()} ${MES_S[d.getMonth()]}`;
+  return `${DIAS_S[d.getDay()]} ${store.fechaDMA(d)}`;
 }
 function esAyer(iso) {
   const h = new Date(); h.setHours(0, 0, 0, 0); h.setDate(h.getDate() - 1);
@@ -276,7 +276,7 @@ function rangoPeriodo(modo, off) {
   if (modo === "dia") {
     const d = new Date(hoy); d.setDate(hoy.getDate() - off);
     const iso = isoDe(d);
-    return { desde: iso, hasta: iso, etiqueta: `${d.getDate()} ${MES_LARGO[d.getMonth()]} ${d.getFullYear()}`, corta: `${d.getDate()} ${MES_S[d.getMonth()]}`, esActual: off === 0 };
+    return { desde: iso, hasta: iso, etiqueta: store.fechaDMA(d), corta: store.fechaDMA(d), esActual: off === 0 };
   }
   if (modo === "mes") {
     const m = new Date(hoy.getFullYear(), hoy.getMonth() - off, 1);
@@ -289,7 +289,7 @@ function rangoPeriodo(modo, off) {
   }
   const lun = lunesDeInicio(hoy); lun.setDate(lun.getDate() - off * 7);
   const dom = new Date(lun); dom.setDate(lun.getDate() + 6);
-  return { desde: isoDe(lun), hasta: isoDe(dom), lunes: lun, etiqueta: `${lun.getDate()}–${dom.getDate()} ${MES_S[dom.getMonth()]}`, corta: `${lun.getDate()} ${MES_S[lun.getMonth()]}`, esActual: off === 0 };
+  return { desde: isoDe(lun), hasta: isoDe(dom), lunes: lun, etiqueta: `${store.fechaDMA(lun)} – ${store.fechaDMA(dom)}`, corta: store.fechaDMA(lun), esActual: off === 0 };
 }
 
 // Ingreso (cortes) + gasto (tickets) de un rango de fechas.

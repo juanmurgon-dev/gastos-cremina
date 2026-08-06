@@ -36,6 +36,22 @@ export function render(el) {
   const off = store.subscribe(pintar);
   pintar();
 
+  // Si llegamos desde otra pantalla con "#/tickets?t=<id>" (p.ej. corregir el
+  // precio de un insumo), abre ese ticket y limpia el parámetro para que al
+  // recargar no se vuelva a abrir solo.
+  (function abrirPedido() {
+    const q = location.hash.split("?")[1];
+    const id = q && new URLSearchParams(q).get("t");
+    if (!id) return;
+    history.replaceState(null, "", "#/tickets");
+    const existe = (store.state.tickets || []).some((x) => x.id === id);
+    if (existe) { abrirModal(id); return; }
+    // Los tickets pueden no haber cargado aún: espera al primer aviso del store.
+    const off = store.subscribe(() => {
+      if ((store.state.tickets || []).some((x) => x.id === id)) { if (off) off(); abrirModal(id); }
+    });
+  })();
+
   function pintar() {
     if (!store.state.listo) { lista.innerHTML = `<div class="vacio">Cargando tickets…</div>`; return; }
     const q = buscar.value.trim().toLowerCase();
@@ -148,6 +164,6 @@ function fechaHora(iso) {
   try {
     const d = new Date(iso);
     const hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
-    return `${d.getDate()} ${MESES_TH[d.getMonth()]}, ${hh}:${mm}`;
+    return `${store.fechaDMA(d)}, ${hh}:${mm}`;
   } catch (e) { return ""; }
 }
