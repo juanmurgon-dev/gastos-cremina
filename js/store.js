@@ -1685,6 +1685,26 @@ export function coincide(texto, consulta) {
   return q.split(" ").every((palabra) => t.includes(palabra));
 }
 
+// Unidades para sugerir al capturar un ticket: las de siempre MÁS las que ya
+// usaste. La lista fija se quedaba corta ("Kg", "bl", "cj", "Lata", "Mazo",
+// "servicio"…) y como era un <select> cerrado, abrir un ticket con una de esas
+// y guardarlo borraba la unidad sin avisar.
+export function unidadesConocidas() {
+  const vistas = new Map();   // clave en minúsculas → cómo se escribió, y cuántas veces
+  for (const u of UNIDADES) vistas.set(u.toLowerCase(), { txt: u, n: Infinity });
+  for (const t of state.tickets) {
+    for (const l of t.lineas || []) {
+      const u = String(l.unidad || "").trim();
+      if (!u) continue;
+      const k = u.toLowerCase();
+      const y = vistas.get(k);
+      if (!y) vistas.set(k, { txt: u, n: 1 });
+      else if (y.n !== Infinity) y.n++;
+    }
+  }
+  return [...vistas.values()].sort((a, b) => b.n - a.n).map((x) => x.txt);
+}
+
 export function proveedoresTodos() {
   const map = new Map();   // clave normalizada → nombre a usar
   for (const p of proveedoresDir()) {

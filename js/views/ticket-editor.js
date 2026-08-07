@@ -1,6 +1,6 @@
 // Editor de un ticket (proveedor, fecha y líneas). Se reutiliza al
 // capturar un ticket nuevo y al corregir uno existente.
-import { AREAS, COLOR_AREA, TIPOS, UNIDADES, num, money, proveedoresConocidos, sugerirProveedor, proveedoresDir, emparejarProveedorDir, mejorMatchProveedor, normProv } from "../store.js";
+import { AREAS, COLOR_AREA, TIPOS, unidadesConocidas, num, money, proveedoresConocidos, sugerirProveedor, proveedoresDir, emparejarProveedorDir, mejorMatchProveedor, normProv } from "../store.js";
 
 function opciones(lista, sel) {
   return lista.map((o) => `<option value="${o}"${o === sel ? " selected" : ""}>${o}</option>`).join("");
@@ -18,7 +18,8 @@ function lineaHTML(l = {}) {
       <label class="campo"><span>Cantidad</span>
         <input data-f="cantidad" type="number" step="any" inputmode="decimal" value="${l.cantidad ?? ""}" /></label>
       <label class="campo"><span>Unidad</span>
-        <select data-f="unidad">${opciones(UNIDADES, l.unidad || "")}</select></label>
+        <input data-f="unidad" list="unidadDL" autocomplete="off" placeholder="kg, pz, caja…"
+               value="${escapar(l.unidad || "")}" /></label>
       <label class="campo"><span>Precio unit.</span>
         <input data-f="precio_unitario" type="number" step="any" inputmode="decimal" value="${l.precio_unitario ?? ""}" /></label>
     </div>
@@ -66,6 +67,7 @@ export function crearEditor(contenedor, ticket = {}) {
       <label class="campo"><span>Fecha</span>
         <input data-fecha type="date" value="${ticket.fecha || ""}" /></label>
     </div>
+    <datalist id="unidadDL">${unidadesConocidas().map((u) => `<option value="${escapar(u)}"></option>`).join("")}</datalist>
     <div class="titulo-seccion" style="margin-top:6px">Líneas</div>
     <div data-lineas>${lineas.map(lineaHTML).join("")}</div>
     <button type="button" class="btn sec chico" data-add>+ Agregar línea</button>
