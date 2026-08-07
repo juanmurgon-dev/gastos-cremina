@@ -1014,7 +1014,9 @@ export async function guardarTicket(t) {
     total: num(t.total),
     aviso: t.aviso || "",
     foto_url: t.fotoUrl || "",
-    lineas: (t.lineas || []).map(limpiarLinea),
+    // Los nombres que se parezcan a uno oficial entran ya con ese nombre,
+    // para que no se abra un insumo nuevo por una tilde o una mayúscula.
+    lineas: (t.lineas || []).map((l) => limpiarLinea({ ...l, descripcion: canonInsumo(l.descripcion) })),
     creado_por: t.creadoPor || ""
   });
   if (error) throw error;
@@ -1683,6 +1685,94 @@ export function coincide(texto, consulta) {
   if (!q) return true;
   const t = normIns(texto);
   return q.split(" ").every((palabra) => t.includes(palabra));
+}
+
+// ── NOMBRE OFICIAL DE UN INSUMO ────────────────────────────────────────
+// El mismo insumo entra escrito de diez formas ("Jamon Kirkland", "JAMÓN
+// KIRKLAND", "Jamón Kirkland "), y cada variante se vuelve un insumo aparte
+// con su propio precio y su propio historial. Aquí se marca UN nombre como el
+// oficial y, al entrar un ticket, todo lo que se le parezca lo suficiente se
+// guarda con ese nombre.
+export const PARECIDO_MIN = 0.8;   // 80%
+
+// Qué tan parecidos son dos nombres, de 0 a 1. Se toma el mejor de dos
+// medidas: letra por letra, y palabra por palabra sin importar el orden
+// (así "Jamón Kirkland" y "Kirkland Jamón" cuentan como el mismo).
+export function parecidoInsumo(a, b) {
+  const x = normIns(a), y = normIns(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  const ratio = (p, q) => (p === q ? 1 : 1 - lev(p, q) / Math.max(p.length, q.length));
+  const orden = (s) => s.split(" ").filter(Boolean).sort().join(" ");
+  return Math.max(ratio(x, y), ratio(orden(x), orden(y)));
+}
+
+// El 80% a secas no basta: "tomate bule" y "Tomate Bola" salen 82% parecidos
+// y son tomates distintos; "bolsa 10" y "bolsa 5" salen 91% y son otro tamaño.
+// Cuando el que cambia es un NÚMERO o una palabra corta que cambia entera, no
+// hay error de dedo: hay producto distinto, y unirlos arruinaría el costeo.
+function distingue(a, b) {
+  const x = normIns(a), y = normIns(b);
+  const nums = (s) => (s.match(/\d+(?:[.,]\d+)?/g) || []).join(" ");
+  if (nums(x) !== nums(y)) return true;                       // bolsa 10 ≠ bolsa 5
+  const tx = x.split(" ").filter(Boolean), ty = y.split(" ").filter(Boolean);
+  if (tx.length !== ty.length) return false;
+  for (let i = 0; i < tx.length; i++) {
+    const p1 = tx[i], p2 = ty[i];
+    if (p1 === p2) continue;
+    const r = 1 - lev(p1, p2) / Math.max(p1.length, p2.length);
+    if (Math.min(p1.length, p2.length) <= 4 && r < 0.75) return true;   // AXI ≠ UTI, bule ≠ bola
+  }
+  return false;
+}
+
+// ¿Son el mismo insumo escrito distinto? Parecido suficiente Y sin nada que
+// los distinga de verdad.
+export function mismoInsumo(a, b) {
+  return parecidoInsumo(a, b) >= PARECIDO_MIN && !distingue(a, b);
+}
+
+// Los nombres marcados como oficiales, tal como se escribieron.
+export function insumosOficiales() {
+  const m = state.config.insumosOficiales || {};
+  return Object.values(m).filter(Boolean);
+}
+export function esOficial(nombre) {
+  const m = state.config.insumosOficiales || {};
+  return !!m[normIns(nombre)];
+}
+export async function marcarOficial(nombre, activo) {
+  const m = { ...(state.config.insumosOficiales || {}) };
+  const k = normIns(nombre);
+  if (!k) return;
+  if (activo) m[k] = String(nombre).trim(); else delete m[k];
+  await guardarConfig({ insumosOficiales: m });
+}
+
+// El nombre con el que se debe guardar un insumo: el oficial más parecido,
+// si llega al 80%. Si no hay ninguno, se respeta lo que venga escrito.
+export function canonInsumo(nombre) {
+  const raw = String(nombre || "").trim();
+  if (!raw) return raw;
+  const of = insumosOficiales();
+  if (!of.length) return raw;
+  let mejor = null, mejorP = 0;
+  for (const o of of) {
+    if (!mismoInsumo(raw, o)) continue;
+    const p = parecidoInsumo(raw, o);
+    if (p > mejorP) { mejorP = p; mejor = o; }
+  }
+  return mejor || raw;
+}
+
+// Los insumos que YA existen y se absorberían bajo este nombre oficial.
+// Sirve para avisar antes de unificar lo viejo (lo nuevo entra solo).
+export function similaresA(oficial) {
+  const k = normIns(oficial);
+  return preciosPorInsumo()
+    .filter((i) => normIns(i.nombre) !== k && mismoInsumo(i.nombre, oficial))
+    .map((i) => ({ nombre: i.nombre, veces: i.veces, parecido: parecidoInsumo(i.nombre, oficial) }))
+    .sort((a, b) => b.parecido - a.parecido);
 }
 
 // Unidades para sugerir al capturar un ticket: las de siempre MÁS las que ya

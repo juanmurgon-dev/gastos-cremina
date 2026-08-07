@@ -61,7 +61,8 @@ function renderPrecios(el) {
   const st = { q: "", area: "todas", orden: "az" };
 
   el.innerHTML = `
-    <p class="sub" style="margin:2px 2px 12px">Precio más reciente de cada insumo y cómo cambió. Toca uno para ver su historial.</p>
+    <p class="sub" style="margin:2px 2px 8px">Precio más reciente de cada insumo y cómo cambió. Toca uno para ver su historial.</p>
+    <p class="sub" style="margin:0 2px 12px;font-size:11.5px">Palomea ✅ el nombre <b>oficial</b> de un insumo: los tickets que entren escritos parecido (80% o más) se guardarán con ese nombre, para que no se te abra un insumo nuevo por una tilde.</p>
     <input id="buscar" placeholder="Buscar insumo o SKU…" style="margin-bottom:10px" />
     <div class="fila" style="margin-bottom:14px">
       <select id="area">
@@ -136,11 +137,14 @@ function renderPrecios(el) {
       return `
         <div class="ticket" data-n="${encodeURIComponent(i.nombre.toLowerCase())}">
           <div class="cab">
+            <input type="checkbox" class="ofic" data-of="${escapar(i.nombre)}"${store.esOficial(i.nombre) ? " checked" : ""}
+                   title="Marcar este nombre como el oficial: los tickets que entren con un nombre parecido se guardarán así"
+                   style="width:17px;height:17px;flex:none;accent-color:var(--verde);margin-right:8px;cursor:pointer" />
             <span class="prov" style="font-size:14px">${escapar(i.nombre)}</span>
             <span class="monto" style="font-size:14px">${money(i.precioActual)}${i.unidad ? `<span class="sub" style="font-weight:400">/${i.unidad}</span>` : ""}</span>
           </div>
           <div class="meta" style="display:flex;justify-content:space-between;align-items:center">
-            <span><span class="chip" style="background:${COLOR_AREA[i.area] || "#9c9482"}">${i.area || "otro"}</span> · ${i.veces} compra(s)${i.codigo ? ` · <span class="sub">SKU ${escapar(i.codigo)}</span>` : ""}${i.presentacion ? ` · <span class="sub">📦 ${escapar(i.presentacion)}</span>` : ""}${etiquetaCriterio(i)}${i.mezclado ? ` · <span class="sub" style="color:#b06a00" title="Hay compras en otra unidad que no se pueden comparar">⚠️ unidades</span>` : ""}</span>
+            <span><span class="chip" style="background:${COLOR_AREA[i.area] || "#9c9482"}">${i.area || "otro"}</span> · ${i.veces} compra(s)${i.codigo ? ` · <span class="sub">SKU ${escapar(i.codigo)}</span>` : ""}${i.presentacion ? ` · <span class="sub">📦 ${escapar(i.presentacion)}</span>` : ""}${store.esOficial(i.nombre) ? ` · <span class="sub" style="color:var(--verde);font-weight:700" title="Nombre oficial: absorbe los parecidos">✔ oficial</span>` : ""}${etiquetaCriterio(i)}${i.mezclado ? ` · <span class="sub" style="color:#b06a00" title="Hay compras en otra unidad que no se pueden comparar">⚠️ unidades</span>` : ""}</span>
             <span>${flecha}</span>
           </div>
         </div>`;
@@ -148,6 +152,35 @@ function renderPrecios(el) {
 
     lista.querySelectorAll("[data-n]").forEach((row) =>
       row.addEventListener("click", () => abrir(decodeURIComponent(row.dataset.n))));
+
+    // ✔ Nombre oficial. De aquí en adelante, todo ticket que entre con un
+    // nombre 80% parecido se guarda con ÉSTE. Lo que ya está en el sistema no
+    // se toca solo: se ofrece unificarlo, con la lista a la vista.
+    lista.querySelectorAll(".ofic").forEach((c) => {
+      c.addEventListener("click", (e) => e.stopPropagation());   // no abrir el modal
+      c.addEventListener("change", async (e) => {
+        e.stopPropagation();
+        const nombre = c.dataset.of, activo = c.checked;
+        c.disabled = true;
+        try {
+          await store.marcarOficial(nombre, activo);
+          if (activo) {
+            const sim = store.similaresA(nombre);
+            if (sim.length) {
+              const lst = sim.slice(0, 12).map((s) => `  · ${s.nombre}  (${s.veces} compra${s.veces === 1 ? "" : "s"}, ${Math.round(s.parecido * 100)}% parecido)`).join("\n");
+              const extra = sim.length > 12 ? `\n  …y ${sim.length - 12} más` : "";
+              if (confirm(`"${nombre}" ya es el nombre oficial: los tickets NUEVOS que se le parezcan entrarán con ese nombre.\n\nEn el sistema ya hay ${sim.length} insumo(s) parecidos:\n\n${lst}${extra}\n\n¿Los paso también a "${nombre}"? Se corrigen sus tickets y las recetas se recalculan.`)) {
+                let n = 0;
+                for (const s of sim) { try { n += await store.renombrarInsumo(s.nombre, nombre, ""); } catch (err) {} }
+                alert(`Listo: se unificaron ${sim.length} insumo(s) en ${n} ticket(s).`);
+              }
+            }
+          }
+        } catch (err) { alert("No se pudo guardar: " + ((err && err.message) || err)); c.checked = !activo; }
+        c.disabled = false;
+        pintar();
+      });
+    });
   }
 
   function abrir(key) {
