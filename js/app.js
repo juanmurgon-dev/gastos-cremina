@@ -15,8 +15,8 @@ import * as insumos from "./views/insumos.js";        // + Requisición adentro
 import * as inventario from "./views/inventario.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.173";
-export const APP_FECHA = "12 ago 2026";
+export const APP_VERSION = "v3.174";
+export const APP_FECHA = "13 ago 2026";
 
 const VISTAS = {
   inicio:      { mod: inicio,      ic: "🏠", txt: "Inicio" },
@@ -192,6 +192,18 @@ function montarShell(user) {
 
 function escaparHtml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
+// Con qué rol estás conectado, junto al correo en el menú ☰. Suena a detalle,
+// pero el navegador guarda UNA sola sesión: si entras con otra cuenta sin
+// cerrar la anterior, sigues siendo el de antes. Verlo aquí evita horas de
+// "juraría que entré como el barista y ve todo".
+function etiquetaRol() {
+  if (!store.state.multiTenant) return "";
+  const rol = store.state.miRol;
+  if (!rol) return ` · <b style="color:var(--rojo,#b3261e)">sin rol asignado</b>`;
+  const area = store.state.miArea ? " · " + store.state.miArea : "";
+  return ` · <b>${escaparHtml(rol + area)}</b>`;
+}
+
 // Menú ☰ → Ajustes: personalizar marca, actualizar, cerrar sesión.
 function abrirMenu() {
   const puedePersonalizar = !store.state.multiTenant || store.state.miRol === "owner";
@@ -201,7 +213,9 @@ function abrirMenu() {
   bg.innerHTML = `
     <div class="modal">
       <h2>Ajustes</h2>
-      <div class="sub" style="margin:-8px 2px 14px;word-break:break-all">${escaparHtml(usuarioActual?.email || "")}</div>
+      <div class="sub" style="margin:-8px 2px 14px;word-break:break-all">
+        ${escaparHtml(usuarioActual?.email || "")}${etiquetaRol()}
+      </div>
       <div class="menu-lista">
         ${puedePersonalizar ? `<button class="menu-item" data-a="marca"><span class="mi-ic">🎨</span><span class="mi-tx"><b>Personalizar marca</b><span class="sub">Cambiar logo y nombre del restaurante</span></span></button>` : ""}
         ${puedePersonalizar ? `<button class="menu-item" data-a="prefs"><span class="mi-ic">⚙️</span><span class="mi-tx"><b>Preferencias</b><span class="sub">Cómo ves los datos de tu restaurante</span></span></button>` : ""}

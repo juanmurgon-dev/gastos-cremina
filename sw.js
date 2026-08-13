@@ -2,7 +2,7 @@
 // Estrategia "network-first" para archivos propios: siempre intenta la
 // versión más nueva de internet y solo usa el caché si no hay conexión.
 // Así, cuando publicas una actualización, aparece de inmediato.
-const CACHE = "cremina-gastos-v3173";
+const CACHE = "cremina-gastos-v3174";
 // Rutas relativas: la app funciona igual en la raíz de un dominio propio
 // o en un subpath tipo usuario.github.io/repo/ (GitHub Pages).
 const SHELL = [
@@ -16,8 +16,13 @@ const SHELL = [
 ];
 
 self.addEventListener("install", (e) => {
-  // NO hacemos skipWaiting automático: la versión nueva "espera" hasta que el
-  // usuario toque "Actualizar" en la app (o hasta el próximo arranque limpio).
+  // Antes esperábamos a que el usuario tocara "Actualizar" para instalar la
+  // versión nueva. Para cambios de permisos eso no sirve: la app vieja se
+  // queda corriendo días en el celular de alguien, enseñándole pestañas que
+  // ya no le tocan. Ahora la versión nueva entra sola al reabrir la app.
+  // (El banner de "Actualizar" sigue existiendo para quien la tenga abierta
+  //  en ese momento; esto solo evita que la vieja se quede pegada.)
+  self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
 });
 
