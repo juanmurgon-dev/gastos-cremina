@@ -30,9 +30,13 @@ function comprimirFoto(file, max = 640) {
 
 // Hub de Insumos: Capturar · Tickets · Requisición · Precios · Proveedores · Ritmo.
 export function render(el, ctx) {
-  let sub = "capturar", limpiar = null;
+  // Roles de área (barista / ayudante): solo Requisición. Capturar, Tickets,
+  // Precios y Proveedores exponen lo que le pagamos a cada proveedor.
+  const soloRequis = !store.esJefe();
+  let sub = soloRequis ? "requisicion" : "capturar";
+  let limpiar = null;
   el.innerHTML = `
-    <div class="segmented" style="font-size:12.5px">
+    <div class="segmented" style="font-size:12.5px"${soloRequis ? ' hidden' : ''}>
       <button data-s="capturar">Capturar</button>
       <button data-s="tickets">Tickets</button>
       <button data-s="requisicion">Requis.</button>

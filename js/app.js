@@ -15,8 +15,8 @@ import * as insumos from "./views/insumos.js";        // + Requisición adentro
 import * as inventario from "./views/inventario.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.172";
-export const APP_FECHA = "6 ago 2026";
+export const APP_VERSION = "v3.173";
+export const APP_FECHA = "12 ago 2026";
 
 const VISTAS = {
   inicio:      { mod: inicio,      ic: "🏠", txt: "Inicio" },
@@ -26,13 +26,19 @@ const VISTAS = {
   reportes:    { mod: reportes,    ic: "📊", txt: "Gastos" }
 };
 
-// Pestañas visibles por rol. Los que NO están aquí (owner, admin, gerente y
-// desconocido) ven TODAS. En single-tenant (miRol=null) también ven todas.
+// Pestañas visibles por rol. Los que NO están aquí (owner, admin, gerente) ven
+// TODAS. En single-tenant (miRol=null) también ven todas.
 // (Recetas vive en Ventas; Requisición vive en Insumos.)
+//
+// barista y ayudante: SOLO su requisición y su conteo. Sin Inicio, porque el
+// tablero de Inicio muestra venta, utilidad y alertas de margen.
+// Esto es cosmético: el candado real es la RLS (supabase/roles-candados.sql).
 const TABS_ROL = {
-  chef:    ["inicio", "ventas", "insumos", "inventario"],
-  compras: ["inicio", "insumos", "inventario"],
-  staff:   ["inicio", "insumos", "inventario"],
+  chef:     ["inicio", "ventas", "insumos", "inventario"],
+  compras:  ["inicio", "insumos", "inventario"],
+  staff:    ["inicio", "insumos", "inventario"],
+  barista:  ["insumos", "inventario"],
+  ayudante: ["insumos", "inventario"],
 };
 function tabsPermitidas() {
   const permit = TABS_ROL[store.state.miRol];
@@ -41,6 +47,21 @@ function tabsPermitidas() {
 function puedeVer(clave) {
   const permit = TABS_ROL[store.state.miRol];
   return !permit || permit.includes(clave);
+}
+// Primera pestaña que sí puede ver (para roles que no tienen Inicio).
+function vistaInicial() { return tabsPermitidas()[0] || "inicio"; }
+
+// Usuarios sin correo real: en el equipo de piso (barista, ayudante) nadie
+// quiere teclear un correo. Escriben "alexis" y aquí se le pega el dominio,
+// porque Supabase necesita algo con forma de correo. El buzón no existe ni
+// hace falta: las cuentas se crean con "Auto Confirm User" y nunca se manda
+// un mail. Quien sí tiene correo real lo escribe completo y pasa igual.
+// ⬇ Cambia esta línea si el restaurante usa otro dominio.
+const DOMINIO_INTERNO = "creminamx.com";
+function aCorreo(v) {
+  const s = String(v || "").trim().toLowerCase();
+  if (!s) return "";
+  return s.includes("@") ? s : s + "@" + DOMINIO_INTERNO;
 }
 
 const app = document.getElementById("app");
@@ -73,8 +94,10 @@ function montarLogin() {
         <p class="sub" style="margin-top:2px">Del plato a la boca se cae el margen</p>
         <div id="err"></div>
         <form id="f" style="margin-top:16px;text-align:left">
-          <label class="campo"><span>Correo</span>
-            <input id="correo" type="email" autocomplete="username" required inputmode="email" /></label>
+          <label class="campo"><span>Usuario</span>
+            <input id="correo" type="text" autocomplete="username" required
+                   autocapitalize="none" autocorrect="off" spellcheck="false"
+                   placeholder="tu nombre de usuario" /></label>
           <label class="campo"><span>Contraseña</span>
             <input id="pass" type="password" autocomplete="current-password" required /></label>
           <button class="btn" id="entrar" type="submit">Entrar</button>
@@ -89,11 +112,11 @@ function montarLogin() {
     const btn = document.getElementById("entrar");
     btn.disabled = true; btn.textContent = "Entrando…"; err.innerHTML = "";
     const { error } = await supabase.auth.signInWithPassword({
-      email: document.getElementById("correo").value.trim(),
+      email: aCorreo(document.getElementById("correo").value),
       password: document.getElementById("pass").value
     });
     if (error) {
-      err.innerHTML = `<div class="error-box">Correo o contraseña incorrectos.</div>`;
+      err.innerHTML = `<div class="error-box">Usuario o contraseña incorrectos.</div>`;
       btn.disabled = false; btn.textContent = "Entrar";
     }
   });
@@ -143,14 +166,21 @@ function montarShell(user) {
     if (store.state.miRol !== rolPintado) {
       rolPintado = store.state.miRol;
       pintarTabs();
-      if (!puedeVer(location.hash.replace("#/", "") || "inicio")) location.hash = "#/inicio";
+      if (!puedeVer(location.hash.replace("#/", "").split("?")[0] || "inicio")) location.hash = "#/" + vistaInicial();
     }
     // White-label: logo + nombre del restaurante en el header y en el ícono.
     marca.aplicarMarcaActual();
     actualizarBadgeRequis();
+    // Usuario autenticado pero SIN rol asignado. Antes aquí se abría el
+    // asistente de "crea tu restaurante", y estaba mal: hoy nadie se registra
+    // solo — las cuentas las crea dirección desde Supabase. Así que quien cae
+    // aquí no es un cliente nuevo, es alguien a quien le falta su rol (o cuya
+    // cuenta ya se dio de baja y le quedaba la sesión viva). Mandarlo al
+    // onboarding le creaba un restaurante nuevo y vacío, y partía los datos.
+    // Cuando existan registros públicos, aquí vuelve onboarding.abrir().
     if (store.state.listo && store.state.multiTenant && !store.state.orgId && !orgPedida) {
       orgPedida = true;
-      onboarding.abrir();
+      pantallaSinAcceso();
       return;
     }
     if (store.state.perfil.cargado && !store.state.perfil.nombre && !nombrePedido) {
@@ -218,6 +248,34 @@ function actualizarBadgeRequis() {
   else { b.textContent = ""; b.hidden = true; }
 }
 
+// Cuenta sin rol: en vez de dejarlo en una app vacía (o peor, en el asistente
+// de restaurante nuevo), se le dice qué pasa y con quién ir. El botón de salir
+// es lo importante: así puede entrar con la cuenta correcta.
+function pantallaSinAcceso() {
+  app.innerHTML = `
+    <div class="login">
+      <div class="card">
+        <img src="assets/platify-wordmark.png" alt="Platify" style="height:46px;width:auto;display:block;margin:2px auto 12px" />
+        <h2 style="margin:0 0 6px">Tu cuenta todavía no tiene acceso</h2>
+        <p class="sub" style="margin-top:0">
+          Entraste como <b>${escaparHtml(usuarioActual?.email || "")}</b>, pero esa cuenta
+          no tiene un rol asignado en el restaurante.
+        </p>
+        <p class="sub">
+          Si es tu primer día, pídele a dirección que te dé de alta. Si te equivocaste
+          de cuenta, sal y entra con la tuya.
+        </p>
+        <button class="btn" id="salir-sin-acceso" style="margin-top:14px">Cerrar sesión</button>
+      </div>
+    </div>`;
+  const b = document.getElementById("salir-sin-acceso");
+  if (b) b.addEventListener("click", async () => {
+    b.disabled = true; b.textContent = "Saliendo…";
+    await supabase.auth.signOut();
+    location.reload();
+  });
+}
+
 function pedirNombre() {
   const bg = document.createElement("div");
   bg.className = "modal-bg";
@@ -244,9 +302,9 @@ function ruta() {
   if (!vistaEl) return;
   // "#/tickets?t=<id>" sigue siendo la vista "tickets": lo de después del ?
   // es para que la vista abra algo en concreto (ej. un ticket a corregir).
-  let clave = (location.hash.replace("#/", "").split("?")[0] || "inicio");
-  if (!VISTAS[clave]) clave = "inicio";
-  if (!puedeVer(clave)) clave = "inicio";   // rol sin acceso → a Inicio
+  let clave = (location.hash.replace("#/", "").split("?")[0] || vistaInicial());
+  if (!VISTAS[clave]) clave = vistaInicial();
+  if (!puedeVer(clave)) clave = vistaInicial();   // rol sin acceso → su 1ª pestaña
 
   // Ya estamos en esa vista: no re-render (evita el doble click+hashchange).
   if (clave === rutaActual && vistaEl.childElementCount > 0) return;

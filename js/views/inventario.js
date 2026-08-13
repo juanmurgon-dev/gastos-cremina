@@ -70,8 +70,11 @@ function inyectarCSS() {
 export function render(el) {
   inyectarCSS();
   let seg = "conteo", boot = false;
+  // Roles de área (barista / ayudante): solo capturan su conteo. El Catálogo
+  // y el Cierre de mes (COGS, compras, venta neta) son de jefes.
+  const soloConteo = !store.esJefe();
   el.innerHTML = `
-    <div class="segmented" style="font-size:13px"><button data-s="conteo">Conteo</button><button data-s="catalogo">Catálogo</button><button data-s="cierre">Cierre de mes</button></div>
+    <div class="segmented" style="font-size:13px"${soloConteo ? ' hidden' : ''}><button data-s="conteo">Conteo</button><button data-s="catalogo">Catálogo</button><button data-s="cierre">Cierre de mes</button></div>
     <div id="invsub"></div>`;
   const sub = el.querySelector("#invsub");
   const btns = [...el.querySelectorAll(".segmented button")];
@@ -94,8 +97,21 @@ export function render(el) {
 async function screenConteo(cont) {
   cont.innerHTML = `<div class="vacio">Cargando…</div>`;
   const borrador = store.conteoBorrador();
+  const jefe = store.esJefe();
 
   if (!borrador) {
+    // Roles de área: no pueden ABRIR el conteo. Si lo abrieran, solo se crearían
+    // las líneas de su área (es lo único que ven) y el conteo saldría incompleto.
+    // El chef lo abre completo; cada quien llena su parte.
+    if (!jefe) {
+      cont.innerHTML = `
+        <div class="card">
+          <h2 style="margin-top:0">No hay conteo abierto</h2>
+          <p class="sub">Cuando el chef abra el conteo del mes, aquí aparecen los artículos de
+          <b>${esc(store.miArea() || "tu área")}</b> para que captures las existencias.</p>
+        </div>`;
+      return;
+    }
     cont.innerHTML = `
       <div class="card">
         <h2 style="margin-top:0">Nuevo conteo</h2>
@@ -135,13 +151,13 @@ async function screenConteo(cont) {
         </div>
         <div style="text-align:right">
           <div id="inv-status" class="sub" style="font-size:11.5px">&nbsp;</div>
-          <button class="btn sec chico inv-btn44" id="cerrar">Cerrar conteo</button>
+          ${jefe ? `<button class="btn sec chico inv-btn44" id="cerrar">Cerrar conteo</button>` : ""}
         </div>
       </div>
       <div class="sub" style="font-size:11px;margin-top:6px">💡 Captura todo <b>SIN IVA</b> (el IVA que pagas al proveedor se acredita, no es costo).</div>
     </div>
 
-    <button class="btn sec" id="sugtodos" style="width:100%;margin:2px 0 8px">💡 Sugerir costos desde tickets (llena los vacíos)</button>
+    ${jefe ? `<button class="btn sec" id="sugtodos" style="width:100%;margin:2px 0 8px">💡 Sugerir costos desde tickets (llena los vacíos)</button>` : ""}
 
     ${cats.map((c, i) => `
       <details class="inv-cat" name="invcat" ${i === 0 ? "open" : ""} data-cat="${esc(c)}">
@@ -149,10 +165,10 @@ async function screenConteo(cont) {
         <div>${mapa.get(c).map(filaLinea).join("")}</div>
       </details>`).join("")}
 
-    <div class="card">
+    ${jefe ? `<div class="card">
       <button class="btn sec" id="addart">+ Agregar artículo fuera del catálogo</button>
       <div id="addform"></div>
-    </div>
+    </div>` : ""}
     <div class="inv-foot" style="height:8px"></div>`;
 
   // ── Auto-guardado con debounce por línea ──
@@ -202,7 +218,8 @@ async function screenConteo(cont) {
   recalc();
 
   // Botón: rellena de golpe los costos vacíos con la sugerencia de tickets.
-  cont.querySelector("#sugtodos").onclick = async () => {
+  // (Solo jefes: los roles de área no leen tickets, así que no hay sugerencias.)
+  if (jefe) cont.querySelector("#sugtodos").onclick = async () => {
     const items = [];
     cont.querySelectorAll("[data-linea]").forEach((row) => {
       const costoInp = row.querySelector(".inv-costo");
@@ -219,15 +236,15 @@ async function screenConteo(cont) {
     catch (e) { setStatus("⚠ error al guardar"); }
   };
 
-  cont.querySelector("#cerrar").onclick = async (e) => {
+  if (jefe) cont.querySelector("#cerrar").onclick = async (e) => {
     if (!confirm("¿Cerrar este conteo? Se actualizarán los costos del catálogo con lo que capturaste. Ya no podrás editarlo.")) return;
     e.target.disabled = true; e.target.textContent = "Cerrando…";
     try { await store.cerrarConteo(borrador.conteo_id); screenConteo(cont); }
     catch (err) { e.target.disabled = false; e.target.textContent = "Cerrar conteo"; alert("No se pudo cerrar: " + (err.message || err)); }
   };
 
-  // ── Agregar artículo fuera de catálogo ──
-  cont.querySelector("#addart").onclick = () => {
+  // ── Agregar artículo fuera de catálogo (solo jefes) ──
+  if (jefe) cont.querySelector("#addart").onclick = () => {
     const f = cont.querySelector("#addform");
     if (f.innerHTML) { f.innerHTML = ""; return; }
     f.innerHTML = `
