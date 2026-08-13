@@ -99,6 +99,11 @@ function parsearPedido(texto, byName) {
 export function render(el) {
   let vista = "lista";        // "lista" | "editor"
   let editing = null;         // requisición en edición (copia local)
+  // Roles de área (barista, ayudante): piden lo que les falta, no cotizan.
+  // Nada de precios, montos ni totales en pantalla ni en lo que exportan.
+  // (De todos modos les saldrían en $0: la RLS no les da los tickets, que es
+  //  de donde salen los precios. Esconderlo evita enseñar ceros confusos.)
+  const sinPrecios = !store.esJefe();
   const insumos = store.preciosPorInsumo();
   const byName = new Map(insumos.map((i) => [i.nombre.toLowerCase(), i]));
 
@@ -138,7 +143,7 @@ export function render(el) {
     return `<div class="ticket" data-open="${r.id}" style="cursor:pointer">
       <div class="cab">
         <span class="prov">Requisición · ${fechaBonita(r.fecha)}</span>
-        <span class="monto">${money(r.total)}</span></div>
+        ${sinPrecios ? "" : `<span class="monto">${money(r.total)}</span>`}</div>
       <div class="meta" style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
         <span><span class="chip" style="background:${e.c}">${e.t}</span> · ${n} insumos</span>
         <span class="sub">abrir ›</span></div>
@@ -154,7 +159,9 @@ export function render(el) {
           <button class="btn sec chico" id="volver">‹ Volver</button>
           <span class="chip" id="rqChip" style="background:${e.c}">${e.t}</span>
         </div>
-        <p class="sub" style="margin:8px 0 0">Toca el chip <b>↻</b> de cada insumo para cambiar su estatus (Pendiente → Pedido → Comprado). Puedes editar nombre, cantidad, unidad y precio directo en la lista.</p>
+        <p class="sub" style="margin:8px 0 0">${sinPrecios
+          ? `Escribe lo que te falta y cuánto necesitas. Toca el chip <b>↻</b> para marcar lo que ya pediste.`
+          : `Toca el chip <b>↻</b> de cada insumo para cambiar su estatus (Pendiente → Pedido → Comprado). Puedes editar nombre, cantidad, unidad y precio directo en la lista.`}</p>
         <button class="btn" id="rqGuardar" style="margin-top:10px">💾 Guardar requisición</button>
         <div id="rqSaveMsg"></div>
       </div>
@@ -230,7 +237,7 @@ export function render(el) {
       sugEl.innerHTML = items.map((i) => `
         <div class="ac-item" data-n="${esc(i.nombre)}" style="padding:11px 13px;cursor:pointer;border-bottom:1px solid var(--linea);font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:center">
           <span>${esc(i.nombre)}</span>
-          <span class="sub" style="font-size:11.5px;white-space:nowrap">${esc(i.unidad || "")}${i.precioActual ? " · " + money(i.precioActual) : ""}</span>
+          <span class="sub" style="font-size:11.5px;white-space:nowrap">${esc(i.unidad || "")}${!sinPrecios && i.precioActual ? " · " + money(i.precioActual) : ""}</span>
         </div>`).join("");
       sugEl.style.display = "block";
       sugEl.querySelectorAll(".ac-item").forEach((it) => it.addEventListener("mousedown", (ev) => {
@@ -299,7 +306,7 @@ export function render(el) {
         const marca = pp != null ? "✓ " : "";
         return `<div class="ac-item" data-n="${esc(i.nombre)}" style="padding:11px 13px;cursor:pointer;border-bottom:1px solid var(--linea);font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:center">
           <span>${esc(i.nombre)}</span>
-          <span class="sub" style="font-size:11.5px;white-space:nowrap">${esc(i.unidad || "")}${precio ? " · " + marca + money(precio) : ""}</span></div>`;
+          <span class="sub" style="font-size:11.5px;white-space:nowrap">${esc(i.unidad || "")}${!sinPrecios && precio ? " · " + marca + money(precio) : ""}</span></div>`;
       }).join("");
       sugEl.style.display = "block";
       sugEl.querySelectorAll(".ac-item").forEach((el2) => el2.addEventListener("mousedown", (ev) => {
@@ -426,13 +433,13 @@ export function render(el) {
     for (const [prov, list] of grupos()) {
       html += `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <h2 style="margin:0">🏪 ${esc(prov)}</h2><span class="val">${money(totalDe(list))}</span></div>
+          <h2 style="margin:0">🏪 ${esc(prov)}</h2>${sinPrecios ? "" : `<span class="val">${money(totalDe(list))}</span>`}</div>
         <div style="margin-top:8px">${list.map(filaItem).join("")}</div>
       </div>`;
     }
     html += `<div class="card">
       <div class="row-stats">
-        <div class="stat"><div class="n">${money(totalDe(editing.items))}</div><div class="l">Total</div></div>
+        ${sinPrecios ? "" : `<div class="stat"><div class="n">${money(totalDe(editing.items))}</div><div class="l">Total</div></div>`}
         <div class="stat"><div class="n">${editing.items.length}</div><div class="l">Insumos</div></div>
       </div>
       <div class="fila" style="margin-top:12px;gap:8px;flex-wrap:wrap">
@@ -440,10 +447,10 @@ export function render(el) {
         <button class="btn sec" id="rqCsv">⬇ Exportar CSV</button>
         <button class="btn sec" id="rqPdf" title="Abre la impresión: elige 'Guardar como PDF'">📄 Guardar PDF</button>
       </div>
-      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;cursor:pointer">
+      ${sinPrecios ? "" : `<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;cursor:pointer">
         <input type="checkbox" id="rqConPrecios" checked style="width:16px;height:16px;accent-color:var(--verde);flex:none" />
         Incluir precios en el PDF
-      </label>
+      </label>`}
       <button class="btn sec" id="rqDel" style="margin-top:10px;color:var(--rojo)">Borrar esta requisición</button>
     </div>`;
     cont.innerHTML = html;
@@ -456,7 +463,9 @@ export function render(el) {
         actualizarChip(); pintarItems(); guardar();
       });
       row.querySelector("[data-f='cant']").addEventListener("change", (ev) => { it.cantidad = num(ev.target.value); pintarItems(); guardar(); });
-      row.querySelector("[data-f='precio']").addEventListener("change", (ev) => { it.precio = num(ev.target.value); pintarItems(); guardar(); });
+      // El campo de precio no existe para roles de área (ver `sinPrecios`).
+      const precioInp = row.querySelector("[data-f='precio']");
+      if (precioInp) precioInp.addEventListener("change", (ev) => { it.precio = num(ev.target.value); pintarItems(); guardar(); });
       row.querySelector("[data-f='nom']").addEventListener("change", (ev) => {
         const v = ev.target.value.trim();
         if (v) { it.nombre = v; const c = store.codigoDeInsumo(v); if (c) it.codigo = c; }
@@ -477,7 +486,10 @@ export function render(el) {
         const c = store.codigoDeInsumo(picked); if (c) it.codigo = c;
         pintarItems(); guardar();
       }, it.proveedor);
-      row.querySelector("[data-f='prov']").addEventListener("change", (ev) => {
+      // Igual el selector de proveedor: va junto al precio, y quien no cotiza
+      // tampoco elige a quién comprarle.
+      const provInp = row.querySelector("[data-f='prov']");
+      if (provInp) provInp.addEventListener("change", (ev) => {
         const v = ev.target.value;
         if (v === "__otro__") {
           let nom = (prompt("Nombre del proveedor:", it.proveedor || "") || "").trim();
@@ -499,7 +511,9 @@ export function render(el) {
     });
     cont.querySelector("#rqWa").addEventListener("click", copiarWa);
     cont.querySelector("#rqCsv").addEventListener("click", exportarCsv);
-    cont.querySelector("#rqPdf").addEventListener("click", () => exportarPdf(cont.querySelector("#rqConPrecios")?.checked ?? true));
+    // Sin precios en pantalla, tampoco en el PDF: la casilla ni existe.
+    cont.querySelector("#rqPdf").addEventListener("click", () =>
+      exportarPdf(sinPrecios ? false : (cont.querySelector("#rqConPrecios")?.checked ?? true)));
     cont.querySelector("#rqDel").addEventListener("click", borrar);
   }
 
@@ -546,13 +560,13 @@ export function render(el) {
           <input data-f="nom" value="${esc(it.nombre)}" autocomplete="off" title="Editar nombre del insumo" style="width:100%;font-weight:600;font-size:14px;border:1px solid var(--linea);border-radius:8px;padding:6px 8px;background:#fff" />
           <div data-sug style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--blanco);border:1px solid var(--linea);border-radius:12px;box-shadow:var(--sombra);max-height:230px;overflow-y:auto;margin-top:4px;text-align:left"></div>
         </span>
-        <span class="val" style="margin-left:auto;white-space:nowrap">${money(montoDe(it))}</span></span>
+        ${sinPrecios ? "" : `<span class="val" style="margin-left:auto;white-space:nowrap">${money(montoDe(it))}</span>`}</span>
       ${sku ? `<span class="sub" style="width:100%;font-size:10.5px;margin:-2px 0 2px 2px">SKU ${esc(sku)}</span>` : ""}
       <input data-f="cant" type="number" step="any" inputmode="decimal" value="${it.cantidad}" style="width:64px" title="Cantidad" />
       <input data-f="uni" value="${esc(it.unidad)}" placeholder="uni" style="width:58px" title="Unidad" />
-      <span class="sub" style="align-self:center">×</span>
+      ${sinPrecios ? "" : `<span class="sub" style="align-self:center">×</span>
       <input data-f="precio" type="number" step="any" inputmode="decimal" value="${it.precio}" style="width:80px" title="Precio" />
-      ${provCampo}
+      ${provCampo}`}
       ${selArea('data-f="area"', area)}
       <button class="linkbtn" data-del style="color:var(--rojo);padding:0 6px;font-size:16px">✕</button>
     </div>`;
@@ -573,11 +587,11 @@ export function render(el) {
       t += `\n🏪 *${prov}*\n`;
       for (const it of list) {
         const ar = AREAS.includes(it.area) ? it.area : areaDe(it.nombre);
-        t += `${it.estatus === "pedido" ? "✅" : "•"} ${it.nombre} (${ar}) — ${num(it.cantidad)} ${it.unidad}${num(it.precio) ? ` — ${money(montoDe(it))}` : ""}\n`;
+        t += `${it.estatus === "pedido" ? "✅" : "•"} ${it.nombre} (${ar}) — ${num(it.cantidad)} ${it.unidad}${!sinPrecios && num(it.precio) ? ` — ${money(montoDe(it))}` : ""}\n`;
       }
-      t += `   Subtotal: ${money(totalDe(list))}\n`;
+      if (!sinPrecios) t += `   Subtotal: ${money(totalDe(list))}\n`;
     }
-    t += `\n*TOTAL: ${money(totalDe(editing.items))}*`;
+    if (!sinPrecios) t += `\n*TOTAL: ${money(totalDe(editing.items))}*`;
     return t;
   }
   async function copiarWa() {
@@ -591,11 +605,14 @@ export function render(el) {
   function exportarCsv() {
     const filas = [];
     for (const [prov, list] of grupos())
-      for (const it of list)
-        filas.push([prov, AREAS.includes(it.area) ? it.area : areaDe(it.nombre), it.nombre,
-                    num(it.cantidad), it.unidad, num(it.precio), montoDe(it)]);
+      for (const it of list) {
+        const base = [prov, AREAS.includes(it.area) ? it.area : areaDe(it.nombre), it.nombre,
+                      num(it.cantidad), it.unidad];
+        filas.push(sinPrecios ? base : base.concat([num(it.precio), montoDe(it)]));
+      }
+    const cols = ["Proveedor", "Área", "Insumo", "Cantidad", "Unidad"];
     descargarCSV("requisicion-" + hoyTxt().replace(" ", "-"),
-      ["Proveedor", "Área", "Insumo", "Cantidad", "Unidad", "Precio unit.", "Monto"], filas);
+      sinPrecios ? cols : cols.concat(["Precio unit.", "Monto"]), filas);
   }
 
   // Genera un PDF REAL y lo descarga (no depende del diálogo de impresión).

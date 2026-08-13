@@ -147,22 +147,28 @@ async function screenConteo(cont) {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
         <div style="min-width:0">
           <div class="sub" style="font-size:11.5px">Conteo ${esc(borrador.fecha)} · borrador</div>
-          <div style="font-size:clamp(18px,6vw,26px);font-weight:800;color:#16514f"><span id="inv-total">$0</span></div>
+          ${jefe
+            ? `<div style="font-size:clamp(18px,6vw,26px);font-weight:800;color:#16514f"><span id="inv-total">$0</span></div>`
+            : `<div style="font-size:clamp(16px,5vw,22px);font-weight:800;color:#16514f">${esc(store.miArea() || "tu área")}</div>`}
         </div>
         <div style="text-align:right">
           <div id="inv-status" class="sub" style="font-size:11.5px">&nbsp;</div>
           ${jefe ? `<button class="btn sec chico inv-btn44" id="cerrar">Cerrar conteo</button>` : ""}
         </div>
       </div>
-      <div class="sub" style="font-size:11px;margin-top:6px">💡 Captura todo <b>SIN IVA</b> (el IVA que pagas al proveedor se acredita, no es costo).</div>
+      <div class="sub" style="font-size:11px;margin-top:6px">${jefe
+        ? `💡 Captura todo <b>SIN IVA</b> (el IVA que pagas al proveedor se acredita, no es costo).`
+        : `💡 Anota <b>cuánto hay</b> de cada cosa. Se guarda solo conforme escribes.`}</div>
     </div>
 
     ${jefe ? `<button class="btn sec" id="sugtodos" style="width:100%;margin:2px 0 8px">💡 Sugerir costos desde tickets (llena los vacíos)</button>` : ""}
 
     ${cats.map((c, i) => `
       <details class="inv-cat" name="invcat" ${i === 0 ? "open" : ""} data-cat="${esc(c)}">
-        <summary><span>${esc(c)}</span><span class="sub" style="font-weight:600">$<span class="inv-sub">0</span> · ${mapa.get(c).length}</span></summary>
-        <div>${mapa.get(c).map(filaLinea).join("")}</div>
+        <summary><span>${esc(c)}</span><span class="sub" style="font-weight:600">${jefe
+          ? `$<span class="inv-sub">0</span> · ${mapa.get(c).length}`
+          : `${mapa.get(c).length} artículos`}</span></summary>
+        <div>${mapa.get(c).map((l) => filaLinea(l, jefe)).join("")}</div>
       </details>`).join("")}
 
     ${jefe ? `<div class="card">
@@ -176,6 +182,8 @@ async function screenConteo(cont) {
   const status = cont.querySelector("#inv-status");
   const setStatus = (t) => { if (status) status.textContent = t; };
   function recalc() {
+    // Sin costos en pantalla no hay nada que sumar (roles de área).
+    if (!jefe) return;
     let grand = 0;
     cont.querySelectorAll("details[data-cat]").forEach((d) => {
       let sub = 0;
@@ -190,12 +198,19 @@ async function screenConteo(cont) {
   }
   function guardar(id, row) {
     setStatus("Guardando…");
-    store.guardarLinea(id, {
+    // Roles de área solo mandan la cantidad: no tienen costo ni nombre editable,
+    // y mandar campos que no ven pisaría lo que capturó el chef.
+    const cambios = jefe ? {
       cantidad: row.querySelector(".inv-cant").value,
       costo_unitario: row.querySelector(".inv-costo").value,
       nombre_snapshot: row.querySelector(".inv-nom").value,
       unidad_snapshot: row.querySelector(".inv-uni").value,
-    }).then(() => setStatus("Guardado " + horaAhora())).catch(() => setStatus("⚠ error al guardar"));
+    } : {
+      cantidad: row.querySelector(".inv-cant").value,
+    };
+    store.guardarLinea(id, cambios)
+      .then(() => setStatus("Guardado " + horaAhora()))
+      .catch(() => setStatus("⚠ error al guardar"));
   }
   cont.querySelectorAll("[data-linea]").forEach((row) => {
     const id = row.dataset.linea;
@@ -286,7 +301,19 @@ function sugChip(l) {
   return `<button type="button" class="inv-sug" data-sug="${sug.precio}" title="Sugerido de tus tickets: ${esc(sug.insumo)}">💡 ${money(sug.precio)}</button>`;
 }
 
-function filaLinea(l) {
+function filaLinea(l, jefe = true) {
+  // Roles de área: cuentan existencias, no valúan inventario. Sin costo
+  // unitario ni valor — solo cuánto hay. El costo lo pone el chef al cerrar.
+  if (!jefe) {
+    return `
+      <div class="inv-linea" data-linea="${l.id}">
+        <div class="nom">${esc(l.nombre_snapshot)}</div>
+        <div class="inv-grid" style="grid-template-columns:1fr 80px">
+          <div><span class="inv-lbl">Cantidad</span><input class="inv-in inv-num inv-cant" type="number" inputmode="decimal" min="0" step="any" value="${num(l.cantidad) || ""}" placeholder="0" /></div>
+          <div><span class="inv-lbl">Unidad</span><div class="inv-in" style="min-height:44px;display:flex;align-items:center;justify-content:center;background:var(--fondo-2,#f6f6f4)">${esc(l.unidad_snapshot || "pza")}</div></div>
+        </div>
+      </div>`;
+  }
   return `
     <div class="inv-linea" data-linea="${l.id}">
       <input class="inv-in inv-nom" style="min-height:40px" value="${esc(l.nombre_snapshot)}" />
