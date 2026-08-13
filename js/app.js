@@ -15,7 +15,7 @@ import * as insumos from "./views/insumos.js";        // + Requisición adentro
 import * as inventario from "./views/inventario.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.176";
+export const APP_VERSION = "v3.177";
 export const APP_FECHA = "13 ago 2026";
 
 const VISTAS = {
@@ -172,11 +172,13 @@ function montarShell(user) {
   // Onboarding: si la BD es multi-tenant y el usuario aún no tiene restaurante,
   // pídelo antes que nada. Luego, el nombre de la persona.
   let orgPedida = false, nombrePedido = false, rolPintado = "__none__", aperturaLog = false;
+  let cargadoPintado = false;
   store.subscribe(() => {
     if (store.state.listo && !aperturaLog) { aperturaLog = true; store.logActividad && store.logActividad("apertura"); }
     // Cuando ya se conoce el rol, ajusta las pestañas visibles.
-    if (store.state.miRol !== rolPintado) {
+    if (store.state.miRol !== rolPintado || store.state.rolCargado !== cargadoPintado) {
       rolPintado = store.state.miRol;
+      cargadoPintado = store.state.rolCargado;
       pintarTabs();
       if (!puedeVer(location.hash.replace("#/", "").split("?")[0] || "inicio")) {
         location.hash = "#/" + vistaInicial();
@@ -264,6 +266,9 @@ function abrirMenu() {
 function pintarTabs() {
   const tabs = document.getElementById("tabs");
   if (!tabs) return;
+  // Sin rol conocido no se pintan pestañas: pintarlas mostraría las cinco a
+  // todo el mundo por un instante, incluido quien solo debe ver dos.
+  if (!store.state.rolCargado) { tabs.innerHTML = ""; return; }
   tabs.innerHTML = tabsPermitidas().map((k) => {
     const v = VISTAS[k];
     const badge = k === "insumos" ? `<span class="tab-badge" data-badge="requisicion" hidden></span>` : "";
@@ -335,6 +340,16 @@ function pedirNombre() {
 function ruta() {
   const vistaEl = document.getElementById("vista");
   if (!vistaEl) return;
+
+  // Todavía no sabemos el rol (la consulta a `miembros` es asíncrona). No se
+  // dibuja NADA: montar una vista aquí significaría elegir qué enseñar sin
+  // saber a quién. En cuanto llega el rol, el subscribe de abajo llama a ruta()
+  // otra vez y se pinta lo que corresponde.
+  if (!store.state.rolCargado) {
+    vistaEl.innerHTML = `<div class="vacio">Cargando…</div>`;
+    rutaActual = null;
+    return;
+  }
   // "#/tickets?t=<id>" sigue siendo la vista "tickets": lo de después del ?
   // es para que la vista abra algo en concreto (ej. un ticket a corregir).
   let clave = (location.hash.replace("#/", "").split("?")[0] || vistaInicial());

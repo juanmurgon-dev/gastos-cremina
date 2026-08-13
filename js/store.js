@@ -46,6 +46,7 @@ export const state = {
   multiTenant: false,   // true si la BD ya tiene la tabla 'miembros'
   miRol: null,          // rol: owner|admin|gerente|chef|barista|ayudante|compras|staff
   miArea: null,         // área del rol acotado: 'barra' | 'cocina' | null (sin límite)
+  rolCargado: false,    // ¿ya sabemos quién es? Hasta entonces no se enseña nada.
   orgNombre: null,      // nombre del restaurante (para mostrar en el encabezado)
   listo: false
 };
@@ -115,13 +116,22 @@ async function cargarConfig() {
 // ¿La BD es multi-tenant? ¿A qué restaurante(s) pertenece el usuario?
 async function cargarMiOrg() {
   const { data, error } = await supabase.from("miembros").select("org_id, rol, area, orgs(nombre)").limit(1);
-  if (error) { state.multiTenant = false; state.orgId = null; state.miRol = null; state.miArea = null; state.orgNombre = null; return; } // tabla no existe → single-tenant
-  state.multiTenant = true;
-  const row = data && data[0];
-  state.orgId = (row && row.org_id) || null;
-  state.miRol = (row && row.rol) || null;
-  state.miArea = (row && row.area && String(row.area).toLowerCase()) || null;
-  state.orgNombre = (row && row.orgs && row.orgs.nombre) || null;
+  if (error) {
+    // La tabla no existe → base sin roles (single-tenant): todos ven todo.
+    state.multiTenant = false; state.orgId = null; state.miRol = null;
+    state.miArea = null; state.orgNombre = null;
+  } else {
+    state.multiTenant = true;
+    const row = data && data[0];
+    state.orgId = (row && row.org_id) || null;
+    state.miRol = (row && row.rol) || null;
+    state.miArea = (row && row.area && String(row.area).toLowerCase()) || null;
+    state.orgNombre = (row && row.orgs && row.orgs.nombre) || null;
+  }
+  // Pase lo que pase: ya sabemos a qué atenernos. Antes de esta línea, la app
+  // no debe dibujar ninguna pantalla — no sabe a quién se la está enseñando.
+  state.rolCargado = true;
+  notify();
 }
 
 // ───────────── Roles y candados ─────────────
@@ -131,8 +141,14 @@ async function cargarMiOrg() {
 // pegue directo a la API, la base de datos no le devuelve el dato.
 
 // Jefes: ven todo. En single-tenant (sin tabla miembros) todos son jefes.
+//
+// Fail-closed: mientras no sepamos el rol, la respuesta es NO. Antes esto
+// devolvía true por defecto, y como el rol llega de la base DESPUÉS de dibujar
+// la pantalla, quien abriera la app veía por un momento la versión completa —
+// con precios y todo — aunque no le tocara. Ante la duda, lo mínimo.
 const ROLES_JEFE = ["owner", "admin", "gerente", "chef"];
 export function esJefe() {
+  if (!state.rolCargado) return false;
   if (!state.multiTenant) return true;
   return ROLES_JEFE.includes(state.miRol);
 }
