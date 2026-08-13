@@ -15,7 +15,7 @@ import * as insumos from "./views/insumos.js";        // + Requisición adentro
 import * as inventario from "./views/inventario.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.175";
+export const APP_VERSION = "v3.176";
 export const APP_FECHA = "13 ago 2026";
 
 const VISTAS = {
@@ -74,8 +74,20 @@ let rutaActual = null;      // clave de la vista montada (evita render doble)
 supabase.auth.getSession().then(({ data }) => aplicarSesion(data.session));
 supabase.auth.onAuthStateChange((_event, session) => aplicarSesion(session));
 
+// Id de la persona que estaba en esta pestaña, para detectar un cambio de cuenta.
+let usuarioPrevio = null;
+
 function aplicarSesion(session) {
   const user = session?.user || null;
+
+  // Cambió la persona (o se cerró sesión) sin recargar la página. El estado en
+  // memoria sigue siendo del anterior — su rol, sus tickets, todo — porque
+  // store.init() no vuelve a correr una vez arrancado. Sin esto, cierras sesión
+  // como el barista, entras como dueño, y la app te deja con el rol del barista.
+  // Recargar es la forma segura de arrancar limpio.
+  if (usuarioPrevio && user?.id !== usuarioPrevio) { location.reload(); return; }
+  if (user) usuarioPrevio = user.id;
+
   usuarioActual = user;
   if (user) {
     store.init();
@@ -166,7 +178,16 @@ function montarShell(user) {
     if (store.state.miRol !== rolPintado) {
       rolPintado = store.state.miRol;
       pintarTabs();
-      if (!puedeVer(location.hash.replace("#/", "").split("?")[0] || "inicio")) location.hash = "#/" + vistaInicial();
+      if (!puedeVer(location.hash.replace("#/", "").split("?")[0] || "inicio")) {
+        location.hash = "#/" + vistaInicial();
+      } else {
+        // El rol llega DESPUÉS del primer render (la consulta es asíncrona), así
+        // que la vista de abajo se dibujó sin saber quién eres. Hay que rehacerla:
+        // si no, un barista que cayó en Insumos se queda con la versión completa,
+        // con precios y todo, hasta que cambie de pestaña.
+        rutaActual = null;
+        ruta();
+      }
     }
     // White-label: logo + nombre del restaurante en el header y en el ícono.
     marca.aplicarMarcaActual();
