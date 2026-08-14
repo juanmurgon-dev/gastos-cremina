@@ -47,6 +47,13 @@ function rangoDe(clave) {
 // ── El cálculo ──────────────────────────────────────────────────
 // Solo COMEDOR y cuentas cerradas con venta: para-llevar no tiene mesero que
 // atienda mesa, y una cuenta en $0 es una prueba o un error.
+//
+// Se exporta porque Capacitación lo reusa: los niveles plata y oro se ganan
+// con desempeño real (café/cuenta, attach de postre), y ese número tiene que
+// salir del MISMO cálculo que ve el marcador. Dos fórmulas para lo mismo es
+// pedir que un día no cuadren.
+export { calcular as metricasMeseros, rangoDe as rangoMeseros };
+
 function calcular(desde, hasta) {
   const filas = (store.state.ordenesMesero || []).filter((o) =>
     o.fecha >= desde && o.fecha <= hasta &&

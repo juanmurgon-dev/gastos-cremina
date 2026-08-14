@@ -182,6 +182,64 @@ export async function importarOrdenesMesero(filas) {
   return { guardadas };
 }
 
+// ═══════════════════════════════════════════════════════════════════
+//  CAPACITACIÓN
+//  Se carga bajo demanda (solo la usa su pantalla) y NO se guarda en
+//  `state`: la vista pide y recibe. Así no hay dos copias del mismo dato.
+// ═══════════════════════════════════════════════════════════════════
+export async function cargarCapacitacion() {
+  const tablas = ["capacitacion_personas", "capacitacion_competencias", "capacitacion_criterios",
+                  "capacitacion_preguntas", "capacitacion_intentos", "capacitacion_practicas"];
+  const res = await Promise.all(tablas.map((t) => supabase.from(t).select("*")));
+  const fallo = res.find((r) => r.error);
+  if (fallo) {
+    const m = fallo.error.message || "";
+    throw new Error(/does not exist|schema cache/i.test(m)
+      ? "Falta correr capacitacion.sql en Supabase." : m);
+  }
+  const [personas, competencias, criterios, preguntas, intentos, practicas] = res.map((r) => r.data || []);
+  personas.sort((a, b) => (a.area || "").localeCompare(b.area || "") || (a.nombre || "").localeCompare(b.nombre || ""));
+  competencias.sort((a, b) => (a.orden || 0) - (b.orden || 0));
+  return { personas, competencias, criterios, preguntas, intentos, practicas };
+}
+
+export async function guardarPersonaCap(p) {
+  const { error } = await supabase.from("capacitacion_personas").insert({
+    nombre: p.nombre, area: p.area, puesto: p.puesto || "", nombre_parrot: p.nombre_parrot || "",
+  });
+  if (error) throw new Error(/duplicate/i.test(error.message) ? "Ya hay alguien con ese nombre." : error.message);
+}
+
+export async function borrarPersonaCap(id) {
+  const { error } = await supabase.from("capacitacion_personas").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// Un intento = un examen completo. Se guarda entero, no respuesta por
+// respuesta, para poder decir "pasó el 70% en ESTE intento" aunque repita.
+export async function guardarIntentoQuiz(i) {
+  const { data: u } = await supabase.auth.getUser();
+  const { error } = await supabase.from("capacitacion_intentos").insert({
+    persona_id: i.persona_id, competencia_id: i.competencia_id, nivel: i.nivel,
+    evaluador: (u && u.user && u.user.id) || null,
+    respuestas: i.respuestas || {}, aciertos: num(i.aciertos), total: num(i.total),
+    aprobado: !!i.aprobado,
+  });
+  if (error) throw error;
+  logActividad("capacitacion", "quiz " + i.nivel);
+}
+
+export async function guardarPracticaCap(p) {
+  const { data: u } = await supabase.auth.getUser();
+  const { error } = await supabase.from("capacitacion_practicas").insert({
+    persona_id: p.persona_id, competencia_id: p.competencia_id, nivel: p.nivel,
+    evaluador: (u && u.user && u.user.id) || null,
+    checklist: p.checklist || {}, observaciones: p.observaciones || "", aprobado: !!p.aprobado,
+  });
+  if (error) throw error;
+  logActividad("capacitacion", "observación " + p.nivel);
+}
+
 // ───────────── Roles y candados ─────────────
 // OJO: esto es solo para ESCONDER lo que no le toca a cada quien y que la app
 // no se vea rota. El candado de verdad vive en la RLS de Supabase
@@ -1318,7 +1376,13 @@ export async function guardarConfig(cfg) {
   // usuario perdía lo que acababa de capturar.
   if (!state.multiTenant || !state.orgId || error) {
     const r = await supabase.from("config").upsert({ id: "app", data: merged });
-    if (r.error) throw (error || r.error);
+    if (r.error) {
+      // Si el respaldo TAMBIÉN falla, lo que importa es su error, no el del
+      // primer intento: antes se enseñaba "falta la columna org_id" aunque la
+      // causa real fuera otra (permisos, por ejemplo) y mandaba a buscar mal.
+      if (error) r.error.message = `${r.error.message} · (el intento por restaurante ya había fallado con: ${error.message})`;
+      throw r.error;
+    }
   }
 
   state.config = merged;

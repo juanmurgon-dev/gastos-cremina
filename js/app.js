@@ -13,9 +13,10 @@ import * as reportes from "./views/reportes.js";
 import * as ventasHub from "./views/ventas-hub.js";   // Ventas · Margen · Recetas
 import * as insumos from "./views/insumos.js";        // + Requisición adentro
 import * as inventario from "./views/inventario.js";
+import * as capacitacion from "./views/capacitacion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.179";
+export const APP_VERSION = "v3.180";
 export const APP_FECHA = "14 ago 2026";
 
 const VISTAS = {
@@ -23,7 +24,8 @@ const VISTAS = {
   ventas:      { mod: ventasHub,   ic: "💵", txt: "Ventas" },
   insumos:     { mod: insumos,     ic: "📦", txt: "Insumos" },
   inventario:  { mod: inventario,  ic: "📋", txt: "Inventario" },
-  reportes:    { mod: reportes,    ic: "📊", txt: "Gastos" }
+  reportes:    { mod: reportes,    ic: "📊", txt: "Gastos" },
+  equipo:      { mod: capacitacion, ic: "🎓", txt: "Equipo" }
 };
 
 // Pestañas visibles por rol. Los que NO están aquí (owner, admin, gerente) ven
@@ -34,7 +36,8 @@ const VISTAS = {
 // tablero de Inicio muestra venta, utilidad y alertas de margen.
 // Esto es cosmético: el candado real es la RLS (supabase/roles-candados.sql).
 const TABS_ROL = {
-  chef:     ["inicio", "ventas", "insumos", "inventario"],
+  // Giselle e Iván (chef) sí ven Equipo: son quienes evalúan en piso.
+  chef:     ["inicio", "ventas", "insumos", "inventario", "equipo"],
   compras:  ["inicio", "insumos", "inventario"],
   staff:    ["inicio", "insumos", "inventario"],
   barista:  ["insumos", "inventario"],
