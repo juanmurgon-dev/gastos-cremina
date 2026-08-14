@@ -3,11 +3,12 @@
 import * as ventas from "./ventas.js";
 import * as margen from "./margen.js";
 import * as recetas from "./recetas.js";
+import * as meseros from "./meseros.js";
 
 export function render(el, ctx) {
   let sub = "ventas";
   el.innerHTML = `
-    <div class="segmented" style="font-size:13px"><button data-s="ventas">Ventas</button><button data-s="margen">Margen</button><button data-s="recetas">Recetas</button></div>
+    <div class="segmented" style="font-size:12.5px"><button data-s="ventas">Ventas</button><button data-s="margen">Margen</button><button data-s="recetas">Recetas</button><button data-s="meseros">Meseros</button></div>
     <div id="vhub"></div>`;
   const subEl = el.querySelector("#vhub");
   const btns = [...el.querySelectorAll(".segmented button")];
@@ -19,6 +20,7 @@ export function render(el, ctx) {
     subEl.innerHTML = "";
     limpiar = sub === "ventas" ? ventas.render(subEl, ctx)
       : sub === "margen" ? margen.render(subEl, ctx)
+      : sub === "meseros" ? meseros.render(subEl, ctx)
       : recetas.render(subEl, ctx);
   }
   marcar(); renderSub();

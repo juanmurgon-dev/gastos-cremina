@@ -47,6 +47,8 @@ export const state = {
   miRol: null,          // rol: owner|admin|gerente|chef|barista|ayudante|compras|staff
   miArea: null,         // área del rol acotado: 'barra' | 'cocina' | null (sin límite)
   rolCargado: false,    // ¿ya sabemos quién es? Hasta entonces no se enseña nada.
+  ordenesMesero: [],    // una fila por cuenta (se carga al abrir Ventas → Meseros)
+  errorMeseros: null,   // p.ej. "falta correr meseros.sql"
   orgNombre: null,      // nombre del restaurante (para mostrar en el encabezado)
   listo: false
 };
@@ -132,6 +134,52 @@ async function cargarMiOrg() {
   // no debe dibujar ninguna pantalla — no sabe a quién se la está enseñando.
   state.rolCargado = true;
   notify();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  DESEMPEÑO POR MESERO (una fila por cuenta, de `ordenes_mesero`)
+//
+//  NO se carga en init(): son miles de filas que solo le sirven a una
+//  pantalla. La vista de Meseros las pide cuando se abre.
+// ═══════════════════════════════════════════════════════════════════
+export async function cargarOrdenesMesero() {
+  const { filas, error } = await traerTodo("ordenes_mesero", "referencia");
+  if (error) { state.errorMeseros = error.message; notify(); return []; }
+  state.errorMeseros = null;
+  state.ordenesMesero = filas;
+  notify();
+  return filas;
+}
+
+// Guarda el reporte importado. Upsert por referencia: volver a subir el mismo
+// archivo (o uno que se traslape) corrige en vez de duplicar.
+export async function importarOrdenesMesero(filas) {
+  if (!Array.isArray(filas) || !filas.length) return { guardadas: 0 };
+  const LOTE = 500;
+  let guardadas = 0;
+  for (let i = 0; i < filas.length; i += LOTE) {
+    const trozo = filas.slice(i, i + LOTE).map((f) => ({
+      referencia: f.referencia,
+      fecha: f.fecha,
+      mesero: f.mesero || "",
+      tipo_orden: f.tipo_orden || "",
+      estatus: f.estatus || "",
+      mesa: f.mesa || "",
+      comensales: num(f.comensales),
+      total: num(f.total),
+      cafes: num(f.cafes),
+      postres: num(f.postres),
+      extras_uds: num(f.extras_uds),
+      extras_monto: num(f.extras_monto),
+      detalle: f.detalle || {},
+    }));
+    const { error } = await supabase.from("ordenes_mesero").upsert(trozo, { onConflict: "referencia" });
+    if (error) throw error;
+    guardadas += trozo.length;
+  }
+  await cargarOrdenesMesero();
+  logActividad("meseros", guardadas + " órdenes");
+  return { guardadas };
 }
 
 // ───────────── Roles y candados ─────────────
@@ -1255,13 +1303,24 @@ export async function borrarTicket(id) {
 
 export async function guardarConfig(cfg) {
   const merged = { ...state.config, ...cfg };
-  let error;
+  let error = null;
+
+  // Camino multi-tenant: una fila de config por restaurante.
   if (state.multiTenant && state.orgId) {
-    ({ error } = await supabase.from("config").upsert({ org_id: state.orgId, data: merged }, { onConflict: "org_id" }));
-  } else {
-    ({ error } = await supabase.from("config").upsert({ id: "app", data: merged }));
+    ({ error } = await supabase.from("config").upsert(
+      { org_id: state.orgId, data: merged }, { onConflict: "org_id" }));
   }
-  if (error) throw error;
+
+  // Respaldo: la tabla `config` puede seguir con su forma vieja — una sola
+  // fila con id='app', sin columna org_id. Pasa cuando se activaron los roles
+  // (que crean `miembros`, así que multiTenant queda en true) sin haber
+  // migrado config. Sin este respaldo, el guardado tronaba en silencio y el
+  // usuario perdía lo que acababa de capturar.
+  if (!state.multiTenant || !state.orgId || error) {
+    const r = await supabase.from("config").upsert({ id: "app", data: merged });
+    if (r.error) throw (error || r.error);
+  }
+
   state.config = merged;
   notify();
 }

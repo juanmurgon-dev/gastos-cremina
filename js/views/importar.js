@@ -133,6 +133,16 @@ const CAMPOS = {
   tipoLinea:  ["modificador producto cargo por servicio", "modificador producto", "tipo de linea"],
   idLinea:    ["id del articulo de la orden", "id de linea", "id articulo orden"],
   idPadre:    ["id padre", "articulo padre", "id del padre"],
+  // Desempeño por mesero: la hoja de órdenes trae quién atendió, y la de
+  // detalle trae los artículos. Se cruzan por el número de referencia, que
+  // es la única columna que comparten. Van ANTES que "venta", porque
+  // "total de orden" cae en los alias genéricos de "total".
+  referencia: ["numero de referencia", "referencia", "folio"],
+  usuario:    ["usuario", "mesero", "atendio", "cajero", "empleado"],
+  tipoOrden:  ["tipo de orden", "tipo orden"],
+  estatus:    ["estatus", "estado", "status"],
+  mesa:       ["mesa", "numero de mesa"],
+  totalOrden: ["total de orden", "total de la orden"],
   ordenes:    ["cantidad de ordenes", "cantidad ordenes", "numero de ordenes", "ordenes", "tickets", "cuentas"],
   comensales: ["cantidad comensales", "cantidad de comensales", "comensales", "personas"],
   categoria:  ["categoria de articulo", "categoria del articulo", "categoria", "familia",
@@ -277,12 +287,89 @@ function parseOrdenes(rows, mapa, hdr) {
     const d = dias.get(fecha);
     d.ordenes += 1;
     d.comensales += N(cel(r, mapa, "comensales"));
-    d.ventas_total += N(cel(r, mapa, "venta"));
+    // "venta" o "total de orden": desde que existe el concepto `totalOrden`
+    // (para el desglose por mesero), en esta hoja la columna del importe la
+    // reclama él. Sin este respaldo, los días entrarían con venta 0.
+    d.ventas_total += N(cel(r, mapa, "venta")) || N(cel(r, mapa, "totalOrden"));
   }
   return [...dias.values()].sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
 }
 
 // ── Venta por día ──
+// ═══════════════ DESEMPEÑO POR MESERO ═══════════════
+// El reporte de órdenes de Parrot trae dos hojas: una con una fila por cuenta
+// (y quién la atendió) y otra con una fila por artículo. Ninguna sirve sola:
+// la de artículos NO dice el mesero. Se cruzan por el número de referencia.
+//
+// Qué cuenta como qué (definido con los datos reales de julio 2026, y
+// cuadrado contra el scorecard hecho a mano):
+//   café   → artículos de la categoría "Barra de Café"
+//   postre → artículos de la categoría "Postres"
+//   extra  → MODIFICADORES pagados cuyo grupo (el paréntesis final del
+//            nombre, ej. "Aguacate (Extras Premium)") sea de Extras.
+//            Incluye "-2 pz huevo", que resta comida pero se cobra: así se
+//            midió julio y así se conservan comparables los históricos.
+const CAT_CAFE = norm("Barra de Café");
+const CAT_POSTRE = norm("Postres");
+const GRUPOS_EXTRA = [norm("Extras Proteína"), norm("Extras Premium")];
+
+function parseMeseros(gen) {
+  const k = gen.kpi;
+  // Sin la hoja de órdenes no hay mesero que valga: la de artículos no lo trae.
+  if (!k || k.mapa.referencia == null || k.mapa.usuario == null) return [];
+
+  const ord = new Map();
+  for (let i = k.hdr + 1; i < k.rows.length; i++) {
+    const r = k.rows[i];
+    if (!Array.isArray(r)) continue;
+    const ref = texto(cel(r, k.mapa, "referencia"));
+    const fecha = ddmmToISO(cel(r, k.mapa, "fecha"));
+    if (!ref || !fecha) continue;
+    ord.set(ref, {
+      referencia: ref,
+      fecha,
+      mesero: texto(cel(r, k.mapa, "usuario")),
+      tipo_orden: texto(cel(r, k.mapa, "tipoOrden")),
+      estatus: texto(cel(r, k.mapa, "estatus")),
+      mesa: texto(cel(r, k.mapa, "mesa")),
+      comensales: Math.round(N(cel(r, k.mapa, "comensales"))),
+      total: N(cel(r, k.mapa, "totalOrden")) || N(cel(r, k.mapa, "venta")),
+      cafes: 0, postres: 0, extras_uds: 0, extras_monto: 0,
+      detalle: { categorias: {}, extras: {} },
+    });
+  }
+  if (!ord.size) return [];
+
+  // Ahora las líneas: cada artículo suma a la cuenta a la que pertenece.
+  if (gen.mapa.referencia != null) {
+    for (let i = gen.hdr + 1; i < gen.rows.length; i++) {
+      const r = gen.rows[i];
+      if (!Array.isArray(r)) continue;
+      const o = ord.get(texto(cel(r, gen.mapa, "referencia")));
+      if (!o) continue;
+      const art = texto(cel(r, gen.mapa, "producto"));
+      const cat = texto(cel(r, gen.mapa, "categoria"));
+      const q = Math.round(N(cel(r, gen.mapa, "cantidad"))) || 0;
+      const monto = N(cel(r, gen.mapa, "venta"));
+
+      if (norm(texto(cel(r, gen.mapa, "tipoLinea"))) === "modificador") {
+        if (monto <= 0) continue;                       // los gratis no son venta
+        const m = /\(([^)]+)\)\s*$/.exec(art);          // el grupo va al final
+        if (!m || !GRUPOS_EXTRA.includes(norm(m[1]))) continue;
+        o.extras_uds += q;
+        o.extras_monto += monto;
+        o.detalle.extras[art] = (o.detalle.extras[art] || 0) + q;
+      } else {
+        if (!cat) continue;
+        o.detalle.categorias[cat] = (o.detalle.categorias[cat] || 0) + q;
+        if (norm(cat) === CAT_CAFE) o.cafes += q;
+        else if (norm(cat) === CAT_POSTRE) o.postres += q;
+      }
+    }
+  }
+  return [...ord.values()];
+}
+
 function parseVentasDia(rows, mapa, hdr) {
   const out = [];
   for (let i = hdr + 1; i < rows.length; i++) {
@@ -926,6 +1013,21 @@ export function montar(el) {
           logs.push(`✅ Venta por día · ${r.nuevos} día(s) · ${money(r.total)}${detalle}` +
             (r.conKpi ? ` · 👥 ${Math.round(r.comensales)} comensales` : " · ⚠️ sin comensales en el reporte"));
         } else if (it.tipo === "gen-lineas") {
+          // Si el libro trae también la hoja de órdenes (con la columna
+          // Usuario), de paso sale el desempeño por mesero. Va aparte y no
+          // debe tumbar la importación de ventas si algo falla.
+          try {
+            const ordm = parseMeseros(it.gen);
+            if (ordm.length) {
+              const rm = await store.importarOrdenesMesero(ordm);
+              const gente = new Set(ordm.map((o) => o.mesero).filter(Boolean)).size;
+              logs.push(`✅ Meseros · ${rm.guardadas} cuentas de ${gente} persona(s)`);
+            }
+          } catch (e) {
+            logs.push(`⚠️ Meseros: no pude guardarlo — ${(e && e.message) || e}` +
+              (String((e && e.message) || "").includes("ordenes_mesero")
+                ? " (¿ya corriste meseros.sql en Supabase?)" : ""));
+          }
           const p = parseLineasOrden(it.gen.rows, it.gen.mapa, it.gen.hdr);
           if (!p.prods.length) throw new Error("no encontré artículos vendidos en ese reporte");
           const r = await importarProducto(p);
