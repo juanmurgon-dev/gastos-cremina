@@ -1030,6 +1030,18 @@ export function montar(el) {
           }
           const p = parseLineasOrden(it.gen.rows, it.gen.mapa, it.gen.hdr);
           if (!p.prods.length) throw new Error("no encontré artículos vendidos en ese reporte");
+          // La venta por producto se guarda POR SEMANA, y este importador mete
+          // todo en la semana de la PRIMERA fecha. Con un archivo de varias
+          // semanas (el de órdenes suele traer mes y medio) eso aplasta seis
+          // semanas dentro de una y borra lo que esa semana ya tenía.
+          // Mejor no tocar las ventas: el desempeño por mesero, que es para lo
+          // que sirve ese archivo, ya se guardó arriba con su fecha correcta.
+          if (p.hasta && semanaDe(p.desde).desde !== semanaDe(p.hasta).desde) {
+            logs.push(`⏭️ Ventas por producto: NO las toqué. Ese archivo abarca ` +
+              `${labelRango(p.desde, p.hasta)} — varias semanas, y la venta se guarda semana por semana. ` +
+              `Para actualizar ventas sube el reporte de UNA semana.`);
+            continue;
+          }
           const r = await importarProducto(p);
           productosCargados = true;
           semanaRef = { desde: r.desde, hasta: r.hasta, periodo: r.periodo };
@@ -1083,7 +1095,10 @@ export function montar(el) {
       }
     }
     const okN = logs.filter((l) => l.startsWith("✅")).length;
-    const malN = logs.length - okN;
+    // Solo ❌ y ⚠️ son problemas. Antes se contaba "todo lo que no empiece con
+    // ✅", así que líneas informativas —los comensales rescatados, o algo que
+    // a propósito no se tocó— se reportaban como archivos fallidos.
+    const malN = logs.filter((l) => l.startsWith("❌") || l.startsWith("⚠️")).length;
     if (okN) { await store.recargarVentas(); store.logActividad("reporte", okN + " archivo(s)"); }
 
     let pie;
