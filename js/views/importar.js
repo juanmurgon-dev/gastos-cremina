@@ -334,8 +334,8 @@ function parseMeseros(gen) {
       mesa: texto(cel(r, k.mapa, "mesa")),
       comensales: Math.round(N(cel(r, k.mapa, "comensales"))),
       total: N(cel(r, k.mapa, "totalOrden")) || N(cel(r, k.mapa, "venta")),
-      cafes: 0, postres: 0, extras_uds: 0, extras_monto: 0,
-      detalle: { categorias: {}, extras: {} },
+      cafes: 0, postres: 0, extras_uds: 0, extras_monto: 0, bebidas: 0,
+      detalle: { categorias: {}, extras: {}, grupos: {} },
     });
   }
   if (!ord.size) return [];
@@ -355,7 +355,13 @@ function parseMeseros(gen) {
       if (norm(texto(cel(r, gen.mapa, "tipoLinea"))) === "modificador") {
         if (monto <= 0) continue;                       // los gratis no son venta
         const m = /\(([^)]+)\)\s*$/.exec(art);          // el grupo va al final
-        if (!m || !GRUPOS_EXTRA.includes(norm(m[1]))) continue;
+        const grupo = m ? m[1] : "";
+        // Todos los grupos pagados, para poder medir mañana algo que hoy no
+        // se mide sin volver a importar mes y medio de órdenes.
+        if (grupo) o.detalle.grupos[grupo] = (o.detalle.grupos[grupo] || 0) + q;
+        // Spritz y limonadas: la bebida que el mesero SÍ mueve, aparte del café.
+        if (/^(spritz|limonada)/i.test(art)) o.bebidas += q;
+        if (!GRUPOS_EXTRA.includes(norm(grupo))) continue;
         o.extras_uds += q;
         o.extras_monto += monto;
         o.detalle.extras[art] = (o.detalle.extras[art] || 0) + q;

@@ -171,6 +171,7 @@ export async function importarOrdenesMesero(filas) {
       postres: num(f.postres),
       extras_uds: num(f.extras_uds),
       extras_monto: num(f.extras_monto),
+      bebidas: num(f.bebidas),
       detalle: f.detalle || {},
     }));
     const { error } = await supabase.from("ordenes_mesero").upsert(trozo, { onConflict: "referencia" });
