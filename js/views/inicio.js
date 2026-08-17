@@ -332,6 +332,45 @@ function cargarOrden() {
 }
 function guardarOrden(ord) { try { localStorage.setItem("platify.inicio.orden", JSON.stringify(ord)); } catch (_) { /* sin storage */ } }
 
+// ── Comensales por canal (comedor vs para-llevar) ───────────────
+// Sale del reporte de órdenes, que es la única fuente que distingue el canal.
+// Se pide aparte y en diferido: son cuatro números y no vale la pena cargar
+// miles de órdenes al abrir la app. La clave evita pedirlo dos veces.
+let canalClave = null, canalDatos = null;
+function pedirCanal(desde, hasta, repintar) {
+  const clave = desde + "|" + hasta;
+  if (canalClave === clave) return;
+  canalClave = clave;                     // se marca ANTES de pedir: si no, cada
+  canalDatos = null;                      // repintado dispararía otra consulta
+  store.comensalesPorCanal(desde, hasta)
+    .then((d) => { if (canalClave === clave) { canalDatos = d; repintar(); } })
+    .catch(() => {});
+}
+
+function bloqueCanal(c, modoLbl) {
+  if (!c) return "";
+  const tot = c.comedor + c.llevar;
+  if (!tot) return "";
+  const pct = (v) => Math.round(v / tot * 100);
+  const tp = (venta, gente) => gente > 0 ? money(venta / gente) : "—";
+  const st = (ic, etq, n, p, sub) => `<div class="stat" style="min-width:0">
+    <div class="n" style="font-size:clamp(15px,5vw,21px)">${n.toLocaleString("es-MX")}</div>
+    <div class="l">${ic} ${etq} · ${p}%</div>
+    <div class="sub" style="font-size:10.5px;margin-top:2px">${sub}</div></div>`;
+  return `<div style="border-top:1px solid var(--linea);margin-top:14px;padding-top:12px">
+    <div class="sub" style="margin:0 0 8px">Dónde estuvo la gente${info.iconoTip({
+      t: "Comensales por canal",
+      q: "Cuántas personas comieron en la casa y cuántas se lo llevaron.",
+      c: "Personas de órdenes cerradas con venta, partidas por el tipo de orden de Parrot: Comedor o Para llevar.",
+      d: "Sale del reporte de órdenes (el Excel de 2 hojas), no del reporte de productos — es el único que distingue el canal. Si el número no cuadra con los comensales de arriba, es porque ese sale del encabezado del otro reporte.",
+    })}</div>
+    <div class="row-stats">
+      ${st("🍽️", "En mesa", c.comedor, pct(c.comedor), `${c.ctasComedor} mesas · ${tp(c.ventaComedor, c.comedor)} p/persona`)}
+      ${st("🥡", "Para llevar", c.llevar, pct(c.llevar), `${c.ctasLlevar} órdenes · ${tp(c.ventaLlevar, c.llevar)} p/persona`)}
+    </div>
+  </div>`;
+}
+
 function renderOwner(el) {
   let modo = "semana";
   try { const m = localStorage.getItem("platify.inicio.modo"); if (m === "dia" || m === "semana" || m === "mes" || m === "año") modo = m; } catch (_) { /* sin storage */ }
@@ -346,6 +385,7 @@ function renderOwner(el) {
     const r = rangoPeriodo(modo, off);
     const hoyISO = store.hoyISO();
     const finReal = (r.esActual && r.hasta > hoyISO) ? hoyISO : r.hasta;
+    pedirCanal(r.desde, finReal, pintar);   // en diferido; repinta cuando llega
     const modoLbl = modo === "dia" ? "del día" : modo === "semana" ? "de la semana" : modo === "mes" ? "del mes" : "del año";
 
     // ── Agregados del periodo elegido ──
@@ -470,6 +510,7 @@ function renderOwner(el) {
           <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.tPersona > 0 ? money(km.tPersona) : "—"}</div><div class="l">Por persona${trendKpi(km.tPersona, kmPrev.tPersona)}</div></div>
           <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${km.tCuenta > 0 ? money(km.tCuenta) : "—"}</div><div class="l">Por cuenta${trendKpi(km.tCuenta, kmPrev.tCuenta)}</div></div>
         </div>
+        ${bloqueCanal(canalDatos, modoLbl)}
       </div>` : "";
 
     cards.rentabilidad = `<div class="card">

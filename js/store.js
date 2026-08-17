@@ -151,6 +151,24 @@ export async function cargarOrdenesMesero() {
   return filas;
 }
 
+// Comensales y venta partidos por canal (comedor vs para-llevar), para un
+// rango. Trae SOLO tres columnas del periodo pedido en vez de las miles de
+// órdenes completas: Inicio necesita cuatro números, no el detalle.
+// Devuelve null si la tabla no existe todavía — quien llame que no pinte nada.
+export async function comensalesPorCanal(desde, hasta) {
+  const { data, error } = await supabase.from("ordenes_mesero")
+    .select("tipo_orden, comensales, total")
+    .gte("fecha", desde).lte("fecha", hasta).eq("estatus", "Cerrada");
+  if (error) return null;
+  const r = { comedor: 0, llevar: 0, ctasComedor: 0, ctasLlevar: 0, ventaComedor: 0, ventaLlevar: 0 };
+  for (const o of data || []) {
+    if (num(o.total) <= 0) continue;             // cuentas en cero: prueba o error
+    if (o.tipo_orden === "Comedor") { r.comedor += num(o.comensales); r.ctasComedor++; r.ventaComedor += num(o.total); }
+    else { r.llevar += num(o.comensales); r.ctasLlevar++; r.ventaLlevar += num(o.total); }
+  }
+  return (r.comedor || r.llevar) ? r : null;
+}
+
 // Guarda el reporte importado. Upsert por referencia: volver a subir el mismo
 // archivo (o uno que se traslape) corrige en vez de duplicar.
 export async function importarOrdenesMesero(filas) {
