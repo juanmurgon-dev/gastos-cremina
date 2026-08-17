@@ -128,6 +128,78 @@ function calcular(desde, hasta) {
 
 const sem = (v, meta) => v >= meta ? "var(--verde,#0e7a4a)" : v >= meta * 0.75 ? "var(--amarillo,#b8860b)" : "var(--rojo,#b3261e)";
 
+// ── Qué significa cada número ───────────────────────────────────
+// Estos indicadores tienen definiciones que NO son obvias, y una mal
+// entendida en una junta se vuelve una decisión mal tomada. El attach de
+// postre ya nos costó una confusión: no es "postres vendidos", es "mesas
+// que llevaron postre", y da distinto.
+//   q = qué es · c = cómo se calcula · d = de dónde sale el dato
+const INFO = {
+  filtros: { t: "Qué entra en estos números",
+    q: "Solo el servicio de mesa. No entra el para-llevar ni las cuentas en cero.",
+    c: "Se toman las órdenes con tipo «Comedor», estatus «Cerrada» y venta mayor a cero. Una cuenta en $0 es una prueba o un error de captura.",
+    d: "El para-llevar se excluye porque no hay mesero que atienda una mesa: en julio, Kenya tenía 478 órdenes en total pero solo 80 de comedor." },
+  cuentas: { t: "Cuentas",
+    q: "Cuántas mesas atendió en el periodo.",
+    c: "Una por cada orden de comedor cerrada con venta.",
+    d: "Reporte de órdenes de Parrot, hoja «Reporte de órdenes». La persona sale de la columna Usuario." },
+  comensales: { t: "Comensales",
+    q: "Cuántas personas atendió en total, sumando todas sus mesas.",
+    c: "Suma de la columna Comensales de sus cuentas.",
+    d: "Lo captura el mesero al abrir la mesa en Parrot. Si alguien no lo captura bien, su ticket por persona sale raro." },
+  tkt: { t: "Ticket por persona",
+    q: "Cuánto dejó en promedio cada persona que atendió.",
+    c: "Su venta total dividida entre sus comensales.",
+    d: "Por persona y no por cuenta, porque una mesa de 6 y una de 2 no son comparables. En julio el equipo quedó en $296." },
+  cafe: { t: "Cafés por cuenta",
+    q: "Cuántos cafés se llevó en promedio cada mesa que atendió.",
+    c: "Unidades de la categoría «Barra de Café» divididas entre sus cuentas.",
+    d: "Ojo al leerlo: en julio los tres de piso quedaron entre 1.47 y 1.63 — están casi iguales. Eso apunta a un techo del sistema, no a que uno sea mejor que otro. Por eso el café NO entra en la competencia." },
+  postre: { t: "Postre (attach)",
+    q: "De cada 100 mesas que atendió, en cuántas se llevaron postre.",
+    c: "Cuentas que llevaron AL MENOS UN postre, divididas entre sus cuentas. NO son postres vendidos: dos postres en una misma mesa cuentan como una.",
+    d: "Categoría «Postres» de Parrot. Se mide así porque lo que se entrena es lograr que la mesa pida postre, no que la que ya lo pidió pida más." },
+  extras: { t: "Extras por cuenta",
+    q: "Cuántos extras pagados logró vender en promedio por mesa.",
+    c: "Modificadores pagados de los grupos «Extras Proteína» y «Extras Premium», divididos entre sus cuentas.",
+    d: "Incluye «-2 pz huevo», que en realidad QUITA comida pero se cobra: son 86 de los 378 extras de julio. Se dejó dentro para que tus números históricos sigan comparables, pero no es upsell coacheable — vale la pena decirlo en la junta." },
+  extrasDinero: { t: "Extras en dinero",
+    q: "Cuánto dinero entró por esos extras.",
+    c: "Suma del importe de esos modificadores.",
+    d: "En julio fueron $21,340 en total. Si todo el piso llegara al 0.72 por cuenta de Giselle, serían unos 60 extras más al mes: misma comida, más venta." },
+  aguacate: { t: "Aguacate por cuenta",
+    q: "Qué tanto ofrece el extra más fácil de vender.",
+    c: "Unidades de «Aguacate (Extras Premium)» divididas entre sus cuentas.",
+    d: "Es el mejor ejemplo de que los extras SÍ se coachean: en julio Giselle 0.20 y Leo 0.18 contra Alexa 0.07, siendo Alexa la de más volumen." },
+  marcador: { t: "Cómo se ordena el marcador",
+    q: "Gana quien mejor ofrece, no quien tuvo más mesas.",
+    c: "Se ordena por la tasa por cuenta y se muestra el volumen al lado.",
+    d: "Si se ordenara por total ganaría siempre quien atendió más mesas. En julio Alexa hizo 138 extras (la que más) con 0.58 por cuenta, y Giselle 91 con 0.72. Quien mejor ofrece es Giselle." },
+};
+
+// El ⓘ tiene que ser tocable con el dedo: en el celular no existe el hover,
+// así que abre una ficha en vez de un tooltip.
+const ico = (k) => `<button data-info="${k}" title="¿Qué es esto?" style="border:none;background:none;padding:0 0 0 3px;cursor:pointer;color:var(--gris,#8a8a8a);font-size:12px;line-height:1;vertical-align:middle">ⓘ</button>`;
+
+function abrirInfo(k) {
+  const i = INFO[k];
+  if (!i) return;
+  const rot = (t) => `<div class="sub" style="font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;margin:14px 0 3px">${t}</div>`;
+  const bg = document.createElement("div");
+  bg.className = "modal-bg";
+  bg.innerHTML = `<div class="modal" style="text-align:left">
+    <h2 style="margin:0 0 6px">${esc(i.t)}</h2>
+    <p style="margin:0;font-size:15px;line-height:1.4">${esc(i.q)}</p>
+    ${rot("Cómo se calcula")}<p style="margin:0;font-size:13.5px;line-height:1.45">${esc(i.c)}</p>
+    ${rot("De dónde sale")}<p style="margin:0;font-size:13.5px;line-height:1.45;color:var(--gris,#666)">${esc(i.d)}</p>
+    <button class="btn sec" data-cerrar style="margin-top:18px">Cerrar</button>
+  </div>`;
+  document.body.appendChild(bg);
+  const cerrar = () => bg.remove();
+  bg.addEventListener("click", (e) => { if (e.target === bg) cerrar(); });
+  bg.querySelector("[data-cerrar]").addEventListener("click", cerrar);
+}
+
 export function render(el) {
   let periodo = "mes", verAjustes = false, semanaSel = null;
   let cargando = !(store.state.ordenesMesero || []).length;
@@ -163,12 +235,12 @@ export function render(el) {
       ${selector(r)}
 
       <div class="card">
-        <h2 style="margin-top:0">🏁 Marcador · ${esc(r.txt)}</h2>
+        <h2 style="margin-top:0">🏁 Marcador · ${esc(r.txt)}${ico("marcador")}</h2>
         <p class="sub" style="margin-top:-6px">Se ordena por <b>tasa por cuenta</b>, que es lo justo entre quien
         atendió ${eq.cuentas ? Math.max(...lista.map((p) => p.cuentas)) : 0} mesas y quien atendió menos. El volumen va al lado.</p>
         <div style="display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
-          ${tarjetaPodio("Extras por cuenta", pExtras, "extrasCuenta", "extras", MED, metas.extrasCuenta, (v) => v.toFixed(2))}
-          ${tarjetaPodio("Postre en la mesa", pPostre, "attach", "ctasPostre", MED, metas.attachPostre, (v) => (v * 100).toFixed(0) + "%")}
+          ${tarjetaPodio("Extras por cuenta", pExtras, "extrasCuenta", "extras", MED, metas.extrasCuenta, (v) => v.toFixed(2), "extras")}
+          ${tarjetaPodio("Postre en la mesa", pPostre, "attach", "ctasPostre", MED, metas.attachPostre, (v) => (v * 100).toFixed(0) + "%", "postre")}
         </div>
         ${lista.some((p) => p.chica && compite(p.mesero)) ? `<p class="sub" style="margin:12px 2px 0;font-size:11.5px">
           Fuera del podio por muestra chica (menos de ${MIN_CUENTAS} cuentas):
@@ -183,12 +255,14 @@ export function render(el) {
           <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:640px">
             <thead><tr style="text-align:right">
               <th style="text-align:left;padding:6px 4px">Mesero</th>
-              <th style="padding:6px 4px">Cuentas</th><th style="padding:6px 4px">Comensales</th>
-              <th style="padding:6px 4px">Ticket/pers</th>
-              <th style="padding:6px 4px">Café/cta<br><span class="sub" style="font-weight:400">meta ${metas.cafeCuenta.toFixed(1)}</span></th>
-              <th style="padding:6px 4px">Postre<br><span class="sub" style="font-weight:400">meta ${(metas.attachPostre * 100).toFixed(0)}%</span></th>
-              <th style="padding:6px 4px">Extras/cta<br><span class="sub" style="font-weight:400">meta ${metas.extrasCuenta.toFixed(2)}</span></th>
-              <th style="padding:6px 4px">Extras $</th><th style="padding:6px 4px">Aguacate/cta</th>
+              <th style="padding:6px 4px">Cuentas${ico("cuentas")}</th>
+              <th style="padding:6px 4px">Comensales${ico("comensales")}</th>
+              <th style="padding:6px 4px">Ticket/pers${ico("tkt")}</th>
+              <th style="padding:6px 4px">Café/cta${ico("cafe")}<br><span class="sub" style="font-weight:400">meta ${metas.cafeCuenta.toFixed(1)}</span></th>
+              <th style="padding:6px 4px">Postre${ico("postre")}<br><span class="sub" style="font-weight:400">meta ${(metas.attachPostre * 100).toFixed(0)}%</span></th>
+              <th style="padding:6px 4px">Extras/cta${ico("extras")}<br><span class="sub" style="font-weight:400">meta ${metas.extrasCuenta.toFixed(2)}</span></th>
+              <th style="padding:6px 4px">Extras $${ico("extrasDinero")}</th>
+              <th style="padding:6px 4px">Aguacate/cta${ico("aguacate")}</th>
             </tr></thead>
             <tbody>${lista.map((p) => filaScore(p, metas)).join("")}</tbody>
             <tfoot><tr style="text-align:right;border-top:2px solid var(--linea);font-weight:800">
@@ -203,8 +277,8 @@ export function render(el) {
           </table>
         </div>
         <p class="sub" style="margin:10px 2px 0;font-size:11.5px">
-          Solo comedor, cuentas cerradas con venta. <b>Postre</b> = porcentaje de mesas que se llevaron postre,
-          no postres vendidos. <b>Extras</b> = modificadores pagados de Extras Proteína y Premium.</p>
+          Solo comedor, cuentas cerradas con venta.${ico("filtros")}
+          Toca la ⓘ de cualquier columna para ver qué significa y de dónde sale.</p>
       </div>
 
       <div class="card">
@@ -213,6 +287,7 @@ export function render(el) {
       </div>`;
 
     wireSel();
+    wireInfo();
     el.querySelector("#mAjustes").onclick = () => { verAjustes = !verAjustes; pintar(); };
     if (verAjustes) wireAjustes(lista);
   }
@@ -235,6 +310,12 @@ export function render(el) {
     const s = el.querySelector("#mSemana");
     if (s) s.addEventListener("change", () => { semanaSel = s.value; pintar(); });
   }
+  // Un solo listener delegado: los ⓘ se repintan con la tabla y así no hay
+  // que volver a engancharlos uno por uno cada vez.
+  function wireInfo() {
+    el.querySelectorAll("[data-info]").forEach((b) =>
+      b.addEventListener("click", (e) => { e.preventDefault(); abrirInfo(b.dataset.info); }));
+  }
   function wireAjustes(lista) {
     el.querySelectorAll("[data-compite]").forEach((c) => c.addEventListener("change", async () => {
       const m = { ...cfg().compiten, [c.dataset.compite]: c.checked };
@@ -255,10 +336,11 @@ export function render(el) {
   return () => { if (typeof unsub === "function") unsub(); };
 }
 
-function tarjetaPodio(titulo, arr, campo, campoVol, MED, meta, fmt) {
-  if (!arr.length) return `<div><h3 style="margin:0 0 8px;font-size:14px">${esc(titulo)}</h3><div class="sub">Sin datos suficientes.</div></div>`;
+function tarjetaPodio(titulo, arr, campo, campoVol, MED, meta, fmt, infoK) {
+  const enc = `<h3 style="margin:0 0 8px;font-size:14px">${esc(titulo)}${infoK ? ico(infoK) : ""}</h3>`;
+  if (!arr.length) return `<div>${enc}<div class="sub">Sin datos suficientes.</div></div>`;
   return `<div>
-    <h3 style="margin:0 0 8px;font-size:14px">${esc(titulo)}</h3>
+    ${enc}
     ${arr.map((p, i) => `
       <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--linea)">
         <span style="width:22px;font-size:15px">${MED[i] || ""}</span>
