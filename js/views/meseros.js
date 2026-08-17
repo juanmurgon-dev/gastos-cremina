@@ -30,7 +30,39 @@ const compite = (nombre) => cfg().compiten[nombre] !== false;
 // ── Periodos ────────────────────────────────────────────────────
 const hoy = () => new Date();
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-function rangoDe(clave) {
+const MES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+// Semanas de lunes a domingo, igual que el resto de la app (la venta por
+// producto se guarda así). Para la junta semanal hay que poder señalar UNA
+// semana concreta — "los últimos 7 días" cambia de significado cada día que
+// pasa y no sirve para comparar una junta con la anterior.
+function lunesDe(fechaISO) {
+  const d = new Date(fechaISO + "T12:00:00");
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));   // 0 = lunes
+  return iso(d);
+}
+function masDias(fechaISO, n) {
+  const d = new Date(fechaISO + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  return iso(d);
+}
+function etiquetaSemana(lunes) {
+  const [, m1, d1] = lunes.split("-");
+  const dom = masDias(lunes, 6);
+  const [, m2, d2] = dom.split("-");
+  return m1 === m2
+    ? `${+d1} – ${+d2} ${MES_CORTO[+m2 - 1]}`
+    : `${+d1} ${MES_CORTO[+m1 - 1]} – ${+d2} ${MES_CORTO[+m2 - 1]}`;
+}
+// Solo las semanas que tienen órdenes: ofrecer semanas vacías es ofrecer
+// pantallas en blanco.
+function semanasConDatos() {
+  const s = new Set();
+  for (const o of store.state.ordenesMesero || []) if (o.fecha) s.add(lunesDe(o.fecha));
+  return [...s].sort().reverse();
+}
+
+function rangoDe(clave, semana) {
   const d = hoy();
   if (clave === "mes") return { desde: iso(new Date(d.getFullYear(), d.getMonth(), 1)), hasta: iso(d), txt: "Este mes" };
   if (clave === "mespasado") {
@@ -38,8 +70,8 @@ function rangoDe(clave) {
     return { desde: iso(ini), hasta: iso(new Date(d.getFullYear(), d.getMonth(), 0)), txt: "Mes pasado" };
   }
   if (clave === "semana") {
-    const ini = new Date(d); ini.setDate(d.getDate() - 6);
-    return { desde: iso(ini), hasta: iso(d), txt: "Últimos 7 días", corto: true };
+    const lun = semana || lunesDe(iso(d));
+    return { desde: lun, hasta: masDias(lun, 6), txt: "Semana " + etiquetaSemana(lun), corto: true };
   }
   return { desde: "0000-01-01", hasta: "9999-12-31", txt: "Todo lo cargado" };
 }
@@ -97,7 +129,7 @@ function calcular(desde, hasta) {
 const sem = (v, meta) => v >= meta ? "var(--verde,#0e7a4a)" : v >= meta * 0.75 ? "var(--amarillo,#b8860b)" : "var(--rojo,#b3261e)";
 
 export function render(el) {
-  let periodo = "mes", verAjustes = false;
+  let periodo = "mes", verAjustes = false, semanaSel = null;
   let cargando = !(store.state.ordenesMesero || []).length;
 
   const unsub = store.subscribe(pintar);
@@ -105,7 +137,10 @@ export function render(el) {
   pintar();
 
   function pintar() {
-    const r = rangoDe(periodo);
+    // La semana arranca en la más reciente CON DATOS, no en la de hoy: si es
+    // lunes en la mañana y aún no se importa nada, la de hoy está vacía.
+    if (periodo === "semana" && !semanaSel) semanaSel = semanasConDatos()[0] || null;
+    const r = rangoDe(periodo, semanaSel);
     const { lista, eq } = calcular(r.desde, r.hasta);
     const metas = cfg().metas;
 
@@ -139,7 +174,7 @@ export function render(el) {
           Fuera del podio por muestra chica (menos de ${MIN_CUENTAS} cuentas):
           ${esc(lista.filter((p) => p.chica && compite(p.mesero)).map((p) => `${p.mesero} (${p.cuentas})`).join(", "))}.
           Sus números sí aparecen abajo.</p>` : ""}
-        ${r.corto ? `<p class="sub" style="margin:8px 2px 0;font-size:11.5px">⚠️ Siete días es poca muestra: tómalo como preliminar. El marcador que cuenta es el del mes.</p>` : ""}
+        ${r.corto ? `<p class="sub" style="margin:8px 2px 0;font-size:11.5px">⚠️ Una semana son ~45 cuentas por persona: con esa muestra un mal martes te cambia al líder. Úsalo para la junta y para dar seguimiento, pero <b>el marcador que cuenta es el del mes</b>.</p>` : ""}
       </div>
 
       <div class="card">
@@ -184,14 +219,21 @@ export function render(el) {
 
   function selector(r) {
     const op = (k, t) => `<button data-p="${k}" class="btn sec chico" style="flex:1${k === periodo ? ";background:var(--verde,#0e3a39);color:#fff;border-color:transparent" : ""}">${t}</button>`;
+    const semanas = semanasConDatos();
     return `<div class="card" style="padding:10px">
-      <div class="fila" style="gap:6px">${op("mes", "Este mes")}${op("mespasado", "Mes pasado")}${op("semana", "7 días")}${op("todo", "Todo")}</div>
+      <div class="fila" style="gap:6px">${op("semana", "Semana")}${op("mes", "Este mes")}${op("mespasado", "Mes pasado")}${op("todo", "Todo")}</div>
+      ${periodo === "semana" ? (semanas.length
+        ? `<select id="mSemana" style="margin-top:8px;width:100%">${semanas.map((s) =>
+            `<option value="${s}"${s === semanaSel ? " selected" : ""}>${esc(etiquetaSemana(s))}</option>`).join("")}</select>`
+        : `<div class="sub" style="margin-top:8px">Todavía no hay semanas cargadas.</div>`) : ""}
       <div class="sub" style="margin-top:8px;font-size:11.5px">${esc(r.desde)} → ${esc(r.hasta)}</div>
     </div>`;
   }
   function wireSel() {
     el.querySelectorAll("[data-p]").forEach((b) =>
       b.addEventListener("click", () => { periodo = b.dataset.p; pintar(); }));
+    const s = el.querySelector("#mSemana");
+    if (s) s.addEventListener("change", () => { semanaSel = s.value; pintar(); });
   }
   function wireAjustes(lista) {
     el.querySelectorAll("[data-compite]").forEach((c) => c.addEventListener("change", async () => {
