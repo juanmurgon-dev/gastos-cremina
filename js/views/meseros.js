@@ -208,7 +208,12 @@ export function render(el) {
     const otros = lista.filter((p) => !compite(p.mesero));
     const cols = [...piso, ...otros];
 
+    // Si nadie tiene bebidas, es que falta la columna o falta re-importar.
+    // Decirlo es mejor que enseñar una fila de ceros que parece un dato real.
+    const sinBebidas = !lista.some((p) => num(p.bebidas) > 0);
+
     el.innerHTML = selector(r)
+      + (sinBebidas ? avisoBebidas() : "")
       + bloqueComedor(cols, piso.length, eq, metas, r)
       + bloqueRatios(cols, piso.length, eq)
       + bloqueVenta(cols, piso.length, eq)
@@ -440,6 +445,16 @@ export function render(el) {
     const actual = (store.state.config && store.state.config.meseros) || {};
     try { await store.guardarConfig({ meseros: { ...actual, ...patch } }); pintar(); }
     catch (e) { alert("No pude guardar: " + ((e && e.message) || e)); }
+  }
+
+  function avisoBebidas() {
+    return `<div class="card" style="border-left:4px solid var(--naranja,#c0622a)">
+      <b>Las bebidas salen en cero, y faltan dos pasos.</b>
+      <p class="sub" style="margin:6px 0 0">1. En Supabase, corre esta línea:</p>
+      <div style="background:var(--fondo-2,#f6f6f4);border-radius:8px;padding:9px 11px;margin:6px 0;font-family:ui-monospace,monospace;font-size:11.5px;overflow-x:auto;white-space:nowrap">alter table public.ordenes_mesero add column if not exists bebidas int not null default 0;</div>
+      <p class="sub" style="margin:0">2. Vuelve a subir el reporte de órdenes en <b>Insumos → Importar</b>.
+      Los spritz y limonadas ya venían en el archivo; solo no había dónde guardarlos.</p>
+    </div>`;
   }
 
   function vacio() {

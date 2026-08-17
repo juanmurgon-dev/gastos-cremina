@@ -174,7 +174,15 @@ export async function importarOrdenesMesero(filas) {
       bebidas: num(f.bebidas),
       detalle: f.detalle || {},
     }));
-    const { error } = await supabase.from("ordenes_mesero").upsert(trozo, { onConflict: "referencia" });
+    let { error } = await supabase.from("ordenes_mesero").upsert(trozo, { onConflict: "referencia" });
+    // `bebidas` se agregó después. Si la base todavía no la tiene, PostgREST
+    // rechaza el lote ENTERO y no entraría ni una orden. Mejor guardar todo lo
+    // demás y que solo falte esa columna, que perder la importación completa.
+    if (error && /bebidas/i.test(error.message || "")) {
+      state.faltaBebidas = true;
+      const sinBebidas = trozo.map(({ bebidas, ...r }) => r);
+      ({ error } = await supabase.from("ordenes_mesero").upsert(sinBebidas, { onConflict: "referencia" }));
+    }
     if (error) throw error;
     guardadas += trozo.length;
   }
