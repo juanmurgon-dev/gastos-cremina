@@ -175,6 +175,7 @@ export async function importarOrdenesMesero(filas) {
   if (!Array.isArray(filas) || !filas.length) return { guardadas: 0 };
   const LOTE = 500;
   let guardadas = 0;
+  state.faltaBebidas = null;
   for (let i = 0; i < filas.length; i += LOTE) {
     const trozo = filas.slice(i, i + LOTE).map((f) => ({
       referencia: f.referencia,
@@ -197,7 +198,10 @@ export async function importarOrdenesMesero(filas) {
     // rechaza el lote ENTERO y no entraría ni una orden. Mejor guardar todo lo
     // demás y que solo falte esa columna, que perder la importación completa.
     if (error && /bebidas/i.test(error.message || "")) {
-      state.faltaBebidas = true;
+      // Se guarda el motivo, no solo una bandera: antes se encendía un flag que
+      // nadie leía, así que la importación decía "listo" mientras tiraba esta
+      // columna en silencio. Un fallo callado es peor que uno ruidoso.
+      state.faltaBebidas = error.message || "la columna `bebidas` no existe";
       const sinBebidas = trozo.map(({ bebidas, ...r }) => r);
       ({ error } = await supabase.from("ordenes_mesero").upsert(sinBebidas, { onConflict: "referencia" }));
     }
@@ -206,7 +210,7 @@ export async function importarOrdenesMesero(filas) {
   }
   await cargarOrdenesMesero();
   logActividad("meseros", guardadas + " órdenes");
-  return { guardadas };
+  return { guardadas, faltaBebidas: state.faltaBebidas };
 }
 
 // ═══════════════════════════════════════════════════════════════════

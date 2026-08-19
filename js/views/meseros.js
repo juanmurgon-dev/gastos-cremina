@@ -449,11 +449,17 @@ export function render(el) {
 
   function avisoBebidas() {
     return `<div class="card" style="border-left:4px solid var(--naranja,#c0622a)">
-      <b>Las bebidas salen en cero, y faltan dos pasos.</b>
-      <p class="sub" style="margin:6px 0 0">1. En Supabase, corre esta línea:</p>
-      <div style="background:var(--fondo-2,#f6f6f4);border-radius:8px;padding:9px 11px;margin:6px 0;font-family:ui-monospace,monospace;font-size:11.5px;overflow-x:auto;white-space:nowrap">alter table public.ordenes_mesero add column if not exists bebidas int not null default 0;</div>
-      <p class="sub" style="margin:0">2. Vuelve a subir el reporte de órdenes en <b>Insumos → Importar</b>.
-      Los spritz y limonadas ya venían en el archivo; solo no había dónde guardarlos.</p>
+      <b>Las bebidas salen en cero.</b>
+      <p class="sub" style="margin:6px 0 0">Los spritz y limonadas SÍ vienen en tu Excel — el problema es que la
+      base todavía no tiene dónde guardarlos. Corre las <b>dos</b> líneas en el SQL Editor:</p>
+      <div style="background:var(--fondo-2,#f6f6f4);border-radius:8px;padding:9px 11px;margin:8px 0;font-family:ui-monospace,monospace;font-size:11.5px;overflow-x:auto">
+        <div style="white-space:nowrap">alter table public.ordenes_mesero add column if not exists bebidas int not null default 0;</div>
+        <div style="white-space:nowrap;margin-top:4px">notify pgrst, 'reload schema';</div>
+      </div>
+      <p class="sub" style="margin:0">La segunda es la que suele faltar: Supabase guarda en memoria la forma de
+      cada tabla, y sin refrescarla sigue creyendo que esa columna no existe aunque ya la hayas creado.</p>
+      <p class="sub" style="margin:8px 0 0">Después vuelve a subir el reporte en <b>Insumos → Importar</b>.
+      Si al terminar aparece un ⚠️ hablando de bebidas, es que la base sigue sin verla.</p>
     </div>`;
   }
 
