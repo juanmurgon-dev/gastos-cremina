@@ -231,7 +231,7 @@ export function render(el) {
       + (sinBebidas ? avisoBebidas() : "")
       + bloqueComedor(cols, piso.length, eq, metas, r)
       + bloqueRatios(cols, piso.length, eq)
-      + bloqueVenta(cols, piso.length, eq)
+      + bloqueVenta(cols, piso.length, eq, r)
       + focos(lista, eq, metas, r)
       + leyenda()
       + marcador(lista, eq, metas, r)
@@ -314,7 +314,7 @@ export function render(el) {
     }, cols, nPiso);
   }
 
-  function bloqueVenta(cols, nPiso, eq) {
+  function bloqueVenta(cols, nPiso, eq, r) {
     const prom = num(eq.ventaComensal);
     const f = [
       fila("Venta total", "", "ventaTotal", cols, eq, "tVenta", (v) => money(v), null),
@@ -323,7 +323,34 @@ export function render(el) {
       fila("Efectividad", "vs promedio del equipo", "efectividad", cols, eq, "ventaComensal",
         (v) => prom ? Math.round(v / prom * 100) + "%" : "—", prom || null, true),
     ].join("");
-    return tabla({ head: seccion("Venta total y efectividad", "Todos los canales: comedor + para-llevar"), filas: f }, cols, nPiso);
+    return tabla({ head: seccion("Venta total y efectividad", "Todos los canales: comedor + para-llevar"), filas: f }, cols, nPiso)
+      + cotejoCortes(eq, r);
+  }
+
+  // La app tiene TRES fuentes de venta: los cortes de caja (lo que ve Inicio),
+  // el encabezado del reporte de productos, y el reporte de órdenes (esto).
+  // Si no se importan igual de completas dan números distintos, y ver 45k en
+  // Inicio y 23k aquí sin explicación destruye la confianza en la herramienta.
+  // Mejor decirlo, con la diferencia y su causa probable.
+  function cotejoCortes(eq, r) {
+    if (!store.cortesEnRango || r.desde === "0000-01-01") return "";
+    const corte = store.cortesEnRango(r.desde, r.hasta).reduce((a, c) => a + num(c.ventas_total), 0);
+    const ordenes = num(eq.tVenta);
+    if (!corte || !ordenes) return "";
+    const dif = Math.abs(corte - ordenes) / Math.max(corte, ordenes);
+    if (dif < 0.05) return "";                       // diferencias chicas son ruido de redondeo
+    const faltaAqui = ordenes < corte;
+    return `<div class="card" style="border-left:4px solid var(--amarillo,#b8860b)">
+      <b>Este total no cuadra con el de Inicio.</b>
+      <p class="sub" style="margin:6px 0 0">
+        Aquí (reporte de órdenes): <b>${money(ordenes)}</b> ·
+        En Inicio (cortes de caja): <b>${money(corte)}</b> ·
+        diferencia ${Math.round(dif * 100)}%.</p>
+      <p class="sub" style="margin:6px 0 0">Son dos fuentes distintas y se importan por separado.
+        ${faltaAqui
+          ? "El más bajo es éste, así que lo más probable es que falten reportes de órdenes por subir — revisa arriba si el periodo tiene días sin datos."
+          : "El más bajo es el de Inicio, así que probablemente falten cortes de caja de esos días."}</p>
+    </div>`;
   }
 
   // ── Focos de coaching ─────────────────────────────────────────
