@@ -122,7 +122,10 @@ function calcular(desde, hasta) {
   eq.ventaComensal = eq.tComensales ? eq.tVenta / eq.tComensales : 0;
 
   lista.sort((a, b) => b.cuentas - a.cuentas);
-  return { lista, eq, comedor };
+  // Qué días del periodo tienen órdenes. Sirve para avisar cuándo el total
+  // que se muestra NO es el del periodo completo.
+  const dias = new Set(todos.map((o) => o.fecha));
+  return { lista, eq, comedor, dias };
 }
 
 // ── Qué significa cada número ───────────────────────────────────
@@ -202,7 +205,7 @@ export function render(el) {
   function pintar() {
     if (periodo === "semana" && !semanaSel) semanaSel = semanasConDatos()[0] || null;
     const r = rangoDe(periodo, semanaSel);
-    const { lista, eq } = calcular(r.desde, r.hasta);
+    const { lista, eq, dias } = calcular(r.desde, r.hasta);
     const metas = cfg().metas;
 
     if (store.state.errorMeseros) {
@@ -224,6 +227,7 @@ export function render(el) {
     const sinBebidas = !lista.some((p) => num(p.bebidas) > 0);
 
     el.innerHTML = selector(r)
+      + avisoDiasFaltantes(r, dias)
       + (sinBebidas ? avisoBebidas() : "")
       + bloqueComedor(cols, piso.length, eq, metas, r)
       + bloqueRatios(cols, piso.length, eq)
@@ -472,6 +476,30 @@ export function render(el) {
     const actual = (store.state.config && store.state.config.meseros) || {};
     try { await store.guardarConfig({ meseros: { ...actual, ...patch } }); pintar(); }
     catch (e) { alert("No pude guardar: " + ((e && e.message) || e)); }
+  }
+
+  // Si al periodo le faltan días, TODO lo de abajo está incompleto: los
+  // totales, el ranking y los focos. Callarlo es dar un numero que parece
+  // bueno y no lo es — que es justo lo que pasa al comparar contra Ventas,
+  // donde el reporte semanal si viene completo.
+  function avisoDiasFaltantes(r, dias) {
+    if (r.desde === "0000-01-01") return "";        // "Todo": no hay periodo que cubrir
+    const hoyIso = iso(hoy());
+    const fin = r.hasta > hoyIso ? hoyIso : r.hasta;
+    const faltan = [];
+    for (let d = r.desde; d <= fin; d = masDias(d, 1)) if (!dias.has(d)) faltan.push(d);
+    if (!faltan.length) return "";
+    const total = faltan.length + dias.size;
+    const dm = (f) => { const [, m, dd] = f.split("-"); return `${+dd} ${MES_CORTO[+m - 1]}`; };
+    return `<div class="card" style="border-left:4px solid var(--rojo,#b3261e)">
+      <b>Faltan ${faltan.length} de ${total} días en este periodo.</b>
+      <p class="sub" style="margin:6px 0 0">Sin órdenes de: ${esc(faltan.map(dm).join(", "))}.</p>
+      <p class="sub" style="margin:6px 0 0"><b>Todo lo de abajo está incompleto</b> — los totales, el marcador
+      y los focos solo cuentan los ${dias.size} días que sí están. Si comparas contra la pestaña de Ventas
+      el número no va a cuadrar, porque allá el reporte semanal sí viene completo.</p>
+      <p class="sub" style="margin:6px 0 0">Sube los reportes de órdenes que falten en <b>Insumos → Importar</b>.
+      Si la casa cerró alguno de esos días, ignora este aviso.</p>
+    </div>`;
   }
 
   function avisoBebidas() {
