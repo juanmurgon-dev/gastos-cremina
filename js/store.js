@@ -48,6 +48,7 @@ export const state = {
   miArea: null,         // área del rol acotado: 'barra' | 'cocina' | null (sin límite)
   rolCargado: false,    // ¿ya sabemos quién es? Hasta entonces no se enseña nada.
   ordenesMesero: [],    // una fila por cuenta (se carga al abrir Ventas → Meseros)
+  ordenesMeseroAl: 0,   // cuándo se trajeron (para saber si ya están viejas)
   errorMeseros: null,   // p.ej. "falta correr meseros.sql"
   orgNombre: null,      // nombre del restaurante (para mostrar en el encabezado)
   listo: false
@@ -147,6 +148,11 @@ export async function cargarOrdenesMesero() {
   if (error) { state.errorMeseros = error.message; notify(); return []; }
   state.errorMeseros = null;
   state.ordenesMesero = filas;
+  // Cuándo se trajo esto. La pantalla lo muestra y decide si ya está viejo:
+  // la base puede cambiar por fuera (un import en otro dispositivo, o un
+  // arreglo corrido a mano en SQL) y sin esto la app se quedaba con la copia
+  // en memoria hasta recargar la app entera.
+  state.ordenesMeseroAl = Date.now();
   notify();
   return filas;
 }

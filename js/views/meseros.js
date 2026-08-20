@@ -182,11 +182,22 @@ function abrirInfo(k) {
 // ── Vista ───────────────────────────────────────────────────────
 export function render(el) {
   let periodo = "mes", verAjustes = false, semanaSel = null;
+  // Se recargan si no hay nada O si lo que hay ya tiene rato. La base cambia
+  // por fuera —otro dispositivo importando, un arreglo corrido en SQL— y antes
+  // la copia en memoria se quedaba pegada hasta recargar la app completa.
+  const VIEJO_MS = 2 * 60 * 1000;
+  const estaViejo = () => Date.now() - (store.state.ordenesMeseroAl || 0) > VIEJO_MS;
   let cargando = !(store.state.ordenesMesero || []).length;
 
   const unsub = store.subscribe(pintar);
-  if (cargando) store.cargarOrdenesMesero().finally(() => { cargando = false; pintar(); });
+  if (cargando || estaViejo()) recargar();
   pintar();
+
+  function recargar() {
+    cargando = !(store.state.ordenesMesero || []).length;   // solo tapa si no hay nada que enseñar
+    pintar();
+    store.cargarOrdenesMesero().finally(() => { cargando = false; pintar(); });
+  }
 
   function pintar() {
     if (periodo === "semana" && !semanaSel) semanaSel = semanasConDatos()[0] || null;
@@ -402,10 +413,26 @@ export function render(el) {
       ${periodo === "semana" ? (semanas.length
         ? `<select id="mSemana" style="margin-top:8px;width:100%">${semanas.map((s) => `<option value="${s}"${s === semanaSel ? " selected" : ""}>${esc(etiquetaSemana(s))}</option>`).join("")}</select>`
         : `<div class="sub" style="margin-top:8px">Todavía no hay semanas cargadas.</div>`) : ""}
-      <div class="sub" style="margin-top:8px;font-size:11.5px">${esc(r.desde)} → ${esc(r.hasta)}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <span class="sub" style="font-size:11.5px">${esc(r.desde)} → ${esc(r.hasta)}</span>
+        <span class="sub" style="font-size:11.5px;margin-left:auto">${selloDatos()}</span>
+        <button class="btn sec chico" id="mRecargar" style="width:auto;padding:4px 10px;font-size:11.5px">↻ Actualizar</button>
+      </div>
     </div>`;
   }
+  // De cuándo son los datos en pantalla. Se muestra siempre: adivinar si lo
+  // que ves ya trae el último cambio cuesta más que un renglón de texto.
+  function selloDatos() {
+    const t = store.state.ordenesMeseroAl;
+    if (!t) return "";
+    const min = Math.floor((Date.now() - t) / 60000);
+    const d = new Date(t);
+    const hora = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return min < 1 ? "datos recién traídos" : min < 60 ? `datos de hace ${min} min` : `datos de las ${hora}`;
+  }
   function wireSel() {
+    const rec = el.querySelector("#mRecargar");
+    if (rec) rec.addEventListener("click", () => { store.state.ordenesMeseroAl = 0; recargar(); });
     el.querySelectorAll("[data-p]").forEach((b) => b.addEventListener("click", () => { periodo = b.dataset.p; pintar(); }));
     const s = el.querySelector("#mSemana");
     if (s) s.addEventListener("change", () => { semanaSel = s.value; pintar(); });
