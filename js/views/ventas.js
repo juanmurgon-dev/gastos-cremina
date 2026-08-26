@@ -152,24 +152,56 @@ function productos(cont) {
   for (const p of prodAll) if (!pmap.has(p.periodo)) pmap.set(p.periodo, p.desde);
   for (const v of varAll) if (!pmap.has(v.periodo)) pmap.set(v.periodo, v.desde);
   const periodos = [...pmap.entries()].sort((a, b) => (a[1] < b[1] ? 1 : -1)).map((e) => e[0]);
-  let periodo = periodos[0];
+
+  // ── Meses, además de semanas ──────────────────────────────────
+  // La venta por producto se guarda por SEMANA. Para ver un mes se suman las
+  // semanas que caen en él. Cada fila se ubica por su día real (`fecha`) si el
+  // reporte era de un día; si era semanal, por el lunes en que empieza.
+  const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                 "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  const mesDe = (r) => String(r.fecha || r.desde || "").slice(0, 7);
+  const meses = [...new Set([...prodAll, ...varAll].map(mesDe).filter(Boolean))].sort().reverse();
+  const etiquetaMes = (ym) => {
+    const [a, m] = ym.split("-");
+    return MESES[+m - 1].charAt(0).toUpperCase() + MESES[+m - 1].slice(1) + " " + a;
+  };
+
+  // "s:<periodo>" = una semana · "m:<AAAA-MM>" = un mes.
+  let sel_ = "s:" + periodos[0];
+  const esMes = () => sel_.startsWith("m:");
+  const clave = () => sel_.slice(2);
+  const enPeriodo = (r) => esMes() ? mesDe(r) === clave() : r.periodo === clave();
+  const etiqueta = () => esMes() ? etiquetaMes(clave()) : clave();
 
   cont.innerHTML = `
     <div class="card" style="padding:10px">
-      <select id="per">${periodos.map((p) => `<option value="${escapar(p)}">${escapar(p)}</option>`).join("")}</select>
+      <select id="per">
+        ${meses.length ? `<optgroup label="Mes">${meses.map((m) =>
+          `<option value="m:${escapar(m)}">${escapar(etiquetaMes(m))}</option>`).join("")}</optgroup>` : ""}
+        <optgroup label="Semana">${periodos.map((p) =>
+          `<option value="s:${escapar(p)}"${"s:" + p === sel_ ? " selected" : ""}>${escapar(p)}</option>`).join("")}</optgroup>
+      </select>
+      <div class="sub" id="perNota" style="font-size:11.5px;margin-top:7px"></div>
     </div>
     <div id="pc"></div>`;
 
   const sel = cont.querySelector("#per");
-  sel.addEventListener("change", () => { periodo = sel.value; pintarPeriodo(); });
+  sel.addEventListener("change", () => { sel_ = sel.value; pintarPeriodo(); });
   pintarPeriodo();
 
   function pintarPeriodo() {
     const pc = cont.querySelector("#pc");
     const usaVar = store.usaVariantes();   // ¿este restaurante desglosa por grupo modificador?
     // Pan de Cortesía es cortesía, no venta → se excluye de los análisis.
-    const prods = prodAll.filter((p) => p.periodo === periodo && !ES_CORTESIA.test(p.producto || "") && !ES_CORTESIA.test(p.categoria || ""));
-    const vars = varAll.filter((v) => v.periodo === periodo && !ES_CORTESIA.test(v.producto || "") && !ES_CORTESIA.test(v.opcion || ""));
+    const prods = prodAll.filter((p) => enPeriodo(p) && !ES_CORTESIA.test(p.producto || "") && !ES_CORTESIA.test(p.categoria || ""));
+    const vars = varAll.filter((v) => enPeriodo(v) && !ES_CORTESIA.test(v.producto || "") && !ES_CORTESIA.test(v.opcion || ""));
+    // Un mes se arma de semanas completas: una semana a caballo entre dos meses
+    // cuenta entera en el mes donde empieza. Decirlo evita que el total del mes
+    // parezca un error cuando no cuadra al peso con el corte de caja.
+    const nota = cont.querySelector("#perNota");
+    if (nota) nota.textContent = esMes()
+      ? `Suma ${new Set(prods.map((p) => p.periodo)).size} semana(s). Una semana partida entre dos meses cuenta completa donde empieza.`
+      : "";
 
     // Acumulado por producto: suma los días de la semana en una sola fila.
     const prodsAgg = (() => {
@@ -233,7 +265,7 @@ function productos(cont) {
 
     let q = "", cat = "todas";
     pc.innerHTML = `
-      <button class="btn sec chico" id="expP" style="margin-bottom:12px">⬇ Exportar CSV (${escapar(periodo)})</button>
+      <button class="btn sec chico" id="expP" style="margin-bottom:12px">⬇ Exportar CSV (${escapar(etiqueta())})</button>
       ${Object.keys(porCat).length ? `<div class="card"><h2>Venta por categoría</h2>${barrasCat(porCat)}</div>` : ""}
       ${(usaVar && lecheEnt.length) ? `<div class="card"><h2>Leche más pedida</h2>
         <p class="sub" style="margin-top:-4px">Total de bebidas por tipo de leche</p>${barrasLeche(lecheEnt)}</div>` : ""}
