@@ -202,7 +202,13 @@ Cilantro 15"></textarea>
       let fotoUrl = "";
       if (fotoBlob) {
         const id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
-        const nombre = `${new Date().toISOString().slice(0, 10)}-${id}.jpg`;
+        // Carpeta por restaurante. Storage no tiene org_id, así que el
+        // aislamiento entre clientes se hace con la RUTA: la policy compara
+        // esta primera carpeta contra la org de quien sube. Sin el prefijo,
+        // un jefe de otro restaurante podría abrir fotos ajenas — y una foto
+        // de ticket trae los precios de sus proveedores.
+        const carpeta = store.state.orgId ? store.state.orgId + "/" : "";
+        const nombre = `${carpeta}${new Date().toISOString().slice(0, 10)}-${id}.jpg`;
         const { error: eUp } = await supabase.storage.from("tickets")
           .upload(nombre, fotoBlob, { contentType: "image/jpeg" });
         if (eUp) throw eUp;
