@@ -16,7 +16,7 @@ import * as inventario from "./views/inventario.js";
 import * as capacitacion from "./views/capacitacion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.191";
+export const APP_VERSION = "v3.192";
 export const APP_FECHA = "20 ago 2026";
 
 const VISTAS = {

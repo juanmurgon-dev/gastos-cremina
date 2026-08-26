@@ -49,6 +49,7 @@ export const state = {
   rolCargado: false,    // ¿ya sabemos quién es? Hasta entonces no se enseña nada.
   ordenesMesero: [],    // una fila por cuenta (se carga al abrir Ventas → Meseros)
   ordenesMeseroAl: 0,   // cuándo se trajeron (para saber si ya están viejas)
+  ventasSemana: {},     // venta escrita a mano por semana: { "2026-08-10": 189353 }
   errorMeseros: null,   // p.ej. "falta correr meseros.sql"
   orgNombre: null,      // nombre del restaurante (para mostrar en el encabezado)
   listo: false
@@ -275,6 +276,39 @@ export async function guardarPracticaCap(p) {
   });
   if (error) throw error;
   logActividad("capacitacion", "observación " + p.nivel);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  VENTA SEMANAL ESCRITA A MANO
+//
+//  El único dato de entrada del plan Lite. Antes se escribía en la
+//  pantalla de Meta y se perdía al salir, porque se trataba como un
+//  ajuste temporal sobre lo que viniera de Parrot. Sin Parrot ese número
+//  ES el sistema, así que ahora se guarda por semana.
+// ═══════════════════════════════════════════════════════════════════
+export async function cargarVentasSemana() {
+  const { data, error } = await supabase.from("ventas_semana").select("semana, venta");
+  if (error) return;                       // tabla aún no creada: se ignora
+  const m = {};
+  for (const r of data || []) m[r.semana] = num(r.venta);
+  state.ventasSemana = m;
+  notify();
+}
+
+// La venta que TÚ escribiste para esa semana. null = no hay, hay que
+// caer a lo que digan los reportes.
+export function ventaEscritaDe(lunesISO) {
+  const v = state.ventasSemana[lunesISO];
+  return v == null ? null : num(v);
+}
+
+export async function guardarVentaSemana(lunesISO, venta) {
+  const { error } = await supabase.from("ventas_semana")
+    .upsert({ semana: lunesISO, venta: num(venta), actualizado: new Date().toISOString() },
+            { onConflict: "org_id,semana" });
+  if (error) throw error;
+  state.ventasSemana = { ...state.ventasSemana, [lunesISO]: num(venta) };
+  notify();
 }
 
 // ───────────── Roles y candados ─────────────
@@ -981,7 +1015,7 @@ export async function init() {
   arrancado = true;
   // allSettled: aunque una consulta falle, la app SIEMPRE deja de estar "cargando".
   await cargarMiOrg();  // primero: define single vs multi-tenant y el orgId
-  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones(), cargarCostosPlatillo(), cargarRecetas(), cargarRecetasFicha(), cargarKpis(), cargarInvArticulos(), cargarConteos(), cargarCierres(), cargarIngredientesMaestro()]);
+  await Promise.allSettled([cargarTickets(), cargarConfig(), cargarCortes(), cargarProductos(), cargarPerfil(), cargarGastosFijos(), cargarRequisiciones(), cargarCostosPlatillo(), cargarRecetas(), cargarRecetasFicha(), cargarKpis(), cargarVentasSemana(), cargarInvArticulos(), cargarConteos(), cargarCierres(), cargarIngredientesMaestro()]);
   try { await recalcularTodos(); } catch (e) { /* recetas o precios aún no disponibles */ }
   state.listo = true;
   notify();
