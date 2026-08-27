@@ -26,17 +26,30 @@ const puestoDe = (id) => PUESTOS.find((p) => p.id === id) || { txt: id, desc: ""
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-let estado = { miembros: [], dominio: "", miRol: "", cargando: true, error: "" };
+let estado = { miembros: [], dominio: "", miRol: "", cargando: true, error: "", status: 0, crudo: "" };
 
 async function llamar(cuerpo) {
   const { data, error } = await supabase.functions.invoke("gestionar-usuarios", { body: cuerpo });
   if (error) {
-    // La función manda el motivo en el cuerpo del error, no en el mensaje.
+    // supabase-js dice "non-2xx status code" para TODO: la función que no
+    // existe, la que existe y contestó 403, y la que reventó al arrancar.
+    // Ese mensaje solo, sin el código ni el cuerpo, manda a instalar algo
+    // que ya está instalado. Aquí se saca lo que de verdad contestó.
     let detalle = error.message || "error";
-    if (error.context && typeof error.context.text === "function") {
-      try { const b = JSON.parse(await error.context.text()); detalle = b.error || detalle; } catch (e) {}
+    let status = 0, crudo = "";
+    if (error.context) {
+      status = Number(error.context.status || 0);
+      if (typeof error.context.text === "function") {
+        try { crudo = await error.context.text(); } catch (e) {}
+      }
     }
-    throw new Error(detalle);
+    if (crudo) {
+      try { detalle = JSON.parse(crudo).error || crudo; } catch (e) { detalle = crudo; }
+    }
+    const e = new Error(detalle);
+    e.status = status;
+    e.crudo = crudo;
+    throw e;
   }
   if (data && data.error) throw new Error(data.error);
   return data;
@@ -45,7 +58,7 @@ async function llamar(cuerpo) {
 export function abrirUsuarios() {
   const bg = document.createElement("div");
   bg.className = "modal-bg";
-  estado = { miembros: [], dominio: "", miRol: "", cargando: true, error: "" };
+  estado = { miembros: [], dominio: "", miRol: "", cargando: true, error: "", status: 0, crudo: "" };
   bg.innerHTML = `<div class="modal" id="uModal">${pintar()}</div>`;
   document.body.appendChild(bg);
   const cerrar = () => bg.remove();
@@ -61,6 +74,8 @@ export function abrirUsuarios() {
     .catch((e) => {
       estado.cargando = false;
       estado.error = String(e.message || e);
+      estado.status = e.status || 0;
+      estado.crudo = e.crudo || "";
       repintar();
     });
 
@@ -72,14 +87,23 @@ function pintar() {
     return `<h2>Equipo y accesos</h2><div class="vacio">Cargando…</div>`;
   }
   if (estado.error) {
-    // El error más probable en el primer uso es que la función no esté
-    // instalada. Decirlo con su nombre ahorra media hora de adivinar.
-    const falta = /not found|404|Failed to send|non-2xx/i.test(estado.error);
+    // Solo un 404 significa "no está instalada". Un 500 significa que SÍ
+    // está y reventó adentro — mandar a reinstalarla ahí es perder el rato.
+    const st = estado.status || 0;
+    const falta = st === 404;
+    const revento = st >= 500;
     return `<h2>Equipo y accesos</h2>
-      <div class="error-box">${esc(estado.error)}</div>
-      ${falta ? `<p class="sub">Parece que falta instalar la función del servidor.
+      <div class="error-box">${esc(estado.error)}${st ? ` <b>(HTTP ${st})</b>` : ""}</div>
+      ${falta ? `<p class="sub">La función no está instalada.
         En Supabase → <b>Edge Functions</b> → <b>Create a function</b>, nómbrala exactamente
         <b>gestionar-usuarios</b>, pega el contenido de <b>supabase/gestionar-usuarios.ts</b> y dale Deploy.</p>` : ""}
+      ${revento ? `<p class="sub">La función <b>sí está instalada</b> y falló por dentro.
+        El motivo exacto está en Supabase → <b>Edge Functions</b> → <b>gestionar-usuarios</b> → pestaña
+        <b>Logs</b>. Pásame esa línea y lo arreglo.</p>` : ""}
+      ${!falta && !revento && st ? `<p class="sub">La función contestó, así que está instalada.
+        Esto es una respuesta suya, no un problema de instalación.</p>` : ""}
+      ${estado.crudo && estado.crudo !== estado.error
+        ? `<pre class="sub" style="white-space:pre-wrap;word-break:break-all;font-size:10.5px;margin-top:8px">${esc(estado.crudo.slice(0, 500))}</pre>` : ""}
       <button class="btn sec" data-cerrar style="margin-top:14px">Cerrar</button>`;
   }
 
