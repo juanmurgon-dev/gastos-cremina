@@ -93,15 +93,25 @@ function unidadesDe(o, cri) {
 // Qué se puede medir con lo que HAY cargado. El selector se arma de aquí,
 // así que el cliente elige de su propia operación y nunca de una lista
 // inventada. Lo que no aparezca es que no está en los datos todavía.
+// Lo que el restaurante puede convertir en indicador: sus categorías, sus
+// grupos de modificador, sus platillos y sus modificadores.
+//
+// Se ACUMULA durante la sesión en vez de leer solo el rango cargado. La
+// pestaña carga una semana a la vez, y una semana no vende todo lo que hay
+// en la carta: sin acumular, quien mira la semana pasada solo podría medir
+// lo que se vendió esa semana. Cambiar de periodo va sumando opciones.
+// El arreglo se vacía solo al recargar la app, que es también cuando cambia
+// la cuenta — así lo de un restaurante no se le aparece a otro.
+const DIMS_VISTAS = { categoria: new Set(), grupo: new Set(), articulo: new Set(), mod: new Set() };
 function dimensionesDisponibles() {
-  const d = { categoria: new Set(), grupo: new Set(), articulo: new Set(), mod: new Set() };
   const llave = { categoria: "categorias", grupo: "grupos", articulo: "articulos", mod: "mods" };
   for (const o of store.state.ordenesMesero || []) {
-    for (const k of Object.keys(d)) {
+    for (const k of Object.keys(DIMS_VISTAS)) {
       const m = (o.detalle && o.detalle[llave[k]]) || {};
-      for (const v of Object.keys(m)) d[k].add(v);
+      for (const v of Object.keys(m)) DIMS_VISTAS[k].add(v);
     }
   }
+  const d = DIMS_VISTAS;
   return { categoria: [...d.categoria].sort(), grupo: [...d.grupo].sort(),
            articulo: [...d.articulo].sort(), mod: [...d.mod].sort() };
 }
@@ -375,7 +385,13 @@ export function render(el) {
       + focos(lista, eq, metas, r, CRI)
       + leyenda()
       + marcador(lista, eq, metas, r, CRI)
-      + `<div class="card"><button class="btn sec" id="mAjustes">⚙️ Quién compite, roles y metas</button>
+      // El constructor de indicadores vive aquí adentro, y es lo que hace
+      // distinto al producto: el cliente elige qué medir sin pedirle nada a
+      // nadie. Estaba detrás de una etiqueta que hablaba de otra cosa, así
+      // que nadie lo iba a encontrar nunca.
+      + `<div class="card"><button class="btn sec" id="mAjustes">⚙️ Elegir qué se mide, metas y quién compite</button>
+         <p class="sub" style="margin:8px 0 0;font-size:11.5px">Tú decides qué cuenta para la calificación —
+         de tus propias categorías y modificadores, no de una lista que alguien más escribió.</p>
          <div id="mPanel">${verAjustes ? panelAjustes(lista, metas) : ""}</div></div>`;
 
     wireSel(); wireInfo();
@@ -729,6 +745,9 @@ export function render(el) {
     const hayDim = dims.categoria.length || dims.grupo.length;
     return `
       <h3 style="margin:20px 0 6px;font-size:14px">Qué se mide</h3>
+      <p class="sub" style="margin:0 0 4px;font-size:11.5px">Las opciones de abajo salen de <b>tu</b> reporte:
+      ${dims.categoria.length + dims.grupo.length + dims.articulo.length + dims.mod.length} cosas que ya estás
+      vendiendo y puedes convertir en indicador.</p>
       <p class="sub" style="margin-top:0;font-size:11.5px">El <b>peso</b> es cuánto cuenta para la calificación.
       <b>Compite</b> lo pone en el marcador. Meta en 0 = solo se muestra, no califica.</p>
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:430px">
