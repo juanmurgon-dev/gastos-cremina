@@ -31,7 +31,13 @@ export function render(el) {
     cargando = true; pintar();
     try {
       datos = await store.cargarCapacitacion();
-      if (!(store.state.ordenesMesero || []).length) await store.cargarOrdenesMesero();
+      // Solo el mes en curso: es contra lo que se miden los KPIs de plata y
+      // oro. Pedir la historia completa aquí sería la misma lentitud que se
+      // acaba de quitar en Meseros.
+      const r = rangoMeseros("mes");
+      if (store.state.ordenesMeseroRango !== r.desde + "|" + r.hasta) {
+        await store.cargarOrdenesMesero(r.desde, r.hasta);
+      }
     } catch (e) { datos.error = (e && e.message) || String(e); }
     cargando = false; pintar();
   }

@@ -50,6 +50,8 @@ export const state = {
   ordenesMesero: [],    // una fila por cuenta (se carga al abrir Ventas → Meseros)
   ordenesMeseroAl: 0,   // cuándo se trajeron (para saber si ya están viejas)
   ventasSemana: {},     // venta escrita a mano por semana: { "2026-08-10": 189353 }
+  fechasMesero: [],     // días que tienen órdenes (índice ligero, sin bajar las órdenes)
+  ordenesMeseroRango: null,  // qué rango está cargado ahora mismo
   errorMeseros: null,   // p.ej. "falta correr meseros.sql"
   orgNombre: null,      // nombre del restaurante (para mostrar en el encabezado)
   listo: false
@@ -144,11 +146,39 @@ async function cargarMiOrg() {
 //  NO se carga en init(): son miles de filas que solo le sirven a una
 //  pantalla. La vista de Meseros las pide cuando se abre.
 // ═══════════════════════════════════════════════════════════════════
-export async function cargarOrdenesMesero() {
-  const { filas, error } = await traerTodo("ordenes_mesero", "referencia");
+// Índice ligero: SOLO las fechas que tienen órdenes. Con esto la pantalla
+// arma su lista de semanas sin bajar una sola orden completa.
+export async function cargarFechasMesero() {
+  const { data, error } = await supabase.from("ordenes_mesero").select("fecha");
+  if (error) return [];
+  state.fechasMesero = [...new Set((data || []).map((r) => r.fecha).filter(Boolean))].sort();
+  notify();
+  return state.fechasMesero;
+}
+
+// Trae las órdenes de UN RANGO, no todas. Antes bajaba la historia
+// completa para enseñar una semana: 2,277 órdenes con su desglose para
+// mostrar 150. Eso es lo que hacía que la pestaña tardara en abrir, y
+// habría empeorado cada semana que pasara.
+export async function cargarOrdenesMesero(desde, hasta) {
+  const clave = (desde || "") + "|" + (hasta || "");
+  const PAGINA = 1000, MAX = 60;
+  const filas = [];
+  let error = null;
+  for (let i = 0; i < MAX; i++) {
+    let q = supabase.from("ordenes_mesero").select("*");
+    if (desde) q = q.gte("fecha", desde);
+    if (hasta) q = q.lte("fecha", hasta);
+    const r = await q.order("referencia", { ascending: true })
+                     .range(i * PAGINA, i * PAGINA + PAGINA - 1);
+    if (r.error) { error = r.error; break; }
+    filas.push(...(r.data || []));
+    if (!r.data || r.data.length < PAGINA) break;
+  }
   if (error) { state.errorMeseros = error.message; notify(); return []; }
   state.errorMeseros = null;
   state.ordenesMesero = filas;
+  state.ordenesMeseroRango = clave;
   // Cuándo se trajo esto. La pantalla lo muestra y decide si ya está viejo:
   // la base puede cambiar por fuera (un import en otro dispositivo, o un
   // arreglo corrido a mano en SQL) y sin esto la app se quedaba con la copia

@@ -44,9 +44,11 @@ function etiquetaSemana(l) {
   const [, m1, d1] = l.split("-"); const dom = masDias(l, 6); const [, m2, d2] = dom.split("-");
   return m1 === m2 ? `${+d1} – ${+d2} ${MES_CORTO[+m2 - 1]}` : `${+d1} ${MES_CORTO[+m1 - 1]} – ${+d2} ${MES_CORTO[+m2 - 1]}`;
 }
+// Del índice de fechas, no de las órdenes: así la lista de semanas existe
+// desde el primer instante sin haber bajado ninguna orden.
 function semanasConDatos() {
   const s = new Set();
-  for (const o of store.state.ordenesMesero || []) if (o.fecha) s.add(lunesDe(o.fecha));
+  for (const f of store.state.fechasMesero || []) s.add(lunesDe(f));
   return [...s].sort().reverse();
 }
 function rangoDe(clave, semana) {
@@ -185,26 +187,49 @@ function abrirInfo(k) {
 // ── Vista ───────────────────────────────────────────────────────
 export function render(el) {
   let periodo = "mes", verAjustes = false, semanaSel = null;
-  // Se recargan si no hay nada O si lo que hay ya tiene rato. La base cambia
-  // por fuera —otro dispositivo importando, un arreglo corrido en SQL— y antes
-  // la copia en memoria se quedaba pegada hasta recargar la app completa.
+  // Solo se baja el periodo que se está viendo. Antes bajaba la historia
+  // completa para enseñar una semana, y por eso tardaba en abrir.
   const VIEJO_MS = 2 * 60 * 1000;
-  const estaViejo = () => Date.now() - (store.state.ordenesMeseroAl || 0) > VIEJO_MS;
-  let cargando = !(store.state.ordenesMesero || []).length;
+  let cargando = true;
+  let pidiendo = null;      // rango que se está pidiendo, para no pedirlo dos veces
 
   const unsub = store.subscribe(pintar);
-  if (cargando || estaViejo()) recargar();
+  arrancar();
   pintar();
 
-  function recargar() {
-    cargando = !(store.state.ordenesMesero || []).length;   // solo tapa si no hay nada que enseñar
+  async function arrancar() {
+    if (!(store.state.fechasMesero || []).length) await store.cargarFechasMesero();
+    if (periodo === "semana" && !semanaSel) semanaSel = semanasConDatos()[0] || null;
+    cargando = false;
+    pedirRango();
     pintar();
-    store.cargarOrdenesMesero().finally(() => { cargando = false; pintar(); });
+  }
+
+  // Pide el rango del periodo actual si no es el que ya está cargado.
+  function pedirRango() {
+    const r = rangoDe(periodo, semanaSel);
+    const clave = r.desde + "|" + r.hasta;
+    const fresco = store.state.ordenesMeseroRango === clave
+                   && Date.now() - (store.state.ordenesMeseroAl || 0) < VIEJO_MS;
+    if (fresco || pidiendo === clave) return;
+    pidiendo = clave;
+    store.cargarOrdenesMesero(r.desde, r.hasta).finally(() => {
+      if (pidiendo === clave) pidiendo = null;
+      pintar();
+    });
+  }
+
+  function recargar() {
+    store.state.ordenesMeseroAl = 0;
+    pidiendo = null;
+    pedirRango();
+    pintar();
   }
 
   function pintar() {
-    if (periodo === "semana" && !semanaSel) semanaSel = semanasConDatos()[0] || null;
     const r = rangoDe(periodo, semanaSel);
+    // ¿Lo que hay en memoria es de ESTE periodo? Si no, está por llegar.
+    const listo = store.state.ordenesMeseroRango === r.desde + "|" + r.hasta;
     const { lista, eq, dias } = calcular(r.desde, r.hasta);
     const metas = cfg().metas;
 
@@ -214,7 +239,8 @@ export function render(el) {
         <p class="sub">Corre <b>supabase/meseros.sql</b> y vuelve a entrar.</p></div>`;
       return;
     }
-    if (cargando) { el.innerHTML = `<div class="vacio">Cargando órdenes…</div>`; return; }
+    if (cargando) { el.innerHTML = `<div class="vacio">Cargando…</div>`; return; }
+    if (!listo) { el.innerHTML = selector(r) + `<div class="vacio">Trayendo ${esc(r.txt.toLowerCase())}…</div>`; wireSel(); return; }
     if (!lista.length) { el.innerHTML = selector(r) + vacio(); wireSel(); return; }
 
     // Columnas: primero quienes compiten (de piso), luego el resto, luego Equipo.
@@ -464,9 +490,13 @@ export function render(el) {
   function wireSel() {
     const rec = el.querySelector("#mRecargar");
     if (rec) rec.addEventListener("click", () => { store.state.ordenesMeseroAl = 0; recargar(); });
-    el.querySelectorAll("[data-p]").forEach((b) => b.addEventListener("click", () => { periodo = b.dataset.p; pintar(); }));
+    el.querySelectorAll("[data-p]").forEach((b) => b.addEventListener("click", () => {
+      periodo = b.dataset.p;
+      if (periodo === "semana" && !semanaSel) semanaSel = semanasConDatos()[0] || null;
+      pedirRango(); pintar();
+    }));
     const s = el.querySelector("#mSemana");
-    if (s) s.addEventListener("change", () => { semanaSel = s.value; pintar(); });
+    if (s) s.addEventListener("change", () => { semanaSel = s.value; pedirRango(); pintar(); });
   }
   function wireInfo() {
     el.querySelectorAll("[data-info]").forEach((b) =>
