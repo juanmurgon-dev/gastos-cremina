@@ -45,6 +45,7 @@ export const state = {
   config: { presupuestoSemanal: 35000, presupuestoPorArea: {} },
   orgId: null,          // id del restaurante (multi-tenant); null = single-tenant
   multiTenant: false,   // true si la BD ya tiene la tabla 'miembros'
+  dominio: "",          // dominio de login del restaurante (orgs.dominio)
   plan: null,           // plan del restaurante: lite | pro (null = se ve todo)
   miRol: null,          // rol: owner|admin|gerente|chef|barista|ayudante|compras|staff
   miArea: null,         // área del rol acotado: 'barra' | 'cocina' | null (sin límite)
@@ -151,7 +152,7 @@ async function cargarMiOrg() {
   // roles" de abajo y TODOS pasarían a ver todo — el barista incluido.
   // Un error de columna faltante no puede convertirse en un permiso.
   let { data, error } = await supabase.from("miembros")
-    .select("org_id, rol, area, orgs(nombre, plan, extras, ocultos)").limit(1);
+    .select("org_id, rol, area, orgs(nombre, plan, extras, ocultos, dominio)").limit(1);
   if (error) {
     ({ data, error } = await supabase.from("miembros")
       .select("org_id, rol, area, orgs(nombre)").limit(1));
@@ -174,7 +175,13 @@ async function cargarMiOrg() {
     // por una migración pendiente.
     const o = (row && row.orgs) || {};
     state.plan = o.plan || null;
+    state.dominio = o.dominio || "";
     plan.definir(o.plan, o.extras, o.ocultos);
+    // Se deja anotado en el navegador porque la pantalla de LOGIN lo
+    // necesita — y ahí todavía no hay sesión con la cual preguntarlo.
+    // (La misma llave que lee app.js; no se importa app.js desde aquí
+    //  para no armar un círculo entre los dos módulos.)
+    try { if (o.dominio) localStorage.setItem("platify.dominio", String(o.dominio).toLowerCase()); } catch (e) {}
   }
   // Pase lo que pase: ya sabemos a qué atenernos. Antes de esta línea, la app
   // no debe dibujar ninguna pantalla — no sabe a quién se la está enseñando.

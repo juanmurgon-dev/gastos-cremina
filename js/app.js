@@ -6,6 +6,7 @@ import * as store from "./store.js";
 import * as plan from "./plan.js";
 import * as marca from "./marca.js";
 import * as preferencias from "./preferencias.js";
+import * as usuarios from "./usuarios.js";
 import * as proveedores from "./proveedores.js";
 import * as onboarding from "./onboarding.js";
 
@@ -17,7 +18,7 @@ import * as inventario from "./views/inventario.js";
 import * as capacitacion from "./views/capacitacion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.203";
+export const APP_VERSION = "v3.204";
 export const APP_FECHA = "27 ago 2026";
 
 const VISTAS = {
@@ -64,12 +65,20 @@ function vistaInicial() { return tabsPermitidas()[0] || "inicio"; }
 // porque Supabase necesita algo con forma de correo. El buzón no existe ni
 // hace falta: las cuentas se crean con "Auto Confirm User" y nunca se manda
 // un mail. Quien sí tiene correo real lo escribe completo y pasa igual.
-// ⬇ Cambia esta línea si el restaurante usa otro dominio.
-const DOMINIO_INTERNO = "creminamx.com";
+// El dominio sale del RESTAURANTE (orgs.dominio), no de aquí. Estaba
+// clavado en "creminamx.com", o sea que el segundo cliente habría creado
+// sus cuentas en el dominio de Cremina. Se guarda en el navegador porque
+// hace falta en la pantalla de login, ANTES de que haya sesión con la
+// cual preguntarle a la base cuál es.
+const DOMINIO_FALLBACK = "creminamx.com";
+function dominioLogin() {
+  try { return localStorage.getItem("platify.dominio") || DOMINIO_FALLBACK; }
+  catch (e) { return DOMINIO_FALLBACK; }
+}
 function aCorreo(v) {
   const s = String(v || "").trim().toLowerCase();
   if (!s) return "";
-  return s.includes("@") ? s : s + "@" + DOMINIO_INTERNO;
+  return s.includes("@") ? s : s + "@" + dominioLogin();
 }
 
 const app = document.getElementById("app");
@@ -238,6 +247,9 @@ function etiquetaRol() {
 // Menú ☰ → Ajustes: personalizar marca, actualizar, cerrar sesión.
 function abrirMenu() {
   const puedePersonalizar = !store.state.multiTenant || store.state.miRol === "owner";
+  // Repartir accesos es cosa del dueño y del administrador. Un gerente ve
+  // todos los números pero no decide quién entra.
+  const puedeAccesos = store.state.multiTenant && ["owner", "admin"].includes(store.state.miRol);
   const badge = ENV === "staging" ? "🧪 STAGING · " : "";
   const bg = document.createElement("div");
   bg.className = "modal-bg";
@@ -250,6 +262,7 @@ function abrirMenu() {
       <div class="menu-lista">
         ${puedePersonalizar ? `<button class="menu-item" data-a="marca"><span class="mi-ic">🎨</span><span class="mi-tx"><b>Personalizar marca</b><span class="sub">Cambiar logo y nombre del restaurante</span></span></button>` : ""}
         ${puedePersonalizar ? `<button class="menu-item" data-a="prefs"><span class="mi-ic">⚙️</span><span class="mi-tx"><b>Preferencias</b><span class="sub">Cómo ves los datos de tu restaurante</span></span></button>` : ""}
+        ${puedeAccesos ? `<button class="menu-item" data-a="usuarios"><span class="mi-ic">👥</span><span class="mi-tx"><b>Equipo y accesos</b><span class="sub">Dar de alta, cambiar puesto o quitar acceso</span></span></button>` : ""}
         <button class="menu-item" data-a="prov"><span class="mi-ic">🏪</span><span class="mi-tx"><b>Unificar proveedores</b><span class="sub">Juntar los que son el mismo</span></span></button>
         <button class="menu-item" data-a="update"><span class="mi-ic">🔄</span><span class="mi-tx"><b>Buscar actualización</b><span class="sub">${badge}${APP_VERSION} · ${APP_FECHA}</span></span></button>
         <button class="menu-item" data-a="salir"><span class="mi-ic">🚪</span><span class="mi-tx"><b>Cerrar sesión</b></span></button>
@@ -264,6 +277,7 @@ function abrirMenu() {
     const a = b.dataset.a;
     cerrar();
     if (a === "marca") marca.abrirPersonalizar();
+    else if (a === "usuarios") usuarios.abrirUsuarios();
     else if (a === "prefs") preferencias.abrirPreferencias();
     else if (a === "prov") proveedores.abrirProveedores();
     else if (a === "update") buscarActualizacion();
