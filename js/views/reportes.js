@@ -6,6 +6,7 @@ import { descargarCSV } from "../csv.js";
 import * as gastosFijos from "./gastos-fijos.js";
 import * as metaCalc from "./meta-calc.js";
 import * as precioAjuste from "./precio-ajuste.js";
+import * as plan from "../plan.js";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -15,6 +16,8 @@ export function render(el) {
   el.innerHTML = `
     <div class="segmented" style="font-size:13px"><button data-s="variables">Variables</button><button data-s="fijos">Fijos</button><button data-s="precio">Precio</button><button data-s="meta">Meta</button></div>
     <div id="rsub"></div>`;
+  // Fuera las sub-pestañas que este restaurante no tiene en su plan.
+  sub = plan.podarSegmented(el, { variables:"g.variables", fijos:"g.fijos", precio:"g.precio", meta:"g.meta" }, sub);
   const subEl = el.querySelector("#rsub");
   const btns = [...el.querySelectorAll(".segmented button")];
   let limpiar = null;

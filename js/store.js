@@ -2,6 +2,7 @@
 //  Capa de datos: habla con Supabase y guarda los tickets en memoria.
 //  Las pantallas se "suscriben" y se redibujan solas cuando algo cambia.
 // ─────────────────────────────────────────────────────────────
+import * as plan from "./plan.js";
 import { supabase } from "./supabase-init.js";
 
 // ── Catálogos (mismos que el bot) ───────────────────────────
@@ -44,6 +45,7 @@ export const state = {
   config: { presupuestoSemanal: 35000, presupuestoPorArea: {} },
   orgId: null,          // id del restaurante (multi-tenant); null = single-tenant
   multiTenant: false,   // true si la BD ya tiene la tabla 'miembros'
+  plan: null,           // plan del restaurante: lite | pro (null = se ve todo)
   miRol: null,          // rol: owner|admin|gerente|chef|barista|ayudante|compras|staff
   miArea: null,         // área del rol acotado: 'barra' | 'cocina' | null (sin límite)
   rolCargado: false,    // ¿ya sabemos quién es? Hasta entonces no se enseña nada.
@@ -143,11 +145,22 @@ async function cargarConfig() {
 
 // ¿La BD es multi-tenant? ¿A qué restaurante(s) pertenece el usuario?
 async function cargarMiOrg() {
-  const { data, error } = await supabase.from("miembros").select("org_id, rol, area, orgs(nombre)").limit(1);
+  // Se piden las columnas del plan, pero con red: si la base todavía no las
+  // tiene (plan-destinos.sql sin correr), PostgREST rechaza la consulta
+  // ENTERA. Sin este reintento, el error caería en la rama de "base sin
+  // roles" de abajo y TODOS pasarían a ver todo — el barista incluido.
+  // Un error de columna faltante no puede convertirse en un permiso.
+  let { data, error } = await supabase.from("miembros")
+    .select("org_id, rol, area, orgs(nombre, plan, extras, ocultos)").limit(1);
+  if (error) {
+    ({ data, error } = await supabase.from("miembros")
+      .select("org_id, rol, area, orgs(nombre)").limit(1));
+  }
   if (error) {
     // La tabla no existe → base sin roles (single-tenant): todos ven todo.
     state.multiTenant = false; state.orgId = null; state.miRol = null;
     state.miArea = null; state.orgNombre = null;
+    state.plan = null; plan.definir(null, [], []);
   } else {
     state.multiTenant = true;
     const row = data && data[0];
@@ -155,6 +168,13 @@ async function cargarMiOrg() {
     state.miRol = (row && row.rol) || null;
     state.miArea = (row && row.area && String(row.area).toLowerCase()) || null;
     state.orgNombre = (row && row.orgs && row.orgs.nombre) || null;
+    // Qué destinos ve este restaurante. Si la base todavía no tiene las
+    // columnas (`plan-destinos.sql` sin correr), `o` viene sin ellas y el
+    // plan queda en null → se ve todo, como antes. Nadie se queda sin app
+    // por una migración pendiente.
+    const o = (row && row.orgs) || {};
+    state.plan = o.plan || null;
+    plan.definir(o.plan, o.extras, o.ocultos);
   }
   // Pase lo que pase: ya sabemos a qué atenernos. Antes de esta línea, la app
   // no debe dibujar ninguna pantalla — no sabe a quién se la está enseñando.

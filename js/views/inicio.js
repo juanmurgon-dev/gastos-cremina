@@ -4,6 +4,7 @@ import * as store from "../store.js";
 import { money, num } from "../store.js";
 import * as dashCompras from "./dash-compras.js";
 import * as info from "../info.js";
+import * as plan from "../plan.js";
 
 // Inicio se adapta al ROL: compras ve su tablero; los demás (owner/gerente/
 // staff/single-tenant) ven el resumen financiero de siempre.
@@ -328,7 +329,10 @@ function cargarOrden() {
   let ord = [];
   try { const s = JSON.parse(localStorage.getItem("platify.inicio.orden")); if (Array.isArray(s)) ord = s.filter((k) => ORDEN_DEFAULT.includes(k)); } catch (_) { /* sin storage */ }
   for (const k of ORDEN_DEFAULT) if (!ord.includes(k)) ord.push(k);   // agrega tarjetas nuevas al final
-  return ord;
+  // El plan manda al final: una tarjeta que este restaurante no tiene se cae
+  // aunque su orden guardado la traiga de antes. Así, apagar un destino se
+  // nota de inmediato y no depende de limpiar el localStorage de cada quien.
+  return ord.filter((k) => plan.ve("c." + k));
 }
 function guardarOrden(ord) { try { localStorage.setItem("platify.inicio.orden", JSON.stringify(ord)); } catch (_) { /* sin storage */ } }
 

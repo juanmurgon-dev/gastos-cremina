@@ -8,6 +8,7 @@ import * as proveedores from "./proveedores.js";
 import * as ritmo from "./ritmo.js";
 import * as requisicion from "./requisicion.js";
 import { verFoto } from "../lightbox.js";
+import * as plan from "../plan.js";
 
 // Comprime una foto (para que pese poco antes de guardarla en base64).
 function comprimirFoto(file, max = 640) {
@@ -44,6 +45,8 @@ export function render(el, ctx) {
       <button data-s="proveedores">Prov.</button>
     </div>
     <div id="isub"></div>`;
+  // Fuera las sub-pestañas que este restaurante no tiene en su plan.
+  sub = plan.podarSegmented(el, { capturar:"i.capturar", tickets:"i.tickets", requisicion:"i.requisicion", precios:"i.precios", proveedores:"i.proveedores" }, sub);
   const subEl = el.querySelector("#isub");
   const btns = [...el.querySelectorAll(".segmented button")];
   btns.forEach((b) => b.addEventListener("click", () => { sub = b.dataset.s; marcar(); renderSub(); }));

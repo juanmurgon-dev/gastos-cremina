@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────
 import { supabase, ENV } from "./supabase-init.js";
 import * as store from "./store.js";
+import * as plan from "./plan.js";
 import * as marca from "./marca.js";
 import * as preferencias from "./preferencias.js";
 import * as proveedores from "./proveedores.js";
@@ -16,7 +17,7 @@ import * as inventario from "./views/inventario.js";
 import * as capacitacion from "./views/capacitacion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.200";
+export const APP_VERSION = "v3.201";
 export const APP_FECHA = "27 ago 2026";
 
 const VISTAS = {
@@ -43,13 +44,17 @@ const TABS_ROL = {
   barista:  ["insumos", "inventario"],
   ayudante: ["insumos", "inventario"],
 };
+// Dos filtros distintos que se aplican juntos:
+//   · el PLAN dice qué compró el restaurante (plan.js)
+//   · el ROL dice qué le toca a esta persona dentro del restaurante
+// Una pestaña se ve solo si pasa los dos.
 function tabsPermitidas() {
   const permit = TABS_ROL[store.state.miRol];
-  return Object.keys(VISTAS).filter((k) => !permit || permit.includes(k));
+  return Object.keys(VISTAS).filter((k) => (!permit || permit.includes(k)) && plan.ve(k));
 }
 function puedeVer(clave) {
   const permit = TABS_ROL[store.state.miRol];
-  return !permit || permit.includes(clave);
+  return (!permit || permit.includes(clave)) && plan.ve(clave);
 }
 // Primera pestaña que sí puede ver (para roles que no tienen Inicio).
 function vistaInicial() { return tabsPermitidas()[0] || "inicio"; }

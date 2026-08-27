@@ -3,6 +3,7 @@
 // Enlaza con inventario_articulos / inventario_conteos / cierres_mensuales.
 import * as store from "../store.js";
 import { money, num } from "../store.js";
+import * as plan from "../plan.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // Unidades estándar (mismas que convierten en recetas: kg↔g, L↔ml, pza). Texto libre no,
@@ -76,6 +77,8 @@ export function render(el) {
   el.innerHTML = `
     <div class="segmented" style="font-size:13px"${soloConteo ? ' hidden' : ''}><button data-s="conteo">Conteo</button><button data-s="catalogo">Catálogo</button><button data-s="cierre">Cierre de mes</button></div>
     <div id="invsub"></div>`;
+  // Fuera las sub-pestañas que este restaurante no tiene en su plan.
+  seg = plan.podarSegmented(el, { conteo:"n.conteo", catalogo:"n.catalogo", cierre:"n.cierre" }, seg);
   const sub = el.querySelector("#invsub");
   const btns = [...el.querySelectorAll(".segmented button")];
   const marcar = () => btns.forEach((b) => b.classList.toggle("act", b.dataset.s === seg));
