@@ -94,7 +94,9 @@ Cilantro 15"></textarea>
     fotoBlob = null; fotoBase64 = null; fotoDataUrl = null;
     // Manual = 100% local (parser propio). NO llama a Claude, así funciona
     // aunque la API esté sin cupo o sin internet. La IA queda solo para fotos.
-    const local = parsearTicketLocal(texto);
+    // Modo laxo: lo escribió una persona, no una cámara. Acepta "jitomate 65"
+    // sin exigir centavos, y de todos modos se le enseña para que lo revise.
+    const local = parsearTicketLocal(texto, { laxo: true });
     local.aviso = "";
     mostrarRevision([local.lineas.length ? local : { ...local, lineas: [{}] }], "manual");
   });
@@ -123,13 +125,24 @@ Cilantro 15"></textarea>
     // local logra estructurarlo.
     if (texto.length >= 25) {
       // 1) GRATIS: Tesseract + parser local, cero API.
+      //
+      // La puerta es `local.confiable`, NO "sacó al menos una línea". Ese
+      // era el bug: el parser convertía casi cualquier renglón en artículo,
+      // así que siempre sacaba líneas, siempre pasaba, y la IA no se
+      // llamaba nunca. Entraban al inventario el RFC, el teléfono y la
+      // dirección del proveedor como si fueran mercancía.
+      //
+      // Ahora solo se acepta la lectura gratis cuando las líneas SUMAN lo
+      // que el propio ticket dice que suman. Si no cuadra, cuesta unos
+      // centavos de IA — mucho más barato que un inventario sucio.
       const local = parsearTicketLocal(texto);
-      if (local.lineas.length >= 1) {
+      if (local.confiable) {
         return mostrarRevision([local], "tesseract");
       }
-      // 2) BARATO: hay texto pero no se estructuró → Claude con TEXTO (sin imagen).
-      setCarg("Estructurando con IA (texto)…");
-      return analizar({ texto, ocr: true });
+      // 2) BARATO: hay texto pero no cuadró → Claude con TEXTO (sin imagen).
+      setCarg("Revisando con IA…");
+      const r = await analizar({ texto, ocr: true });
+      return r;
     }
 
     // 3) ÚLTIMO RECURSO (más caro): Tesseract no sacó casi nada → Claude lee la IMAGEN.
