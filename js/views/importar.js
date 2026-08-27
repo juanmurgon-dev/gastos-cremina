@@ -1039,11 +1039,14 @@ export function montar(el) {
               // Si la base rechazó `bebidas`, se guardó todo lo demás — pero hay
               // que DECIRLO. Callarlo hacía que la fila de bebidas saliera en
               // cero sin ninguna pista de por qué.
-              if (rm.faltaBebidas) {
-                logs.push(`⚠️ Bebidas NO se guardaron: la base todavía no conoce esa columna. ` +
-                  `En el SQL Editor corre estas dos líneas y vuelve a importar:  ` +
-                  `alter table public.ordenes_mesero add column if not exists bebidas int not null default 0;  ` +
-                  `notify pgrst, 'reload schema';`);
+              if (rm.faltan && rm.faltan.length) {
+                // Las órdenes SÍ entraron, pero sin estas columnas. Decir cuáles
+                // y dar el remedio exacto, para no mandar a nadie a adivinar.
+                const tipo = (c) => c === "descuento" ? "numeric(12,2) not null default 0" : "int not null default 0";
+                logs.push(`⚠️ Las órdenes se guardaron SIN ${rm.faltan.join(" y ")}: la base todavía no ` +
+                  `conoce esa(s) columna(s). Corre esto en el SQL Editor y vuelve a importar:  ` +
+                  rm.faltan.map((c) => `alter table public.ordenes_mesero add column if not exists ${c} ${tipo(c)};`).join("  ") +
+                  `  notify pgrst, 'reload schema';`);
               }
             }
           } catch (e) {

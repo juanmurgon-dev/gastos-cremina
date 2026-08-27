@@ -246,7 +246,7 @@ export async function importarOrdenesMesero(filas) {
   if (!Array.isArray(filas) || !filas.length) return { guardadas: 0 };
   const LOTE = 500;
   let guardadas = 0;
-  state.faltaBebidas = null;
+  state.columnasQueFaltan = null;
   for (let i = 0; i < filas.length; i += LOTE) {
     const trozo = filas.slice(i, i + LOTE).map((f) => ({
       referencia: f.referencia,
@@ -265,24 +265,31 @@ export async function importarOrdenesMesero(filas) {
       bebidas: num(f.bebidas),
       detalle: f.detalle || {},
     }));
-    let { error } = await supabase.from("ordenes_mesero").upsert(trozo, { onConflict: "referencia" });
-    // `bebidas` se agregó después. Si la base todavía no la tiene, PostgREST
-    // rechaza el lote ENTERO y no entraría ni una orden. Mejor guardar todo lo
-    // demás y que solo falte esa columna, que perder la importación completa.
-    if (error && /bebidas/i.test(error.message || "")) {
-      // Se guarda el motivo, no solo una bandera: antes se encendía un flag que
-      // nadie leía, así que la importación decía "listo" mientras tiraba esta
-      // columna en silencio. Un fallo callado es peor que uno ruidoso.
-      state.faltaBebidas = error.message || "la columna `bebidas` no existe";
-      const sinBebidas = trozo.map(({ bebidas, ...r }) => r);
-      ({ error } = await supabase.from("ordenes_mesero").upsert(sinBebidas, { onConflict: "referencia" }));
+    let lote = trozo;
+    let { error } = await supabase.from("ordenes_mesero").upsert(lote, { onConflict: "referencia" });
+
+    // Cuando la app guarda una columna que la base todavía no tiene, PostgREST
+    // rechaza el LOTE ENTERO y no entra ni una orden. Ya pasó con `bebidas` y
+    // con `descuento`, y va a volver a pasar con la siguiente columna nueva.
+    //
+    // En vez de tratar cada caso por su nombre, se lee cuál columna reclama,
+    // se quita, y se reintenta. Así una columna que falte cuesta esa columna,
+    // no la importación completa. Y SIEMPRE se dice cuál faltó — un fallo
+    // callado es peor que uno ruidoso.
+    for (let intento = 0; intento < 4 && error; intento++) {
+      const m = /Could not find the '([^']+)' column/i.exec(error.message || "");
+      if (!m) break;
+      const col = m[1];
+      state.columnasQueFaltan = [...new Set([...(state.columnasQueFaltan || []), col])];
+      lote = lote.map((r) => { const c = { ...r }; delete c[col]; return c; });
+      ({ error } = await supabase.from("ordenes_mesero").upsert(lote, { onConflict: "referencia" }));
     }
     if (error) throw error;
     guardadas += trozo.length;
   }
   await cargarOrdenesMesero();
   logActividad("meseros", guardadas + " órdenes");
-  return { guardadas, faltaBebidas: state.faltaBebidas };
+  return { guardadas, faltan: state.columnasQueFaltan };
 }
 
 // ═══════════════════════════════════════════════════════════════════
