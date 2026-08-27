@@ -242,6 +242,7 @@ export async function importarOrdenesMesero(filas) {
       mesa: f.mesa || "",
       comensales: num(f.comensales),
       total: num(f.total),
+      descuento: num(f.descuento),
       cafes: num(f.cafes),
       postres: num(f.postres),
       extras_uds: num(f.extras_uds),

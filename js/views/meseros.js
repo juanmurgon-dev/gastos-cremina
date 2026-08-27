@@ -211,7 +211,12 @@ function calcular(desde, hasta) {
   // Qué días del periodo tienen órdenes. Sirve para avisar cuándo el total
   // que se muestra NO es el del periodo completo.
   const dias = new Set(todos.map((o) => o.fecha));
-  return { lista, eq, comedor, dias, criterios: CRI };
+  // Cortesías: cerradas pero en cero, casi siempre por un descuento que se
+  // come el ticket completo. No son venta, pero callarlas hace que el total
+  // no cuadre con nada y nadie sepa por qué.
+  const cortesias = enRango.filter((o) => o.estatus === "Cerrada" && num(o.total) <= 0).length;
+  const descuentos = enRango.reduce((a, o) => a + num(o.descuento), 0);
+  return { lista, eq, comedor, dias, criterios: CRI, cortesias, descuentos };
 }
 
 // ── Qué significa cada número ───────────────────────────────────
@@ -239,8 +244,9 @@ const INFO = {
   ratios: { t: "1 de cada cuántas personas", q: "El mismo dato de arriba, dicho como se dice en la junta.",
     c: "Comensales entre unidades vendidas. Más bajo = más consumo.",
     d: "«1 café por cada 1.5 personas» se entiende de inmediato; «1.63 por cuenta» hay que traducirlo. Es el mismo número visto al revés." },
-  ventaTotal: { t: "Venta total", q: "Todo lo que pasó por su usuario, en todos los canales.", c: "Suma del total de sus órdenes cerradas, comedor y para-llevar.",
-    d: "Aquí SÍ entra el para-llevar, a diferencia del bloque de arriba." },
+  ventaTotal: { t: "Venta total", q: "Todo lo que pasó por su usuario, en todos los canales.",
+    c: "Suma del «Total de orden» de sus órdenes cerradas, comedor y para-llevar. Ese total ya viene NETO de descuentos, y las órdenes que quedaron en $0 (cortesías) no se cuentan.",
+    d: "Por eso casi nunca cuadra con el corte de caja: el corte va en bruto y además trae propinas. En julio y agosto los descuentos fueron 2.3% de la venta y hubo 29 órdenes en cortesía. Debajo de la tabla se dice cuántas fueron en el periodo que estás viendo." },
   efectividad: { t: "Efectividad", q: "Su venta por persona comparada con el promedio del equipo. 100% = promedio.",
     c: "Su venta por comensal (todos los canales) entre la del equipo.",
     d: "CUIDADO al comparar meseros contra cajeras: el para-llevar tiene ticket naturalmente más bajo (un café son $35), así que la efectividad de quien atiende barra sale menor. No es mal desempeño, es la naturaleza del canal." },
@@ -320,7 +326,7 @@ export function render(el) {
     const r = rangoDe(periodo, semanaSel);
     // ¿Lo que hay en memoria es de ESTE periodo? Si no, está por llegar.
     const listo = store.state.ordenesMeseroRango === r.desde + "|" + r.hasta;
-    const { lista, eq, dias, criterios: CRI } = calcular(r.desde, r.hasta);
+    const { lista, eq, dias, criterios: CRI, cortesias, descuentos } = calcular(r.desde, r.hasta);
     const metas = cfg().metas;
 
     if (store.state.errorMeseros) {
@@ -360,7 +366,7 @@ export function render(el) {
       + (sinBebidas ? avisoBebidas() : "")
       + bloqueComedor(cols, piso.length, eq, metas, r, CRI)
       + bloqueRatios(cols, piso.length, eq, CRI)
-      + bloqueVenta(cols, piso.length, eq, r)
+      + bloqueVenta(cols, piso.length, eq, r, cortesias, descuentos)
       + (sinTurnos.length ? `<div class="card" style="padding:12px 14px"><p class="sub" style="margin:0;font-size:12px">
           <b>Sin turnos ${esc(r.txt.toLowerCase())}:</b> ${esc(sinTurnos.map((m) => m.split(" ")[0]).join(", "))}.
           Aparecen en el scorecard con guiones para que las columnas no cambien de una semana a otra.</p></div>` : "")
@@ -491,7 +497,7 @@ export function render(el) {
     }, cols, nPiso);
   }
 
-  function bloqueVenta(cols, nPiso, eq, r) {
+  function bloqueVenta(cols, nPiso, eq, r, cortesias, descuentos) {
     const prom = num(eq.ventaComensal);
     const f = [
       fila("Venta total", "", "ventaTotal", cols, eq, "tVenta", (v) => money(v), null),
@@ -501,7 +507,24 @@ export function render(el) {
         (v) => prom ? Math.round(v / prom * 100) + "%" : "—", prom || null, true),
     ].join("");
     return tabla({ head: seccion("Venta total y efectividad", "Todos los canales: comedor + para-llevar"), filas: f }, cols, nPiso)
+      + queNoEntra(cortesias, descuentos, eq)
       + cotejoCortes(eq, r);
+  }
+
+  // Qué NO está sumado en el total de arriba. Es la primera explicación de
+  // por qué este número no cuadra con el corte de caja, y hasta ahora había
+  // que adivinarla.
+  function queNoEntra(cortesias, descuentos, eq) {
+    if (!cortesias && !(descuentos > 0)) return "";
+    const partes = [];
+    if (cortesias) partes.push(`<b>${cortesias}</b> orden(es) en cortesía, que salieron en $0`);
+    if (descuentos > 0) partes.push(`<b>${money(descuentos)}</b> en descuentos ya restados`);
+    const pct = num(eq.tVenta) > 0 ? (descuentos / num(eq.tVenta) * 100).toFixed(1) : null;
+    return `<div class="card" style="padding:12px 14px">
+      <p class="sub" style="margin:0;font-size:12px"><b>Qué no entra en esta venta:</b>
+        ${partes.join(" · ")}${pct ? ` (${pct}% de la venta)` : ""}.
+        Si comparas contra tu corte de caja, ahí sí entran las propinas y la venta va en bruto —
+        por eso el corte casi siempre sale más alto.</p></div>`;
   }
 
   // La app tiene TRES fuentes de venta: los cortes de caja (lo que ve Inicio),

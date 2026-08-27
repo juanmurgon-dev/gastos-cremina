@@ -143,6 +143,7 @@ const CAMPOS = {
   estatus:    ["estatus", "estado", "status"],
   mesa:       ["mesa", "numero de mesa"],
   totalOrden: ["total de orden", "total de la orden"],
+  descuentoOrden: ["descuento de la orden", "descuento de orden"],
   ordenes:    ["cantidad de ordenes", "cantidad ordenes", "numero de ordenes", "ordenes", "tickets", "cuentas"],
   comensales: ["cantidad comensales", "cantidad de comensales", "comensales", "personas"],
   categoria:  ["categoria de articulo", "categoria del articulo", "categoria", "familia",
@@ -334,6 +335,7 @@ function parseMeseros(gen) {
       mesa: texto(cel(r, k.mapa, "mesa")),
       comensales: Math.round(N(cel(r, k.mapa, "comensales"))),
       total: N(cel(r, k.mapa, "totalOrden")) || N(cel(r, k.mapa, "venta")),
+      descuento: N(cel(r, k.mapa, "descuentoOrden")),
       cafes: 0, postres: 0, extras_uds: 0, extras_monto: 0, bebidas: 0,
       detalle: { categorias: {}, extras: {}, grupos: {}, articulos: {}, mods: {} },
     });
