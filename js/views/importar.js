@@ -314,10 +314,48 @@ const CAT_CAFE = norm("Barra de Café");
 const CAT_POSTRE = norm("Postres");
 const GRUPOS_EXTRA = [norm("Extras Proteína"), norm("Extras Premium")];
 
+// Guarda el desempeño por mesero de un libro de Parrot, venga como libro de
+// dos hojas (órdenes + artículos) o como el reporte de órdenes solo. Va aparte
+// y nunca tumba la importación de ventas: si falla, lo dice y sigue.
+async function guardarMeseros(gen, logs) {
+  try {
+    const ordm = parseMeseros(gen);
+    if (!ordm.length) return;
+    const rm = await store.importarOrdenesMesero(ordm, ordm.conDetalle !== false);
+    const gente = new Set(ordm.map((o) => o.mesero).filter(Boolean)).size;
+    logs.push(`✅ Meseros · ${rm.guardadas} cuentas de ${gente} persona(s)` +
+      (ordm.conDetalle === false
+        ? " · ⚠️ este archivo no trae la hoja de artículos: se guardaron las cuentas, pero café/postres/extras salen de los reportes que sí la traen"
+        : ""));
+    // Si la base rechazó alguna columna, se guardó todo lo demás — pero hay
+    // que DECIRLO. Callarlo hacía que la fila saliera en cero sin ninguna pista.
+    if (rm.faltan && rm.faltan.length) {
+      const tipo = (c) => c === "descuento" ? "numeric(12,2) not null default 0" : "int not null default 0";
+      logs.push(`⚠️ Las órdenes se guardaron SIN ${rm.faltan.join(" y ")}: la base todavía no ` +
+        `conoce esa(s) columna(s). Corre esto en el SQL Editor y vuelve a importar:  ` +
+        rm.faltan.map((c) => `alter table public.ordenes_mesero add column if not exists ${c} ${tipo(c)};`).join("  ") +
+        `  notify pgrst, 'reload schema';`);
+    }
+  } catch (e) {
+    logs.push(`⚠️ Meseros: no pude guardarlo — ${(e && e.message) || e}` +
+      (String((e && e.message) || "").includes("ordenes_mesero")
+        ? " (¿ya corriste meseros.sql en Supabase?)" : ""));
+  }
+}
+
 function parseMeseros(gen) {
-  const k = gen.kpi;
-  // Sin la hoja de órdenes no hay mesero que valga: la de artículos no lo trae.
+  // La hoja de ÓRDENES es la que trae al mesero. Puede venir como la hoja
+  // secundaria de un libro de dos hojas (`gen.kpi`) o ser el libro entero,
+  // cuando se exporta solo el reporte de órdenes. Antes solo se contemplaba
+  // el primer caso, así que subir el reporte de órdenes solo guardaba la
+  // venta del día y perdía a los meseros sin decir nada.
+  const k = (gen.kpi && gen.kpi.mapa.usuario != null) ? gen.kpi
+          : (gen.mapa && gen.mapa.usuario != null && gen.mapa.referencia != null) ? gen
+          : null;
   if (!k || k.mapa.referencia == null || k.mapa.usuario == null) return [];
+  // ¿Hay hoja de artículos? Si no, se guardan las cuentas pero no lo que
+  // llevaban: café, postres y extras se quedan como estén.
+  const det = (gen !== k && gen.mapa && gen.mapa.producto != null) ? gen : null;
 
   const ord = new Map();
   for (let i = k.hdr + 1; i < k.rows.length; i++) {
@@ -343,7 +381,8 @@ function parseMeseros(gen) {
   if (!ord.size) return [];
 
   // Ahora las líneas: cada artículo suma a la cuenta a la que pertenece.
-  if (gen.mapa.referencia != null) {
+  if (det && det.mapa.referencia != null) {
+    const gen = det;   // dentro de este bloque, `gen` es la hoja de artículos
     for (let i = gen.hdr + 1; i < gen.rows.length; i++) {
       const r = gen.rows[i];
       if (!Array.isArray(r)) continue;
@@ -381,7 +420,9 @@ function parseMeseros(gen) {
       }
     }
   }
-  return [...ord.values()];
+  const filas = [...ord.values()];
+  filas.conDetalle = !!det;
+  return filas;
 }
 
 function parseVentasDia(rows, mapa, hdr) {
@@ -1013,6 +1054,7 @@ export function montar(el) {
               ? `✅ Variantes día ${diaRef} · ${r.filas} líneas (sumado a la semana ${r.periodo})`
               : `✅ Variantes ${r.periodo} · ${r.filas} líneas platillo/variante`);
         } else if (it.tipo === "gen-ordenes") {
+          await guardarMeseros(it.gen, logs);
           const filas = parseOrdenes(it.gen.rows, it.gen.mapa, it.gen.hdr);
           const r = await importarVentasDia(filas);
           if (filas.length === 1) diaRef = filas[0].fecha;
@@ -1030,30 +1072,7 @@ export function montar(el) {
           // Si el libro trae también la hoja de órdenes (con la columna
           // Usuario), de paso sale el desempeño por mesero. Va aparte y no
           // debe tumbar la importación de ventas si algo falla.
-          try {
-            const ordm = parseMeseros(it.gen);
-            if (ordm.length) {
-              const rm = await store.importarOrdenesMesero(ordm);
-              const gente = new Set(ordm.map((o) => o.mesero).filter(Boolean)).size;
-              logs.push(`✅ Meseros · ${rm.guardadas} cuentas de ${gente} persona(s)`);
-              // Si la base rechazó `bebidas`, se guardó todo lo demás — pero hay
-              // que DECIRLO. Callarlo hacía que la fila de bebidas saliera en
-              // cero sin ninguna pista de por qué.
-              if (rm.faltan && rm.faltan.length) {
-                // Las órdenes SÍ entraron, pero sin estas columnas. Decir cuáles
-                // y dar el remedio exacto, para no mandar a nadie a adivinar.
-                const tipo = (c) => c === "descuento" ? "numeric(12,2) not null default 0" : "int not null default 0";
-                logs.push(`⚠️ Las órdenes se guardaron SIN ${rm.faltan.join(" y ")}: la base todavía no ` +
-                  `conoce esa(s) columna(s). Corre esto en el SQL Editor y vuelve a importar:  ` +
-                  rm.faltan.map((c) => `alter table public.ordenes_mesero add column if not exists ${c} ${tipo(c)};`).join("  ") +
-                  `  notify pgrst, 'reload schema';`);
-              }
-            }
-          } catch (e) {
-            logs.push(`⚠️ Meseros: no pude guardarlo — ${(e && e.message) || e}` +
-              (String((e && e.message) || "").includes("ordenes_mesero")
-                ? " (¿ya corriste meseros.sql en Supabase?)" : ""));
-          }
+          await guardarMeseros(it.gen, logs);
           const p = parseLineasOrden(it.gen.rows, it.gen.mapa, it.gen.hdr);
           if (!p.prods.length) throw new Error("no encontré artículos vendidos en ese reporte");
           // La venta por producto se guarda POR SEMANA, y este importador mete

@@ -294,7 +294,9 @@ export function render(el) {
   pintar();
 
   async function arrancar() {
-    if (!(store.state.fechasMesero || []).length) await store.cargarFechasMesero();
+    // `null` = el índice se invalidó (entró una importación). `[]` = ya se
+    // consultó y de verdad no hay nada. Solo el primer caso vuelve a pedir.
+    if (!store.state.fechasMesero) await store.cargarFechasMesero();
     if (periodo === "semana" && !semanaSel) semanaSel = semanasConDatos()[0] || null;
     cargando = false;
     pedirRango();
@@ -362,7 +364,7 @@ export function render(el) {
     const sinBebidas = !lista.some((p) => num(p.uds && p.uds.bebidas) > 0);
 
     el.innerHTML = selector(r)
-      + avisoDiasFaltantes(r, dias)
+      + avisoDiasFaltantes(r, dias, sinTurnos)
       + (sinBebidas ? avisoBebidas() : "")
       + bloqueComedor(cols, piso.length, eq, metas, r, CRI)
       + bloqueRatios(cols, piso.length, eq, CRI)
@@ -680,7 +682,15 @@ export function render(el) {
   }
   function wireSel() {
     const rec = el.querySelector("#mRecargar");
-    if (rec) rec.addEventListener("click", () => { store.state.ordenesMeseroAl = 0; recargar(); });
+    // ↻ vuelve a pedir TODO: el índice de días y personas, y las órdenes del
+    // rango. Antes solo pedía el rango, así que un día recién subido no
+    // aparecía en la lista de semanas por más veces que le picaras.
+    if (rec) rec.addEventListener("click", async () => {
+      store.state.ordenesMeseroAl = 0;
+      store.state.fechasMesero = null;
+      await store.cargarFechasMesero();
+      recargar();
+    });
     el.querySelectorAll("[data-p]").forEach((b) => b.addEventListener("click", () => {
       periodo = b.dataset.p;
       if (periodo === "semana" && !semanaSel) semanaSel = semanasConDatos()[0] || null;
@@ -830,7 +840,7 @@ export function render(el) {
   // totales, el ranking y los focos. Callarlo es dar un numero que parece
   // bueno y no lo es — que es justo lo que pasa al comparar contra Ventas,
   // donde el reporte semanal si viene completo.
-  function avisoDiasFaltantes(r, dias) {
+  function avisoDiasFaltantes(r, dias, sinTurnos = []) {
     if (r.desde === "0000-01-01") return "";        // "Todo": no hay periodo que cubrir
     const hoyIso = iso(hoy());
     const fin = r.hasta > hoyIso ? hoyIso : r.hasta;
@@ -845,8 +855,16 @@ export function render(el) {
       <p class="sub" style="margin:6px 0 0"><b>Todo lo de abajo está incompleto</b> — los totales, el marcador
       y los focos solo cuentan los ${dias.size} días que sí están. Si comparas contra la pestaña de Ventas
       el número no va a cuadrar, porque allá el reporte semanal sí viene completo.</p>
+      ${sinTurnos.length ? `<p class="sub" style="margin:6px 0 0">Por eso
+      <b>${esc(sinTurnos.map((m) => m.split(" ")[0]).join(", "))}</b>
+      ${sinTurnos.length === 1 ? "puede salir" : "pueden salir"} en <b>sin turnos</b>:
+      si ${sinTurnos.length === 1 ? "trabajó" : "trabajaron"} justo alguno de los días que faltan,
+      el app no tiene cómo saberlo. Sube esos días y ${sinTurnos.length === 1 ? "aparece" : "aparecen"} solos.</p>` : ""}
       <p class="sub" style="margin:6px 0 0">Sube los reportes de órdenes que falten en <b>Insumos → Importar</b>.
       Si la casa cerró alguno de esos días, ignora este aviso.</p>
+      <p class="sub" style="margin:6px 0 0;opacity:.75">Ojo: Parrot nombra el archivo con el día que
+      lo <i>descargas</i>, no con el día que trae adentro. Un archivo llamado "Ordenes 25-08" puede traer
+      el 24. Guíate por esta lista, no por el nombre del archivo.</p>
     </div>`;
   }
 

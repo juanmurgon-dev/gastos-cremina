@@ -50,8 +50,8 @@ export const state = {
   ordenesMesero: [],    // una fila por cuenta (se carga al abrir Ventas → Meseros)
   ordenesMeseroAl: 0,   // cuándo se trajeron (para saber si ya están viejas)
   ventasSemana: {},     // venta escrita a mano por semana: { "2026-08-10": 189353 }
-  fechasMesero: [],     // días que tienen órdenes (índice ligero, sin bajar las órdenes)
-  indiceMesero: [],     // pares { fecha, mesero } — para saber quién ha trabajado
+  fechasMesero: null,   // días que tienen órdenes (índice ligero, sin bajar las órdenes)
+  indiceMesero: null,   // pares { fecha, mesero } — para saber quién ha trabajado
   ordenesMeseroRango: null,  // qué rango está cargado ahora mismo
   errorMeseros: null,   // p.ej. "falta correr meseros.sql"
   orgNombre: null,      // nombre del restaurante (para mostrar en el encabezado)
@@ -242,11 +242,23 @@ export async function comensalesPorCanal(desde, hasta) {
 
 // Guarda el reporte importado. Upsert por referencia: volver a subir el mismo
 // archivo (o uno que se traslape) corrige en vez de duplicar.
-export async function importarOrdenesMesero(filas) {
+// `conDetalle` dice si el archivo traía la hoja de artículos. Cuando NO la
+// trae (el reporte de órdenes exportado solo), se guardan los datos de la
+// cuenta —mesero, comensales, total— pero no se tocan los conteos de café,
+// postres y extras: un upsert solo escribe las columnas que le mandas, así
+// que omitirlas conserva lo que ya se había guardado de un reporte completo.
+// Mandarlas en cero borraría el desglose de esa semana.
+export async function importarOrdenesMesero(filas, conDetalle = true) {
   if (!Array.isArray(filas) || !filas.length) return { guardadas: 0 };
   const LOTE = 500;
   let guardadas = 0;
   state.columnasQueFaltan = null;
+  // El índice de fechas y personas que alimenta la pestaña de Meseros queda
+  // viejo en cuanto entra una orden nueva. Sin esto, subir el reporte de un
+  // día y no ver aparecer ni el día ni a quien lo trabajó hasta recargar
+  // toda la app — que fue justo lo que pasó con Denisse, Alexa y Giselle.
+  state.fechasMesero = null;
+  state.indiceMesero = null;
   for (let i = 0; i < filas.length; i += LOTE) {
     const trozo = filas.slice(i, i + LOTE).map((f) => ({
       referencia: f.referencia,
@@ -258,12 +270,14 @@ export async function importarOrdenesMesero(filas) {
       comensales: num(f.comensales),
       total: num(f.total),
       descuento: num(f.descuento),
-      cafes: num(f.cafes),
-      postres: num(f.postres),
-      extras_uds: num(f.extras_uds),
-      extras_monto: num(f.extras_monto),
-      bebidas: num(f.bebidas),
-      detalle: f.detalle || {},
+      ...(conDetalle ? {
+        cafes: num(f.cafes),
+        postres: num(f.postres),
+        extras_uds: num(f.extras_uds),
+        extras_monto: num(f.extras_monto),
+        bebidas: num(f.bebidas),
+        detalle: f.detalle || {},
+      } : {}),
     }));
     let lote = trozo;
     let { error } = await supabase.from("ordenes_mesero").upsert(lote, { onConflict: "referencia" });
