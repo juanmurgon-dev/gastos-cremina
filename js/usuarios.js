@@ -89,6 +89,17 @@ function pintar() {
     <p class="sub" style="margin-top:0">Quién entra a la app y qué ve cada quien.
     ${dom ? `Tu equipo entra escribiendo solo su nombre — la app le pega <b>@${esc(dom)}</b>.` : ""}</p>
 
+    ${estado.miRol === "owner" ? `
+      <div class="titulo-seccion" style="margin-top:16px">Cómo entra tu equipo</div>
+      <label class="campo"><span>Dominio de tu restaurante</span>
+        <div class="fila" style="gap:8px">
+          <input id="uDom" value="${esc(dom)}" placeholder="mirestaurante.com" autocapitalize="none" style="flex:1" />
+          <button class="btn sec" id="uDomOk" style="width:auto;padding:0 14px">Guardar</button>
+        </div>
+        <span class="sub" style="font-size:11px">Con esto tu equipo entra escribiendo solo su nombre.
+        El buzón no tiene que existir — nunca se manda un correo.
+        ${dom ? "Cambiarlo <b>no</b> mueve las cuentas ya creadas." : ""}</span></label>` : ""}
+
     <div class="titulo-seccion" style="margin-top:16px">Tu equipo (${estado.miembros.length})</div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
       ${estado.miembros.map(filaMiembro).join("") || `<div class="vacio">Todavía no hay nadie.</div>`}
@@ -161,6 +172,15 @@ function wire(bg, cerrar, repintar) {
     catch (e) { msg(String(e.message || e), true); }
     finally { btn.disabled = false; btn.textContent = txt; }
   };
+
+  const domOk = q("#uDomOk");
+  if (domOk) domOk.addEventListener("click", () => conBoton(domOk, async () => {
+    const r = await llamar({ accion: "dominio", dominio: q("#uDom").value });
+    estado.dominio = r.dominio;
+    estado.miembros = r.miembros;
+    try { localStorage.setItem("platify.dominio", r.dominio); } catch (e) {}
+    repintar();
+  }));
 
   const add = q("#nAdd");
   if (add) add.addEventListener("click", () => conBoton(add, async () => {
