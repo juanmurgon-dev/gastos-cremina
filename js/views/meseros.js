@@ -333,6 +333,19 @@ export function render(el) {
     if (!listo) { el.innerHTML = selector(r) + `<div class="vacio">Trayendo ${esc(r.txt.toLowerCase())}…</div>`; wireSel(); return; }
     if (!lista.length) { el.innerHTML = selector(r) + vacio(); wireSel(); return; }
 
+    // Columnas estables: quien haya trabajado en las últimas 8 semanas sale
+    // SIEMPRE, aunque este periodo no tenga turnos. Si desaparecieran, el
+    // scorecard cambiaría de forma cada semana y sería imposible compararlo
+    // con el de la junta anterior — que es justo para lo que existe.
+    const conocidos = store.meserosActivos(r.hasta, 8);
+    const yaEstan = new Set(lista.map((p) => p.mesero));
+    const sinTurnos = conocidos.filter((m) => !yaEstan.has(m));
+    for (const m of sinTurnos) {
+      lista.push({ mesero: m, cuentas: 0, comensales: 0, venta: 0, extrasMonto: 0,
+                   uds: {}, val: {}, tCuentas: 0, tComensales: 0, tVenta: 0,
+                   tktPersona: 0, ventaComensal: 0, nota: null, chica: true });
+    }
+
     // Columnas: primero quienes compiten (de piso), luego el resto, luego Equipo.
     const piso = lista.filter((p) => compite(p.mesero));
     const otros = lista.filter((p) => !compite(p.mesero));
@@ -348,6 +361,9 @@ export function render(el) {
       + bloqueComedor(cols, piso.length, eq, metas, r, CRI)
       + bloqueRatios(cols, piso.length, eq, CRI)
       + bloqueVenta(cols, piso.length, eq, r)
+      + (sinTurnos.length ? `<div class="card" style="padding:12px 14px"><p class="sub" style="margin:0;font-size:12px">
+          <b>Sin turnos ${esc(r.txt.toLowerCase())}:</b> ${esc(sinTurnos.map((m) => m.split(" ")[0]).join(", "))}.
+          Aparecen en el scorecard con guiones para que las columnas no cambien de una semana a otra.</p></div>` : "")
       + focos(lista, eq, metas, r, CRI)
       + leyenda()
       + marcador(lista, eq, metas, r, CRI)
@@ -368,8 +384,8 @@ export function render(el) {
     return `<tr>
       <th style="position:sticky;left:0;background:var(--blanco,#fff);z-index:2;text-align:left;padding:9px 10px;min-width:150px"></th>
       ${cols.map((p, i) => `<th style="padding:8px 6px;text-align:center;color:#fff;background:${i < nPiso ? "#173a34" : "#7b7b74"};min-width:88px">
-        <div style="font-size:13px;font-weight:700">${esc(p.mesero.split(" ")[0])}</div>
-        <div style="font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.8">${esc(rolDe(p.mesero) || (i < nPiso ? "piso" : "no compite"))}</div>
+        <div style="font-size:13px;font-weight:700;${p.cuentas ? "" : "opacity:.5"}">${esc(p.mesero.split(" ")[0])}</div>
+        <div style="font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.8">${p.cuentas ? esc(rolDe(p.mesero) || (i < nPiso ? "piso" : "no compite")) : "sin turnos"}</div>
       </th>`).join("")}
       <th style="padding:8px 6px;text-align:center;color:#fff;background:#5c2018;min-width:82px;font-size:13px">Equipo</th>
     </tr>`;

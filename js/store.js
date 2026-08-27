@@ -51,6 +51,7 @@ export const state = {
   ordenesMeseroAl: 0,   // cuándo se trajeron (para saber si ya están viejas)
   ventasSemana: {},     // venta escrita a mano por semana: { "2026-08-10": 189353 }
   fechasMesero: [],     // días que tienen órdenes (índice ligero, sin bajar las órdenes)
+  indiceMesero: [],     // pares { fecha, mesero } — para saber quién ha trabajado
   ordenesMeseroRango: null,  // qué rango está cargado ahora mismo
   errorMeseros: null,   // p.ej. "falta correr meseros.sql"
   orgNombre: null,      // nombre del restaurante (para mostrar en el encabezado)
@@ -149,11 +150,29 @@ async function cargarMiOrg() {
 // Índice ligero: SOLO las fechas que tienen órdenes. Con esto la pantalla
 // arma su lista de semanas sin bajar una sola orden completa.
 export async function cargarFechasMesero() {
-  const { data, error } = await supabase.from("ordenes_mesero").select("fecha");
+  // Fecha + quién atendió. Dos columnas de texto: pesa poco y con eso la
+  // pantalla sabe QUÉ semanas hay y QUIÉNES han trabajado, sin bajar una
+  // sola orden completa.
+  const { data, error } = await supabase.from("ordenes_mesero").select("fecha, mesero");
   if (error) return [];
-  state.fechasMesero = [...new Set((data || []).map((r) => r.fecha).filter(Boolean))].sort();
+  state.indiceMesero = (data || []).filter((r) => r.fecha);
+  state.fechasMesero = [...new Set(state.indiceMesero.map((r) => r.fecha))].sort();
   notify();
   return state.fechasMesero;
+}
+
+// Quiénes atendieron en las últimas `semanas` antes de `hasta`. Sirve para
+// que las columnas del scorecard no cambien de una semana a otra: si alguien
+// no tuvo turnos, aparece igual con "sin turnos" en vez de desaparecer.
+export function meserosActivos(hasta, semanas = 8) {
+  const fin = new Date(hasta + "T12:00:00");
+  const ini = new Date(fin); ini.setDate(ini.getDate() - semanas * 7);
+  const desdeISO = ini.toISOString().slice(0, 10);
+  const s = new Set();
+  for (const r of state.indiceMesero || []) {
+    if (r.fecha >= desdeISO && r.fecha <= hasta && r.mesero) s.add(r.mesero);
+  }
+  return [...s];
 }
 
 // Trae las órdenes de UN RANGO, no todas. Antes bajaba la historia
