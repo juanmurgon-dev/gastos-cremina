@@ -16,7 +16,7 @@ import * as inventario from "./views/inventario.js";
 import * as capacitacion from "./views/capacitacion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.198";
+export const APP_VERSION = "v3.199";
 export const APP_FECHA = "27 ago 2026";
 
 const VISTAS = {
@@ -371,6 +371,30 @@ function ruta() {
   window.scrollTo(0, 0);
   limpiarVista = VISTAS[clave].mod.render(vistaEl, { user: usuarioActual }) || null;
 }
+
+// ── ¿Hay versión nueva? ────────────────────────────────────────
+// El service worker avisa de las actualizaciones, pero en una PWA instalada
+// ese aviso tarda o a veces no llega: GitHub Pages manda `max-age=600`, así
+// que el navegador puede quedarse con la copia vieja sin enterarse.
+//
+// Esto no depende de él: pide un archivo diminuto SIN caché y compara. Si el
+// servidor tiene otra versión, recarga. Solo se hace al abrir la app y al
+// volver a ella, que son los dos momentos en que recargar no interrumpe nada.
+async function revisarVersion() {
+  try {
+    const r = await fetch("./version.txt?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return;
+    const v = (await r.text()).trim();
+    if (!v || v === APP_VERSION) return;
+    // Una sola recarga por versión detectada: si el servidor sirviera el
+    // version.txt nuevo pero todavía el app.js viejo, esto evita el bucle.
+    if (sessionStorage.getItem("platify.recarga") === v) return;
+    sessionStorage.setItem("platify.recarga", v);
+    location.reload();
+  } catch (_) { /* sin conexión: se queda con lo que tiene */ }
+}
+revisarVersion();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) revisarVersion(); });
 
 // ── Service worker + actualización sin reinstalar ──────────────
 let swReg = null;

@@ -2,7 +2,7 @@
 // Estrategia "network-first" para archivos propios: siempre intenta la
 // versión más nueva de internet y solo usa el caché si no hay conexión.
 // Así, cuando publicas una actualización, aparece de inmediato.
-const CACHE = "cremina-gastos-v3198";
+const CACHE = "cremina-gastos-v3199";
 // Rutas relativas: la app funciona igual en la raíz de un dominio propio
 // o en un subpath tipo usuario.github.io/repo/ (GitHub Pages).
 const SHELL = [
@@ -46,6 +46,9 @@ self.addEventListener("fetch", (e) => {
 
   // Solo manejamos archivos propios (mismo origen). Todo lo de Supabase va directo a la red.
   if (url.origin !== location.origin) return;
+  // version.txt jamás se cachea: es justo el archivo que sirve para saber si
+  // lo que tienes guardado ya quedó viejo. Guardarlo sería el mismo problema.
+  if (url.pathname.endsWith("/version.txt")) return;
 
   // Network-first: intenta la red, guarda copia fresca y si falla usa el caché.
   e.respondWith(
