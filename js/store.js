@@ -85,6 +85,27 @@ function rowToTicket(r) {
 // Supabase corta CADA consulta en 1000 filas. Con varios meses de historial eso
 // hace que semanas enteras desaparezcan sin aviso (variantes_venta ya pasó ese
 // tope). Pedimos de mil en mil hasta que llegue una página incompleta.
+// Trae TODAS las filas de una consulta, de mil en mil.
+//
+// Supabase corta en 1000 filas por petición y NO avisa: devuelve mil y se
+// queda tan tranquilo. Cualquier consulta que pueda pasar de ahí tiene que
+// pasar por aquí, o va a mentir en silencio — que fue justo lo que hizo el
+// índice de meseros: con 2,277 órdenes solo veía las primeras mil, así que
+// faltaban semanas en el selector y personas en el scorecard.
+async function traerPaginado(hacerQuery, orden) {
+  const PAGINA = 1000, MAX = 60;
+  const filas = [];
+  for (let i = 0; i < MAX; i++) {
+    const r = await hacerQuery()
+      .order(orden, { ascending: true })
+      .range(i * PAGINA, i * PAGINA + PAGINA - 1);
+    if (r.error) return { filas, error: r.error };
+    filas.push(...(r.data || []));
+    if (!r.data || r.data.length < PAGINA) break;
+  }
+  return { filas, error: null };
+}
+
 async function traerTodo(tabla, orden = "id") {
   const PAGINA = 1000, MAX_PAGINAS = 60;
   const filas = [];
@@ -153,9 +174,10 @@ export async function cargarFechasMesero() {
   // Fecha + quién atendió. Dos columnas de texto: pesa poco y con eso la
   // pantalla sabe QUÉ semanas hay y QUIÉNES han trabajado, sin bajar una
   // sola orden completa.
-  const { data, error } = await supabase.from("ordenes_mesero").select("fecha, mesero");
+  const { filas, error } = await traerPaginado(
+    () => supabase.from("ordenes_mesero").select("fecha, mesero"), "fecha");
   if (error) return [];
-  state.indiceMesero = (data || []).filter((r) => r.fecha);
+  state.indiceMesero = filas.filter((r) => r.fecha);
   state.fechasMesero = [...new Set(state.indiceMesero.map((r) => r.fecha))].sort();
   notify();
   return state.fechasMesero;
@@ -181,19 +203,12 @@ export function meserosActivos(hasta, semanas = 8) {
 // habría empeorado cada semana que pasara.
 export async function cargarOrdenesMesero(desde, hasta) {
   const clave = (desde || "") + "|" + (hasta || "");
-  const PAGINA = 1000, MAX = 60;
-  const filas = [];
-  let error = null;
-  for (let i = 0; i < MAX; i++) {
+  const { filas, error } = await traerPaginado(() => {
     let q = supabase.from("ordenes_mesero").select("*");
     if (desde) q = q.gte("fecha", desde);
     if (hasta) q = q.lte("fecha", hasta);
-    const r = await q.order("referencia", { ascending: true })
-                     .range(i * PAGINA, i * PAGINA + PAGINA - 1);
-    if (r.error) { error = r.error; break; }
-    filas.push(...(r.data || []));
-    if (!r.data || r.data.length < PAGINA) break;
-  }
+    return q;
+  }, "referencia");
   if (error) { state.errorMeseros = error.message; notify(); return []; }
   state.errorMeseros = null;
   state.ordenesMesero = filas;
@@ -212,9 +227,9 @@ export async function cargarOrdenesMesero(desde, hasta) {
 // órdenes completas: Inicio necesita cuatro números, no el detalle.
 // Devuelve null si la tabla no existe todavía — quien llame que no pinte nada.
 export async function comensalesPorCanal(desde, hasta) {
-  const { data, error } = await supabase.from("ordenes_mesero")
-    .select("tipo_orden, comensales, total")
-    .gte("fecha", desde).lte("fecha", hasta).eq("estatus", "Cerrada");
+  const { filas: data, error } = await traerPaginado(
+    () => supabase.from("ordenes_mesero").select("referencia, tipo_orden, comensales, total")
+      .gte("fecha", desde).lte("fecha", hasta).eq("estatus", "Cerrada"), "referencia");
   if (error) return null;
   const r = { comedor: 0, llevar: 0, ctasComedor: 0, ctasLlevar: 0, ventaComedor: 0, ventaLlevar: 0 };
   for (const o of data || []) {
