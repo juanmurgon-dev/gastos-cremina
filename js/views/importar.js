@@ -335,7 +335,7 @@ function parseMeseros(gen) {
       comensales: Math.round(N(cel(r, k.mapa, "comensales"))),
       total: N(cel(r, k.mapa, "totalOrden")) || N(cel(r, k.mapa, "venta")),
       cafes: 0, postres: 0, extras_uds: 0, extras_monto: 0, bebidas: 0,
-      detalle: { categorias: {}, extras: {}, grupos: {} },
+      detalle: { categorias: {}, extras: {}, grupos: {}, articulos: {}, mods: {} },
     });
   }
   if (!ord.size) return [];
@@ -359,6 +359,10 @@ function parseMeseros(gen) {
         // Todos los grupos pagados, para poder medir mañana algo que hoy no
         // se mide sin volver a importar mes y medio de órdenes.
         if (grupo) o.detalle.grupos[grupo] = (o.detalle.grupos[grupo] || 0) + q;
+        // El modificador SIN su grupo entre paréntesis: "Aguacate", no
+        // "Aguacate (Extras Premium)". Así se puede medir por nombre.
+        const solo = art.replace(/\s*\([^)]+\)\s*$/, "").trim();
+        if (solo) o.detalle.mods[solo] = (o.detalle.mods[solo] || 0) + q;
         // Spritz y limonadas: la bebida que el mesero SÍ mueve, aparte del café.
         if (/^(spritz|limonada)/i.test(art)) o.bebidas += q;
         if (!GRUPOS_EXTRA.includes(norm(grupo))) continue;
@@ -368,6 +372,8 @@ function parseMeseros(gen) {
       } else {
         if (!cat) continue;
         o.detalle.categorias[cat] = (o.detalle.categorias[cat] || 0) + q;
+        // Y el platillo por su nombre, para poder medir uno solo.
+        if (art) o.detalle.articulos[art] = (o.detalle.articulos[art] || 0) + q;
         if (norm(cat) === CAT_CAFE) o.cafes += q;
         else if (norm(cat) === CAT_POSTRE) o.postres += q;
       }

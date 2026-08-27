@@ -28,7 +28,82 @@ const ROJO  = "#fadfdb", R_TXT = "#b3261e";
 
 function cfg() {
   const c = (store.state.config && store.state.config.meseros) || {};
-  return { metas: { ...METAS_DEF, ...(c.metas || {}) }, compiten: c.compiten || {}, roles: c.roles || {} };
+  return { metas: { ...METAS_DEF, ...(c.metas || {}) }, compiten: c.compiten || {},
+           roles: c.roles || {}, criterios: c.criterios || null };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CRITERIOS
+//
+//  Un indicador son tres decisiones: QUÉ cuentas, ENTRE QUÉ lo divides,
+//  y cuál es la META. Todo lo que se mide aquí cabe en esa forma, así que
+//  en vez de escribir cada uno en el código, se configuran.
+//
+//  `dim` dice de dónde sale el número:
+//    columna   → un contador ya sumado en la orden (rápido, siempre existe)
+//    categoria → detalle.categorias  · grupo  → detalle.grupos
+//    articulo  → detalle.articulos   · mod    → detalle.mods
+//    extras    → detalle.extras (el nombre completo con su grupo)
+//
+//  Los cinco de fábrica reproducen exacto el scorecard de siempre. En
+//  cuanto agregas uno tuyo, convive con ellos sin tocar código.
+// ═══════════════════════════════════════════════════════════════
+const CRITERIOS_DEF = [
+  { id: "cafe",     nombre: "Café / cuenta",      dim: "columna", valores: ["cafes"],
+    entre: "cuenta",   meta: 2.0,  peso: 2, formato: "num", ratio: "cafés",   compite: false,
+    nota: "Todos los de piso suelen quedar casi iguales: es techo del sistema, no de la persona." },
+  { id: "postre",   nombre: "Attach postre",      dim: "columna", valores: ["postres"],
+    entre: "comensal", meta: 0.10, peso: 2, formato: "pct", ratio: "postres", compite: true },
+  { id: "extras",   nombre: "Extras / cuenta",    dim: "columna", valores: ["extras_uds"],
+    entre: "cuenta",   meta: 0.72, peso: 3, formato: "num", sub: "proteína + premium", compite: true },
+  { id: "aguacate", nombre: "Aguacate / cuenta",  dim: "extras",  valores: ["Aguacate"],
+    entre: "cuenta",   meta: 0,    peso: 1, formato: "num", compite: false },
+  { id: "bebidas",  nombre: "Bebidas / cuenta",   dim: "columna", valores: ["bebidas"],
+    entre: "cuenta",   meta: 0,    peso: 1, formato: "num", sub: "spritz + limonada", ratio: "bebidas", compite: false },
+];
+
+// Los de fábrica siguen tomando su meta de donde siempre, para no romper
+// lo que ya configuraste en la pantalla de metas.
+function criterios() {
+  const c = cfg();
+  if (c.criterios) return c.criterios;
+  const m = c.metas;
+  return CRITERIOS_DEF.map((x) => ({ ...x,
+    meta: x.id === "cafe" ? m.cafeCuenta : x.id === "postre" ? m.attachPostre
+        : x.id === "extras" ? m.extrasCuenta : x.meta }));
+}
+
+// Cuántas unidades de ESTE criterio trae una orden.
+function unidadesDe(o, cri) {
+  const vals = cri.valores || [];
+  if (cri.dim === "columna") return vals.reduce((a, k) => a + num(o[k]), 0);
+  const mapa = (o.detalle && o.detalle[
+    cri.dim === "categoria" ? "categorias" : cri.dim === "grupo" ? "grupos"
+    : cri.dim === "articulo" ? "articulos" : cri.dim === "mod" ? "mods" : "extras"]) || {};
+  let n = 0;
+  for (const k of Object.keys(mapa)) {
+    const kl = k.toLowerCase();
+    // Coincide exacto o contiene: así "Aguacate" encuentra
+    // "Aguacate (Extras Premium)" sin tener que escribirlo completo.
+    if (vals.some((v) => { const vl = String(v).toLowerCase(); return kl === vl || kl.includes(vl); })) n += num(mapa[k]);
+  }
+  return n;
+}
+
+// Qué se puede medir con lo que HAY cargado. El selector se arma de aquí,
+// así que el cliente elige de su propia operación y nunca de una lista
+// inventada. Lo que no aparezca es que no está en los datos todavía.
+function dimensionesDisponibles() {
+  const d = { categoria: new Set(), grupo: new Set(), articulo: new Set(), mod: new Set() };
+  const llave = { categoria: "categorias", grupo: "grupos", articulo: "articulos", mod: "mods" };
+  for (const o of store.state.ordenesMesero || []) {
+    for (const k of Object.keys(d)) {
+      const m = (o.detalle && o.detalle[llave[k]]) || {};
+      for (const v of Object.keys(m)) d[k].add(v);
+    }
+  }
+  return { categoria: [...d.categoria].sort(), grupo: [...d.grupo].sort(),
+           articulo: [...d.articulo].sort(), mod: [...d.mod].sort() };
 }
 const compite = (n) => cfg().compiten[n] !== false;
 const rolDe = (n) => cfg().roles[n] || "";
@@ -78,56 +153,65 @@ function calcular(desde, hasta) {
   // TODOS LOS CANALES: para la venta total y la efectividad.
   const todos = enRango.filter((o) => o.estatus === "Cerrada" && num(o.total) > 0);
 
-  const base = () => ({ cuentas: 0, comensales: 0, venta: 0, cafes: 0, postres: 0, bebidas: 0,
-    extras: 0, extrasMonto: 0, aguacate: 0, tCuentas: 0, tComensales: 0, tVenta: 0 });
+  const base = () => ({ cuentas: 0, comensales: 0, venta: 0, extrasMonto: 0,
+    uds: {}, val: {}, tCuentas: 0, tComensales: 0, tVenta: 0 });
   const por = new Map();
   const get = (m) => { if (!por.has(m)) por.set(m, { mesero: m, ...base() }); return por.get(m); };
 
+  const CRI = criterios();
   for (const o of comedor) {
     const p = get(o.mesero || "(sin usuario)");
     p.cuentas++; p.comensales += num(o.comensales); p.venta += num(o.total);
-    p.cafes += num(o.cafes); p.postres += num(o.postres); p.bebidas += num(o.bebidas);
-    p.extras += num(o.extras_uds); p.extrasMonto += num(o.extras_monto);
-    const ex = (o.detalle && o.detalle.extras) || {};
-    for (const k of Object.keys(ex)) if (/aguacate/i.test(k)) p.aguacate += num(ex[k]);
+    p.extrasMonto += num(o.extras_monto);
+    // Unidades de cada criterio configurado, en una sola pasada.
+    for (const c of CRI) p.uds[c.id] = (p.uds[c.id] || 0) + unidadesDe(o, c);
   }
   for (const o of todos) {
     const p = get(o.mesero || "(sin usuario)");
     p.tCuentas++; p.tComensales += num(o.comensales); p.tVenta += num(o.total);
   }
 
-  const lista = [...por.values()].map((p) => ({
+  // El valor de cada criterio: unidades entre su divisor. El attach de
+  // postre va entre COMENSALES, no entre cuentas — así se lee en la casa
+  // ("1 de cada 15 personas pide postre") y así está en el guión.
+  const valorar = (p) => {
+    for (const c of CRI) {
+      const div = c.entre === "comensal" ? p.comensales : c.entre === "cuenta" ? p.cuentas : 1;
+      p.val[c.id] = div ? num(p.uds[c.id]) / div : 0;
+    }
+    // Nota 0-100: qué tanto de su meta alcanzó cada criterio, ponderado.
+    // Se topa en 100% por criterio para que uno brillante no tape uno malo.
+    let suma = 0, pesos = 0;
+    for (const c of CRI) {
+      if (!(num(c.meta) > 0) || !(num(c.peso) > 0)) continue;
+      suma += Math.min(1, num(p.val[c.id]) / num(c.meta)) * num(c.peso);
+      pesos += num(c.peso);
+    }
+    p.nota = pesos ? Math.round(suma / pesos * 100) : null;
+    return p;
+  };
+
+  const lista = [...por.values()].map((p) => valorar({
     ...p,
     tktPersona: p.comensales ? p.venta / p.comensales : 0,
-    cafeCuenta: p.cuentas ? p.cafes / p.cuentas : 0,
-    // Attach = por PERSONA, no por cuenta. Es como se lee en la casa
-    // ("1 de cada 15 personas pide postre") y como está en el guión.
-    attach: p.comensales ? p.postres / p.comensales : 0,
-    bebidaCuenta: p.cuentas ? p.bebidas / p.cuentas : 0,
-    extrasCuenta: p.cuentas ? p.extras / p.cuentas : 0,
-    aguaCuenta: p.cuentas ? p.aguacate / p.cuentas : 0,
     ventaComensal: p.tComensales ? p.tVenta / p.tComensales : 0,
     chica: p.cuentas < MIN_CUENTAS,
   })).filter((p) => p.cuentas > 0 || p.tCuentas > 0);
 
   const eq = lista.reduce((a, p) => {
-    for (const k of ["cuentas", "comensales", "venta", "cafes", "postres", "bebidas", "extras", "extrasMonto", "aguacate", "tComensales", "tVenta"]) a[k] += p[k];
+    for (const k of ["cuentas", "comensales", "venta", "extrasMonto", "tComensales", "tVenta"]) a[k] += p[k];
+    for (const c of CRI) a.uds[c.id] = (a.uds[c.id] || 0) + num(p.uds[c.id]);
     return a;
-  }, { cuentas: 0, comensales: 0, venta: 0, cafes: 0, postres: 0, bebidas: 0, extras: 0, extrasMonto: 0, aguacate: 0, tComensales: 0, tVenta: 0 });
-  eq.mesero = "Equipo";
+  }, { ...base(), mesero: "Equipo" });
   eq.tktPersona = eq.comensales ? eq.venta / eq.comensales : 0;
-  eq.cafeCuenta = eq.cuentas ? eq.cafes / eq.cuentas : 0;
-  eq.attach = eq.comensales ? eq.postres / eq.comensales : 0;
-  eq.bebidaCuenta = eq.cuentas ? eq.bebidas / eq.cuentas : 0;
-  eq.extrasCuenta = eq.cuentas ? eq.extras / eq.cuentas : 0;
-  eq.aguaCuenta = eq.cuentas ? eq.aguacate / eq.cuentas : 0;
   eq.ventaComensal = eq.tComensales ? eq.tVenta / eq.tComensales : 0;
+  valorar(eq);
 
   lista.sort((a, b) => b.cuentas - a.cuentas);
   // Qué días del periodo tienen órdenes. Sirve para avisar cuándo el total
   // que se muestra NO es el del periodo completo.
   const dias = new Set(todos.map((o) => o.fecha));
-  return { lista, eq, comedor, dias };
+  return { lista, eq, comedor, dias, criterios: CRI };
 }
 
 // ── Qué significa cada número ───────────────────────────────────
@@ -160,10 +244,16 @@ const INFO = {
   efectividad: { t: "Efectividad", q: "Su venta por persona comparada con el promedio del equipo. 100% = promedio.",
     c: "Su venta por comensal (todos los canales) entre la del equipo.",
     d: "CUIDADO al comparar meseros contra cajeras: el para-llevar tiene ticket naturalmente más bajo (un café son $35), así que la efectividad de quien atiende barra sale menor. No es mal desempeño, es la naturaleza del canal." },
+  nota: { t: "La calificación",
+    q: "Qué tanto de sus metas alcanzó cada quien, en un solo número del 0 al 100.",
+    c: "Por cada criterio con meta: qué tan cerca quedó de ella, topado en 100%, multiplicado por su peso. La suma se divide entre los pesos.",
+    d: "Se topa en 100% por criterio a propósito: sin eso, alguien brillante en extras taparía que no vende un solo postre. Y se puede desarmar renglón por renglón — nunca es una caja negra que nadie pueda discutir en la junta." },
   marcador: { t: "Cómo se ordena el marcador", q: "Gana quien mejor ofrece, no quien tuvo más mesas.",
     c: "Se ordena por tasa por cuenta y se muestra el volumen al lado.",
     d: "Por total ganaría siempre quien atendió más mesas: en julio Alexa hizo 138 extras, los más de todos, con 0.58 por cuenta; Giselle 91 con 0.72." },
 };
+// ⓘ de un criterio que trae su propia advertencia de lectura.
+const icoTexto = (c) => `<button data-nota="${esc(c.nota)}" title="Ojo con este" style="border:none;background:none;padding:0 0 0 3px;cursor:pointer;color:var(--gris,#9a9a9a);font-size:12px;line-height:1;vertical-align:middle">ⓘ</button>`;
 const ico = (k) => `<button data-info="${k}" title="¿Qué es esto?" style="border:none;background:none;padding:0 0 0 3px;cursor:pointer;color:var(--gris,#9a9a9a);font-size:12px;line-height:1;vertical-align:middle">ⓘ</button>`;
 
 function abrirInfo(k) {
@@ -230,7 +320,7 @@ export function render(el) {
     const r = rangoDe(periodo, semanaSel);
     // ¿Lo que hay en memoria es de ESTE periodo? Si no, está por llegar.
     const listo = store.state.ordenesMeseroRango === r.desde + "|" + r.hasta;
-    const { lista, eq, dias } = calcular(r.desde, r.hasta);
+    const { lista, eq, dias, criterios: CRI } = calcular(r.desde, r.hasta);
     const metas = cfg().metas;
 
     if (store.state.errorMeseros) {
@@ -250,17 +340,17 @@ export function render(el) {
 
     // Si nadie tiene bebidas, es que falta la columna o falta re-importar.
     // Decirlo es mejor que enseñar una fila de ceros que parece un dato real.
-    const sinBebidas = !lista.some((p) => num(p.bebidas) > 0);
+    const sinBebidas = !lista.some((p) => num(p.uds && p.uds.bebidas) > 0);
 
     el.innerHTML = selector(r)
       + avisoDiasFaltantes(r, dias)
       + (sinBebidas ? avisoBebidas() : "")
-      + bloqueComedor(cols, piso.length, eq, metas, r)
-      + bloqueRatios(cols, piso.length, eq)
+      + bloqueComedor(cols, piso.length, eq, metas, r, CRI)
+      + bloqueRatios(cols, piso.length, eq, CRI)
       + bloqueVenta(cols, piso.length, eq, r)
-      + focos(lista, eq, metas, r)
+      + focos(lista, eq, metas, r, CRI)
       + leyenda()
-      + marcador(lista, eq, metas, r)
+      + marcador(lista, eq, metas, r, CRI)
       + `<div class="card"><button class="btn sec" id="mAjustes">⚙️ Quién compite, roles y metas</button>
          <div id="mPanel">${verAjustes ? panelAjustes(lista, metas) : ""}</div></div>`;
 
@@ -315,28 +405,73 @@ export function render(el) {
       <thead>${encabezados(cols, nPiso)}</thead><tbody>${contenido.filas}</tbody>
     </table></div></div>`;
 
-  function bloqueComedor(cols, nPiso, eq, metas, r) {
+  const fmtCri = (c) => (v) => c.formato === "pct" ? (v * 100).toFixed(0) + "%" : v.toFixed(2);
+
+  function bloqueComedor(cols, nPiso, eq, metas, r, CRI) {
     const f = [
       fila("Cuentas", "", "cuentas", cols, eq, "cuentas", (v) => Math.round(v).toLocaleString("es-MX"), null),
       fila("Comensales", "", "comensales", cols, eq, "comensales", (v) => Math.round(v).toLocaleString("es-MX"), null),
       fila("Ticket / persona", "", "tkt", cols, eq, "tktPersona", (v) => money(v), null),
-      fila("Café / cuenta", `meta ${metas.cafeCuenta.toFixed(1)}`, "cafe", cols, eq, "cafeCuenta", (v) => v.toFixed(2), metas.cafeCuenta),
-      fila("Attach postre", `meta ${(metas.attachPostre * 100).toFixed(0)}%`, "postre", cols, eq, "attach", (v) => (v * 100).toFixed(0) + "%", metas.attachPostre),
-      fila("Extras / cuenta", "proteína + premium", "extras", cols, eq, "extrasCuenta", (v) => v.toFixed(2), metas.extrasCuenta),
-      fila("Aguacate / cuenta", "", "aguacate", cols, eq, "aguaCuenta", (v) => v.toFixed(2), null),
-      fila("Bebidas / cuenta", "spritz + limonada", "bebidas", cols, eq, "bebidaCuenta", (v) => v.toFixed(2), null),
+      // Un renglón por criterio configurado. Antes estaban escritos a mano
+      // en el código, que es por lo que cada indicador nuevo pedía cambios.
+      ...CRI.map((c) => filaCri(c, cols, eq)),
+      fila("Extras en dinero", "", null, cols, eq, "extrasMonto", (v) => money(v), null),
+      filaNota(cols, eq, CRI),
     ].join("");
     return tabla({ head: seccion("Servicio en comedor", `KPIs de piso · ${esc(r.txt)} · solo comedor` + ico("filtros")), filas: f }, cols, nPiso);
   }
 
-  function bloqueRatios(cols, nPiso, eq) {
-    const ratio = (nom, sub, campo) => fila(nom, sub, null, cols, eq, "__r_" + campo,
-      (_, p) => { const u = num(p[campo]); return u > 0 ? `1 : ${(num(p.comensales) / u).toFixed(1)}` : "—"; }, null);
+  // Renglón de un criterio: lee `val[id]`, se colorea contra su meta.
+  function filaCri(c, cols, eq) {
+    const sub = [c.sub, num(c.meta) > 0 ? "meta " + fmtCri(c)(num(c.meta)) : ""].filter(Boolean).join(" · ");
+    const celda = (p, esEq) => {
+      const v = num(p.val && p.val[c.id]);
+      const meta = num(c.meta);
+      let bg = "", col = "";
+      if (meta > 0 && p.cuentas > 0) {
+        if (v >= meta) { bg = VERDE; col = V_TXT; }
+        else if (v >= meta * 0.75) { bg = AMBAR; col = A_TXT; }
+        else { bg = ROJO; col = R_TXT; }
+      }
+      return `<td style="padding:9px 6px;text-align:center;background:${esEq ? "#f6efe8" : bg || "transparent"};${col ? "color:" + col + ";" : ""}font-weight:${esEq || (meta > 0 && v >= meta) ? 700 : 500};font-size:13.5px">${p.cuentas ? fmtCri(c)(v) : "—"}</td>`;
+    };
+    return `<tr style="border-top:1px solid #ece7df">
+      <td style="position:sticky;left:0;background:var(--blanco,#fff);z-index:1;padding:9px 10px;font-weight:600;font-size:13.5px">
+        ${esc(c.nombre)}${INFO[c.id] ? ico(c.id) : (c.nota ? icoTexto(c) : "")}
+        ${sub ? `<div class="sub" style="font-size:10.5px;font-weight:400">${esc(sub)}</div>` : ""}
+      </td>
+      ${cols.map((p) => celda(p, false)).join("")}${celda(eq, true)}
+    </tr>`;
+  }
+
+  // La nota: qué tanto de sus metas alcanzó, ponderado por el peso de cada
+  // criterio. Se puede desarmar renglón por renglón — nunca es caja negra.
+  function filaNota(cols, eq, CRI) {
+    const conMeta = CRI.filter((c) => num(c.meta) > 0 && num(c.peso) > 0);
+    if (!conMeta.length) return "";
+    const celda = (p, esEq) => {
+      const n = p.nota;
+      const col = n == null ? "" : n >= 90 ? V_TXT : n >= 70 ? A_TXT : R_TXT;
+      const bg = n == null ? "" : n >= 90 ? VERDE : n >= 70 ? AMBAR : ROJO;
+      return `<td style="padding:11px 6px;text-align:center;background:${esEq ? "#f6efe8" : bg};${col ? "color:" + col + ";" : ""}font-weight:800;font-size:17px">${n == null || !p.cuentas ? "—" : n}</td>`;
+    };
+    return `<tr style="border-top:2px solid var(--linea)">
+      <td style="position:sticky;left:0;background:var(--blanco,#fff);z-index:1;padding:11px 10px;font-weight:800;font-size:14px">
+        Calificación${ico("nota")}
+        <div class="sub" style="font-size:10.5px;font-weight:400">${esc(conMeta.map((c) => c.nombre.split(" ")[0] + "×" + c.peso).join(" · "))}</div>
+      </td>
+      ${cols.map((p) => celda(p, false)).join("")}${celda(eq, true)}
+    </tr>`;
+  }
+
+  function bloqueRatios(cols, nPiso, eq, CRI) {
+    const conRatio = CRI.filter((c) => c.ratio);
+    if (!conRatio.length) return "";
+    const ratio = (c) => fila(`1 ${c.ratio.replace(/s$/, "")} por cada…`, "personas", null, cols, eq, "__r_" + c.id,
+      (_, p) => { const u = num(p.uds && p.uds[c.id]); return u > 0 ? `1 : ${(num(p.comensales) / u).toFixed(1)}` : "—"; }, null);
     return tabla({
       head: seccion("1 de cada cuántas personas pide…", "Personas por unidad — más bajo, más consumo" + ico("ratios")),
-      filas: [ratio("1 café por cada…", "personas", "cafes"),
-              ratio("1 bebida por cada…", "personas", "bebidas"),
-              ratio("1 postre por cada…", "personas", "postres")].join(""),
+      filas: conRatio.map(ratio).join(""),
     }, cols, nPiso);
   }
 
@@ -381,43 +516,56 @@ export function render(el) {
 
   // ── Focos de coaching ─────────────────────────────────────────
   // Se generan del dato, no son texto fijo: si el mes cambia, cambian solos.
-  function focos(lista, eq, metas, r) {
+  // Se generan del dato, no son texto fijo: si cambian los criterios o el mes,
+  // cambian solos.
+  function focos(lista, eq, metas, r, CRI) {
     const piso = lista.filter((p) => compite(p.mesero) && !p.chica);
     const pts = [];
     const nom = (p) => p.mesero.split(" ")[0];
 
-    if (num(eq.cafeCuenta) < metas.cafeCuenta) {
-      const pers = num(eq.cafes) ? (num(eq.comensales) / num(eq.cafes)).toFixed(1) : "—";
-      pts.push(`<b>Café — de todos.</b> Nadie llega a ${metas.cafeCuenta.toFixed(1)} por cuenta: va en
-        ${num(eq.cafeCuenta).toFixed(2)}, o sea ~1 café por cada ${pers} personas. Los de piso están casi iguales,
-        así que es techo de sistema: se sube con el ritual de «¿otro café?» en la sobremesa para todo el piso, no rankeando.`);
+    // 1) Criterios donde el EQUIPO no llega a la meta.
+    for (const c of CRI) {
+      if (!(num(c.meta) > 0) || num(eq.val[c.id]) >= num(c.meta)) continue;
+      const pers = num(eq.uds[c.id]) ? (num(eq.comensales) / num(eq.uds[c.id])).toFixed(1) : "—";
+      pts.push(`<b>${esc(c.nombre)} — de todos.</b> El equipo va en ${fmtCri(c)(num(eq.val[c.id]))}
+        contra la meta de ${fmtCri(c)(num(c.meta))}: uno por cada ${pers} personas.`);
     }
-    if (num(eq.attach) < metas.attachPostre) {
-      const pers = num(eq.postres) ? (num(eq.comensales) / num(eq.postres)).toFixed(0) : "—";
-      pts.push(`<b>Postre — de todos.</b> Va en ${(num(eq.attach) * 100).toFixed(0)}% contra la meta de
-        ${(metas.attachPostre * 100).toFixed(0)}%: ~1 postre por cada ${pers} personas. La carta no se ve —
-        hacerla visible y ofrecerla al levantar los platos fuertes.`);
-    }
-    // La brecha específica: dónde hay líder claro y rezagado claro. Eso SÍ se
-    // coachea persona a persona, al revés del café.
-    if (piso.length >= 2) {
-      const ord = [...piso].sort((a, b) => b.aguaCuenta - a.aguaCuenta);
+
+    // 2) La brecha específica: líder claro contra rezagado claro. Eso SÍ se
+    //    coachea persona a persona, al revés de un techo de sistema.
+    for (const c of CRI) {
+      if (piso.length < 2) break;
+      const ord = [...piso].sort((a, b) => num(b.val[c.id]) - num(a.val[c.id]));
       const lider = ord[0], ultimo = ord[ord.length - 1];
-      if (num(lider.aguaCuenta) > 0 && num(lider.aguaCuenta) >= num(ultimo.aguaCuenta) * 2) {
-        const mejorVenta = [...piso].sort((a, b) => b.ventaComensal - a.ventaComensal)[0];
-        pts.push(`<b>Aguacate y extras — ${esc(nom(ultimo))} es la brecha.</b>
-          ${esc(nom(lider))} vende ${num(lider.aguaCuenta).toFixed(2)} de aguacate por cuenta y
-          ${esc(nom(ultimo))} ${num(ultimo.aguaCuenta).toFixed(2)}.
-          ${mejorVenta.mesero === ultimo.mesero
-            ? `Ojo: ${esc(nom(ultimo))} es quien MÁS vende por comensal, así que su tema no es desempeño general — es sumar extras.`
-            : `Que ${esc(nom(lider))} le enseñe cómo lo ofrece al tomar la orden.`}`);
-      }
+      if (!(num(lider.val[c.id]) > 0) || num(lider.val[c.id]) < num(ultimo.val[c.id]) * 2) continue;
+      const mejorVenta = [...piso].sort((a, b) => b.ventaComensal - a.ventaComensal)[0];
+      pts.push(`<b>${esc(c.nombre)} — ${esc(nom(ultimo))} es la brecha.</b>
+        ${esc(nom(lider))} va en ${fmtCri(c)(num(lider.val[c.id]))} y ${esc(nom(ultimo))} en
+        ${fmtCri(c)(num(ultimo.val[c.id]))}.
+        ${mejorVenta.mesero === ultimo.mesero
+          ? `Ojo: ${esc(nom(ultimo))} es quien MÁS vende por comensal, así que su tema no es desempeño general — es este indicador.`
+          : `Que ${esc(nom(lider))} le enseñe cómo lo hace.`}`);
     }
+
+    // 3) Techo de sistema: donde todos están casi iguales no hay nada que
+    //    coachear individualmente. Calificar a alguien por algo que no
+    //    controla es la forma más rápida de que el equipo deje de creer.
+    for (const c of CRI) {
+      if (piso.length < 3) break;
+      const vs = piso.map((p) => num(p.val[c.id])).filter((v) => v > 0);
+      if (vs.length < 3) continue;
+      const max = Math.max(...vs), min = Math.min(...vs);
+      if (max <= 0 || (max - min) / max > 0.25) continue;
+      pts.push(`<b>${esc(c.nombre)} — no rankees aquí.</b> Todos los de piso están entre
+        ${fmtCri(c)(min)} y ${fmtCri(c)(max)}. Eso es techo del sistema, no diferencia de persona:
+        se sube cambiando el ritual para todo el piso, no comparando gente.`);
+    }
+
     if (!pts.length) pts.push(`<b>Todo en meta.</b> Ningún indicador del equipo está por debajo. Buen momento para subir la meta.`);
 
     return `<div class="card">
       <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:#5c2018;margin-bottom:10px">Focos de coaching · ${esc(r.txt)}</div>
-      ${pts.map((t) => `<div style="display:flex;gap:9px;margin-bottom:11px;font-size:13.5px;line-height:1.5">
+      ${pts.slice(0, 5).map((t) => `<div style="display:flex;gap:9px;margin-bottom:11px;font-size:13.5px;line-height:1.5">
         <span style="color:var(--naranja,#c0622a)">▸</span><div>${t}</div></div>`).join("")}
     </div>`;
   }
@@ -434,27 +582,31 @@ export function render(el) {
   }
 
   // ── Marcador (la competencia) ─────────────────────────────────
-  function marcador(lista, eq, metas, r) {
-    const podio = (campo) => lista.filter((p) => compite(p.mesero) && !p.chica).sort((a, b) => b[campo] - a[campo]);
+  function marcador(lista, eq, metas, r, CRI) {
+    // Compiten los criterios marcados. El café NO: cuando todos quedan casi
+    // iguales es techo del sistema, y rankear ahí premia el ruido.
+    const enJuego = CRI.filter((c) => c.compite && num(c.meta) > 0);
+    const podio = (c) => lista.filter((p) => compite(p.mesero) && !p.chica)
+      .sort((a, b) => num(b.val[c.id]) - num(a.val[c.id]));
     const MED = ["🥇", "🥈", "🥉"];
-    const tarj = (titulo, arr, campo, vol, meta, fmt, infoK) => {
-      const h = `<h3 style="margin:0 0 8px;font-size:13.5px">${esc(titulo)}${infoK ? ico(infoK) : ""}</h3>`;
+    const tarj = (c) => {
+      const arr = podio(c);
+      const h = `<h3 style="margin:0 0 8px;font-size:13.5px">${esc(c.nombre)}${INFO[c.id] ? ico(c.id) : ""}</h3>`;
       if (!arr.length) return `<div>${h}<div class="sub">Sin muestra suficiente.</div></div>`;
       return `<div>${h}${arr.map((p, i) => `
         <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #ece7df">
           <span style="width:20px">${MED[i] || ""}</span>
           <span style="flex:1;min-width:0;font-weight:${i === 0 ? 700 : 500};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.mesero.split(" ")[0])}</span>
-          <span class="sub" style="font-size:11px">${Math.round(num(p[vol]))} uds</span>
-          <b style="min-width:48px;text-align:right;color:${num(p[campo]) >= meta ? V_TXT : A_TXT}">${fmt(num(p[campo]))}</b>
+          <span class="sub" style="font-size:11px">${Math.round(num(p.uds[c.id]))} uds</span>
+          <b style="min-width:48px;text-align:right;color:${num(p.val[c.id]) >= num(c.meta) ? V_TXT : A_TXT}">${fmtCri(c)(num(p.val[c.id]))}</b>
         </div>`).join("")}</div>`;
     };
     const fuera = lista.filter((p) => p.chica && compite(p.mesero));
     return `<div class="card">
       <h2 style="margin-top:0">🏁 Marcador · ${esc(r.txt)}${ico("marcador")}</h2>
-      <div style="display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">
-        ${tarj("Extras por cuenta", podio("extrasCuenta"), "extrasCuenta", "extras", metas.extrasCuenta, (v) => v.toFixed(2), "extras")}
-        ${tarj("Postre por persona", podio("attach"), "attach", "postres", metas.attachPostre, (v) => (v * 100).toFixed(0) + "%", "postre")}
-      </div>
+      ${enJuego.length
+        ? `<div style="display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">${enJuego.map(tarj).join("")}</div>`
+        : `<div class="sub">Ningún criterio está marcado para competir. Actívalos en ⚙️ abajo.</div>`}
       ${fuera.length ? `<p class="sub" style="margin:12px 2px 0;font-size:11.5px">Fuera del podio por muestra chica (menos de ${MIN_CUENTAS} cuentas):
         ${esc(fuera.map((p) => `${p.mesero.split(" ")[0]} (${p.cuentas})`).join(", "))}.</p>` : ""}
       ${r.corto ? `<p class="sub" style="margin:8px 2px 0;font-size:11.5px">⚠️ Una semana son ~45 cuentas por persona: con esa muestra un mal martes cambia al líder. <b>El marcador que cuenta es el del mes.</b></p>` : ""}
@@ -501,6 +653,8 @@ export function render(el) {
   function wireInfo() {
     el.querySelectorAll("[data-info]").forEach((b) =>
       b.addEventListener("click", (e) => { e.preventDefault(); abrirInfo(b.dataset.info); }));
+    el.querySelectorAll("[data-nota]").forEach((b) =>
+      b.addEventListener("click", (e) => { e.preventDefault(); alert(b.dataset.nota); }));
   }
 
   function panelAjustes(lista, metas) {
@@ -513,21 +667,119 @@ export function render(el) {
         <input data-rol="${esc(p.mesero)}" value="${esc(rolDe(p.mesero))}" placeholder="puesto" style="width:110px;font-size:12px" />
         <span class="sub" style="font-size:11px;white-space:nowrap">${p.cuentas} ctas</span>
       </div>`).join("")}
-      <h3 style="margin:16px 0 6px;font-size:14px">Metas</h3>
-      <label class="campo"><span>Cafés por cuenta</span><input data-meta="cafeCuenta" type="number" step="0.1" inputmode="decimal" value="${metas.cafeCuenta}" /></label>
-      <label class="campo"><span>Attach de postre (% de personas)</span><input data-meta="attachPostre" type="number" step="1" inputmode="decimal" value="${(metas.attachPostre * 100).toFixed(0)}" /></label>
-      <label class="campo"><span>Extras por cuenta</span><input data-meta="extrasCuenta" type="number" step="0.01" inputmode="decimal" value="${metas.extrasCuenta}" /></label>
+      ${panelCriterios()}
     </div>`;
+  }
+
+  // ── Constructor de criterios ──────────────────────────────────
+  // Se elige de la propia operación del restaurante, no de una lista
+  // inventada: las opciones salen de lo que trae SU reporte de Parrot.
+  function panelCriterios() {
+    const CRI = criterios();
+    const dims = dimensionesDisponibles();
+    const hayDim = dims.categoria.length || dims.grupo.length;
+    return `
+      <h3 style="margin:20px 0 6px;font-size:14px">Qué se mide</h3>
+      <p class="sub" style="margin-top:0;font-size:11.5px">El <b>peso</b> es cuánto cuenta para la calificación.
+      <b>Compite</b> lo pone en el marcador. Meta en 0 = solo se muestra, no califica.</p>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:430px">
+        <thead><tr style="text-align:left">
+          <th style="padding:5px 4px">Indicador</th><th style="padding:5px 4px;width:74px">Meta</th>
+          <th style="padding:5px 4px;width:58px">Peso</th><th style="padding:5px 4px;width:62px">Compite</th><th style="width:30px"></th>
+        </tr></thead>
+        <tbody>${CRI.map((c, i) => `<tr style="border-top:1px solid var(--linea)">
+          <td style="padding:7px 4px">${esc(c.nombre)}
+            <div class="sub" style="font-size:10px">${esc(c.dim === "columna" ? "de fábrica" : c.dim + ": " + (c.valores || []).join(", "))}</div></td>
+          <td style="padding:7px 4px"><input data-cri="${i}" data-campo="meta" type="number" step="0.01" inputmode="decimal"
+            value="${c.formato === "pct" ? (num(c.meta) * 100).toFixed(0) : num(c.meta)}" style="width:64px;font-size:12px" />
+            ${c.formato === "pct" ? '<span class="sub" style="font-size:10px">%</span>' : ""}</td>
+          <td style="padding:7px 4px"><input data-cri="${i}" data-campo="peso" type="number" step="1" min="0" inputmode="numeric" value="${num(c.peso)}" style="width:48px;font-size:12px" /></td>
+          <td style="padding:7px 4px;text-align:center"><input data-cri="${i}" data-campo="compite" type="checkbox"${c.compite ? " checked" : ""} style="width:17px;height:17px;accent-color:var(--verde)" /></td>
+          <td style="padding:7px 4px"><button class="linkbtn" data-cridel="${i}" style="color:var(--rojo);padding:0 4px">✕</button></td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+
+      <h3 style="margin:18px 0 6px;font-size:14px">Agregar indicador</h3>
+      ${hayDim ? `
+        <label class="campo"><span>Nombre</span><input id="nqNombre" placeholder="Ej. Aguas por cuenta" /></label>
+        <div class="fila" style="gap:8px">
+          <label class="campo" style="flex:1"><span>Qué cuenta</span><select id="nqDim">
+            ${dims.categoria.length ? `<option value="categoria">Una categoría</option>` : ""}
+            ${dims.grupo.length ? `<option value="grupo">Un grupo de modificador</option>` : ""}
+            ${dims.articulo.length ? `<option value="articulo">Un platillo</option>` : ""}
+            ${dims.mod.length ? `<option value="mod">Un modificador</option>` : ""}
+          </select></label>
+          <label class="campo" style="flex:1"><span>Entre qué</span><select id="nqEntre">
+            <option value="cuenta">Por cuenta</option><option value="comensal">Por persona</option>
+          </select></label>
+        </div>
+        <label class="campo"><span>Cuál</span><select id="nqVal"></select></label>
+        <div class="fila" style="gap:8px">
+          <label class="campo" style="flex:1"><span>Meta</span><input id="nqMeta" type="number" step="0.01" inputmode="decimal" placeholder="0" /></label>
+          <label class="campo" style="width:90px"><span>Peso</span><input id="nqPeso" type="number" step="1" min="0" inputmode="numeric" value="1" /></label>
+        </div>
+        <label style="display:flex;align-items:center;gap:9px;margin-bottom:10px;font-size:13px">
+          <input id="nqCompite" type="checkbox" style="width:17px;height:17px;accent-color:var(--verde)" /> Que compita en el marcador</label>
+        <button class="btn" id="nqAdd">Agregar</button>`
+      : `<div class="aviso-box">Para elegir qué medir hace falta el desglose por categoría y grupo, que solo traen
+         las importaciones recientes. <b>Vuelve a subir tu reporte de órdenes</b> en Insumos → Importar y aquí
+         aparecerán tus categorías y tus grupos de modificador.</div>`}`;
   }
   function wireAjustes() {
     el.querySelectorAll("[data-compite]").forEach((c) => c.addEventListener("change", () =>
       guardar({ compiten: { ...cfg().compiten, [c.dataset.compite]: c.checked } })));
     el.querySelectorAll("[data-rol]").forEach((i) => i.addEventListener("change", () =>
       guardar({ roles: { ...cfg().roles, [i.dataset.rol]: i.value.trim() } })));
-    el.querySelectorAll("[data-meta]").forEach((i) => i.addEventListener("change", () => {
-      const k = i.dataset.meta;
-      guardar({ metas: { ...cfg().metas, [k]: k === "attachPostre" ? num(i.value) / 100 : num(i.value) } });
+    // ── Criterios: editar, borrar y agregar ─────────────────────
+    const guardarCri = (lista) => guardar({ criterios: lista });
+
+    el.querySelectorAll("[data-cri]").forEach((i) => i.addEventListener("change", () => {
+      const lista = criterios().map((c) => ({ ...c }));
+      const c = lista[Number(i.dataset.cri)];
+      if (!c) return;
+      const campo = i.dataset.campo;
+      if (campo === "compite") c.compite = i.checked;
+      else if (campo === "meta") c.meta = c.formato === "pct" ? num(i.value) / 100 : num(i.value);
+      else c.peso = Math.max(0, Math.round(num(i.value)));
+      guardarCri(lista);
     }));
+
+    el.querySelectorAll("[data-cridel]").forEach((b) => b.addEventListener("click", () => {
+      const lista = criterios().map((c) => ({ ...c }));
+      const c = lista[Number(b.dataset.cridel)];
+      if (!c || !confirm(`¿Quitar "${c.nombre}" del scorecard?`)) return;
+      lista.splice(Number(b.dataset.cridel), 1);
+      guardarCri(lista);
+    }));
+
+    // El selector de "cuál" se llena con lo que hay en SUS datos.
+    const dims = dimensionesDisponibles();
+    const dimSel = el.querySelector("#nqDim"), valSel = el.querySelector("#nqVal");
+    const llenarVal = () => {
+      if (!dimSel || !valSel) return;
+      const ops = dims[dimSel.value] || [];
+      valSel.innerHTML = ops.map((v) => `<option>${esc(v)}</option>`).join("")
+        || `<option value="">— nada disponible —</option>`;
+    };
+    if (dimSel) { dimSel.addEventListener("change", llenarVal); llenarVal(); }
+
+    const add = el.querySelector("#nqAdd");
+    if (add) add.addEventListener("click", () => {
+      const nombre = (el.querySelector("#nqNombre").value || "").trim();
+      const valor = valSel ? valSel.value : "";
+      if (!nombre || !valor) { alert("Ponle nombre y elige qué cuenta."); return; }
+      const entre = el.querySelector("#nqEntre").value;
+      const lista = criterios().map((c) => ({ ...c }));
+      lista.push({
+        id: "c" + Date.now().toString(36),
+        nombre, dim: dimSel.value, valores: [valor], entre,
+        meta: num(el.querySelector("#nqMeta").value),
+        peso: Math.max(0, Math.round(num(el.querySelector("#nqPeso").value))),
+        formato: "num",
+        compite: el.querySelector("#nqCompite").checked,
+      });
+      guardarCri(lista);
+    });
   }
   async function guardar(patch) {
     const actual = (store.state.config && store.state.config.meseros) || {};
