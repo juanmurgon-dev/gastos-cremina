@@ -33,10 +33,10 @@ export function render(el) {
       </div>
 
       ${subidas.length ? `<div class="card" style="border-left:4px solid var(--flame)">
-        <h2 style="margin-bottom:8px">🔺 Alertas de precio</h2>
+        <h2 style="margin-bottom:8px">Alertas de precio</h2>
         ${subidas.map((i) => `<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--linea)">
           <b>${esc(i.nombre)}</b> subió <b style="color:var(--rojo)">${Math.round(i.variacion * 100)}%</b> → ${money(i.precioActual)}<span class="sub">/${esc(i.unidad || "")}</span></div>`).join("")}
-      </div>` : `<div class="card"><div class="ok-box">✅ Sin subidas fuertes de precio esta semana.</div></div>`}
+      </div>` : `<div class="card"><div class="ok-box">Sin subidas fuertes de precio esta semana.</div></div>`}
 
       <div class="card">
         <h2>Todos los insumos</h2>

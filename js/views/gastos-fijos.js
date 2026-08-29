@@ -2,6 +2,7 @@
 // peso sobre la venta mensual, comparación con la industria y focos rojos.
 import * as store from "../store.js";
 import { money, num } from "../store.js";
+import { ic } from "../iconos.js";
 
 function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 // Monto compacto (peso entero, sin centavos) para que quepa bien en celular.
@@ -128,7 +129,7 @@ export function montar(el) {
         <h2>Focos rojos</h2>
         ${focosRojos(rubros, ventaMes, pctFijo).map((f) => `
           <div style="font-size:13px;padding:7px 0;border-bottom:1px solid var(--linea)">
-            ${f.t === "rojo" ? "🔴" : f.t === "amarillo" ? "🟡" : "✅"} ${f.txt}
+            <span class="i-ic" style="margin-right:6px;color:${f.t === "rojo" ? "var(--rojo)" : f.t === "amarillo" ? "var(--ambar)" : "var(--verde)"}">${ic(f.t === "verde" ? "ok" : "alerta", 14)}</span>${f.txt}
           </div>`).join("")}
       </div>
       ` : ""}
@@ -164,7 +165,7 @@ function fila(g, ventaMes) {
   return `<div class="barra-row" style="justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--linea)">
     <span class="etq" style="width:auto;flex:1;min-width:0">${esc(g.concepto || "—")}</span>
     <span class="val" style="width:auto;white-space:nowrap;text-align:right">${m0(g.monto_mensual)}${ventaMes > 0 ? `<span class="sub" style="font-weight:400"> · ${pct.toFixed(1)}%</span>` : ""}</span>
-    <button class="linkbtn" data-del="${g.id}" style="color:var(--rojo);padding:0 2px;font-size:16px;flex:none">✕</button>
+    <button class="linkbtn" data-del="${g.id}" style="color:var(--rojo);padding:0 2px;line-height:0;flex:none" aria-label="Quitar">${ic("basura",15)}</button>
   </div>`;
 }
 

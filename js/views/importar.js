@@ -3,6 +3,7 @@
 import { supabase } from "../supabase-init.js";
 import * as store from "../store.js";
 import { money } from "../store.js";
+import { ic } from "../iconos.js";
 
 const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
@@ -325,7 +326,7 @@ async function guardarMeseros(gen, logs) {
     const gente = new Set(ordm.map((o) => o.mesero).filter(Boolean)).size;
     logs.push(`✅ Meseros · ${rm.guardadas} cuentas de ${gente} persona(s)` +
       (ordm.conDetalle === false
-        ? " · ⚠️ este archivo no trae la hoja de artículos: se guardaron las cuentas, pero café/postres/extras salen de los reportes que sí la traen"
+        ? " · este archivo no trae la hoja de artículos: se guardaron las cuentas, pero café/postres/extras salen de los reportes que sí la traen"
         : ""));
     // Si la base rechazó alguna columna, se guardó todo lo demás — pero hay
     // que DECIRLO. Callarlo hacía que la fila saliera en cero sin ninguna pista.
@@ -816,7 +817,7 @@ async function importarProductosPDF(r) {
 // la función los está leyendo del encabezado).
 function kpiSuffix(data) {
   const c = Number(data && data.comensales) || 0, m = Number(data && data.mesas) || 0;
-  return (c || m) ? ` · 👥 ${Math.round(c)} comensales, ${Math.round(m)} mesas` : ` · ⚠️ el reporte no trajo comensales`;
+  return (c || m) ? ` · ${Math.round(c)} comensales, ${Math.round(m)} mesas` : " · el reporte no trajo comensales";
 }
 
 // Guarda los KPIs del encabezado del reporte (comensales/mesas/venta), keyeados por
@@ -890,7 +891,7 @@ export function montar(el) {
       <p class="sub" style="margin-top:0">Sube los <b>Excel tal como te los da tu punto de venta</b>
       (o el PDF del reporte). No importa cómo se llame el archivo: leo las columnas
       y detecto solo qué es cada uno. Puedes soltar varios de golpe.</p>
-      <label class="btn"><input id="files" type="file" accept=".xlsx,.xls,.csv,.pdf" multiple hidden> ⬆ Elegir archivos</label>
+      <label class="btn"><input id="files" type="file" accept=".xlsx,.xls,.csv,.pdf" multiple hidden> Elegir archivos</label>
       <details style="margin-top:12px">
         <summary class="sub" style="cursor:pointer;font-size:12.5px">¿Qué reportes puedo subir?</summary>
         <div class="sub" style="font-size:12.5px;line-height:1.6;margin-top:8px">
@@ -903,7 +904,7 @@ export function montar(el) {
         </div>
       </details>
       <div class="aviso-box" style="margin-top:12px;font-size:12.5px;line-height:1.5">
-        📅 <b>Días y consolidados se suman en la semana.</b> Puedes mezclar un consolidado
+        <b>Días y consolidados se suman en la semana.</b> Puedes mezclar un consolidado
         (ej. 27–29 jul) con días sueltos (ej. 30 jul) y se acumulan juntos.
         <b>Ojo:</b> no subas un consolidado y un día que <b>incluyan la misma fecha</b> — se contaría doble.
       </div>
@@ -913,7 +914,7 @@ export function montar(el) {
     <div class="card">
       <h2>Respaldo de tus datos</h2>
       <p class="sub" style="margin-top:-4px">Descarga TODO tu historial (gastos, ventas, gastos fijos, requisiciones…) en un archivo. Guárdalo por seguridad.</p>
-      <button class="btn sec" id="respaldo">⬇ Descargar respaldo (todo)</button>
+      <button class="btn sec" id="respaldo">Descargar respaldo (todo)</button>
       <div id="resp-msg"></div>
     </div>`;
 
@@ -931,11 +932,11 @@ export function montar(el) {
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
       const n = Object.values(data.tablas).reduce((s, v) => s + (Array.isArray(v) ? v.length : 0), 0);
-      msg.innerHTML = `<div class="ok-box" style="margin-top:10px">✅ Respaldo descargado (${n} registros). Guárdalo en un lugar seguro.</div>`;
+      msg.innerHTML = `<div class="ok-box" style="margin-top:10px">Respaldo descargado (${n} registros). Guárdalo en un lugar seguro.</div>`;
     } catch (e) {
       msg.innerHTML = `<div class="error-box" style="margin-top:10px">No pude generar el respaldo: ${(e && e.message) || e}</div>`;
     }
-    btn.disabled = false; btn.textContent = "⬇ Descargar respaldo (todo)";
+    btn.disabled = false; btn.textContent = "Descargar respaldo (todo)";
   });
 
   el.querySelector("#files").addEventListener("change", async (e) => {
@@ -993,7 +994,16 @@ export function montar(el) {
       document.head.appendChild(st);
     }
     const escF = (s) => String(s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-    const logLinea = (l) => `<div style="font-size:13px;padding:6px 0;border-bottom:1px solid var(--linea);overflow-wrap:anywhere">${l}</div>`;
+    // Cada línea del registro empieza con un signo que además sirve para
+    // contarlas más abajo. En pantalla ese signo NO se imprime: se traduce a
+    // un icono con color. Así el conteo sigue igual y no queda un emoji.
+    const SIGNOS = [["✅", "ok", "var(--verde)"], ["⚠️", "alerta", "var(--ambar)"], ["❌", "alerta", "var(--rojo)"]];
+    const logLinea = (l) => {
+      const sg = SIGNOS.find(([e]) => l.startsWith(e));
+      const txt = sg ? l.slice(sg[0].length).trimStart() : l;
+      const senal = sg ? `<span class="i-ic" style="color:${sg[2]};margin-right:8px">${ic(sg[1], 13)}</span>` : "";
+      return `<div style="font-size:13px;padding:7px 0;border-bottom:1px solid var(--linea);overflow-wrap:anywhere">${senal}${txt}</div>`;
+    };
 
     const logs = [];
     let semanaRef = null;
@@ -1030,7 +1040,7 @@ export function montar(el) {
             if (!d.comensales) continue;   // sin comensales no hay nada que rescatar
             try { await store.guardarKpiDia(d.fecha, { comensales: d.comensales, cuentas: d.ordenes, venta: d.ventas_total }); n++; } catch (_) {}
           }
-          if (n) logs.push(`👥 ${it.f.name}: ${dias.reduce((a, d) => a + N(d.comensales), 0)} comensales en ${n} día(s)`);
+          if (n) logs.push(`${it.f.name}: ${dias.reduce((a, d) => a + N(d.comensales), 0)} comensales en ${n} día(s)`);
         }
         if (it.tipo === "corte") {
           const c = parseCorte(XLSX.utils.sheet_to_json(it.wb.Sheets["Detalle corte de caja"], { header: 1 }));
@@ -1058,7 +1068,7 @@ export function montar(el) {
           const filas = parseOrdenes(it.gen.rows, it.gen.mapa, it.gen.hdr);
           const r = await importarVentasDia(filas);
           if (filas.length === 1) diaRef = filas[0].fecha;
-          logs.push(`✅ Detalle de órdenes · ${filas.length} día(s) · ${money(r.total)} · 👥 ${Math.round(r.comensales)} comensales`);
+          logs.push(`✅ Detalle de órdenes · ${filas.length} día(s) · ${money(r.total)} · ${Math.round(r.comensales)} comensales`);
         } else if (it.tipo === "gen-ventasdia") {
           const filas = parseVentasDia(it.gen.rows, it.gen.mapa, it.gen.hdr);
           const r = await importarVentasDia(filas);
@@ -1067,7 +1077,7 @@ export function montar(el) {
             ? ` (${r.conCorte} día(s) ya tenían corte de caja, no los toqué)`
             : "";
           logs.push(`✅ Venta por día · ${r.nuevos} día(s) · ${money(r.total)}${detalle}` +
-            (r.conKpi ? ` · 👥 ${Math.round(r.comensales)} comensales` : " · ⚠️ sin comensales en el reporte"));
+            (r.conKpi ? ` · ${Math.round(r.comensales)} comensales` : " · sin comensales en el reporte"));
         } else if (it.tipo === "gen-lineas") {
           // Si el libro trae también la hoja de órdenes (con la columna
           // Usuario), de paso sale el desempeño por mesero. Va aparte y no
@@ -1150,9 +1160,9 @@ export function montar(el) {
     if (okN && !malN) {
       pie = `<div class="ok-box" style="margin-top:12px">Listo. Se cargaron ${okN} archivo(s). Ya se actualizaron Resumen y Productos.</div>`;
     } else if (okN && malN) {
-      pie = `<div class="aviso-box" style="margin-top:12px">Se cargaron ${okN}, pero ${malN} no (revisa los ❌ de arriba). Lo que sí entró ya se actualizó.</div>`;
+      pie = `<div class="aviso-box" style="margin-top:12px">Se cargaron ${okN}, pero ${malN} no (revisa las líneas marcadas en rojo). Lo que sí entró ya se actualizó.</div>`;
     } else {
-      pie = `<div class="error-box" style="margin-top:12px">No se cargó ningún archivo. Revisa los ❌ de arriba.</div>`;
+      pie = `<div class="error-box" style="margin-top:12px">No se cargó ningún archivo. Revisa las líneas marcadas en rojo.</div>`;
     }
     res.innerHTML =
       `<div style="margin-top:14px"><div class="barra-track" style="height:10px;margin-bottom:12px"><span class="barra-fill" style="width:100%;background:var(--verde)"></span></div>${logs.map(logLinea).join("")}</div>

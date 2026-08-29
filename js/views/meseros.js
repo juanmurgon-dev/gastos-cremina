@@ -22,9 +22,9 @@ const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</
 const MIN_CUENTAS = 40;
 const METAS_DEF = { cafeCuenta: 2.0, attachPostre: 0.10, extrasCuenta: 0.72 };
 
-const VERDE = "#dff0e2", V_TXT = "#0e7a4a";
-const AMBAR = "#fbf0d8", A_TXT = "#8a6a1c";
-const ROJO  = "#fadfdb", R_TXT = "#b3261e";
+const VERDE = "var(--success-100)", V_TXT = "var(--success-600)";
+const AMBAR = "var(--warning-100)", A_TXT = "var(--warning-700)";
+const ROJO  = "var(--danger-100)", R_TXT = "var(--danger-600)";
 
 function cfg() {
   const c = (store.state.config && store.state.config.meseros) || {};
@@ -269,8 +269,8 @@ const INFO = {
     d: "Por total ganaría siempre quien atendió más mesas: en julio Alexa hizo 138 extras, los más de todos, con 0.58 por cuenta; Giselle 91 con 0.72." },
 };
 // ⓘ de un criterio que trae su propia advertencia de lectura.
-const icoTexto = (c) => `<button data-nota="${esc(c.nota)}" title="Ojo con este" style="border:none;background:none;padding:0 0 0 3px;cursor:pointer;color:var(--gris,#9a9a9a);font-size:12px;line-height:1;vertical-align:middle">ⓘ</button>`;
-const ico = (k) => `<button data-info="${k}" title="¿Qué es esto?" style="border:none;background:none;padding:0 0 0 3px;cursor:pointer;color:var(--gris,#9a9a9a);font-size:12px;line-height:1;vertical-align:middle">ⓘ</button>`;
+const icoTexto = (c) => `<button data-nota="${esc(c.nota)}" title="Ojo con este" style="border:none;background:none;padding:0 0 0 3px;cursor:pointer;color:var(--gris,var(--default-500));font-size:12px;line-height:1;vertical-align:middle">ⓘ</button>`;
+const ico = (k) => `<button data-info="${k}" title="¿Qué es esto?" style="border:none;background:none;padding:0 0 0 3px;cursor:pointer;color:var(--gris,var(--default-500));font-size:12px;line-height:1;vertical-align:middle">ⓘ</button>`;
 
 function abrirInfo(k) {
   const i = INFO[k]; if (!i) return;
@@ -281,7 +281,7 @@ function abrirInfo(k) {
     <h2 style="margin:0 0 6px">${esc(i.t)}</h2>
     <p style="margin:0;font-size:15px;line-height:1.4">${esc(i.q)}</p>
     ${rot("Cómo se calcula")}<p style="margin:0;font-size:13.5px;line-height:1.45">${esc(i.c)}</p>
-    ${rot("De dónde sale")}<p style="margin:0;font-size:13.5px;line-height:1.45;color:var(--gris,#666)">${esc(i.d)}</p>
+    ${rot("De dónde sale")}<p style="margin:0;font-size:13.5px;line-height:1.45;color:var(--gris,var(--default-500))">${esc(i.d)}</p>
     <button class="btn sec" data-cerrar style="margin-top:18px">Cerrar</button>
   </div>`;
   document.body.appendChild(bg);
@@ -389,7 +389,7 @@ export function render(el) {
       // distinto al producto: el cliente elige qué medir sin pedirle nada a
       // nadie. Estaba detrás de una etiqueta que hablaba de otra cosa, así
       // que nadie lo iba a encontrar nunca.
-      + `<div class="card"><button class="btn sec" id="mAjustes">⚙️ Elegir qué se mide, metas y quién compite</button>
+      + `<div class="card"><button class="btn sec" id="mAjustes">Elegir qué se mide, metas y quién compite</button>
          <p class="sub" style="margin:8px 0 0;font-size:11.5px">Tú decides qué cuenta para la calificación —
          de tus propias categorías y modificadores, no de una lista que alguien más escribió.</p>
          <div id="mPanel">${verAjustes ? panelAjustes(lista, metas) : ""}</div></div>`;
@@ -400,18 +400,18 @@ export function render(el) {
   }
 
   // ── Encabezado de sección, como el de tu scorecard ────────────
-  const seccion = (titulo, sub) => `<div style="background:#6b7a3a;color:#fff;padding:9px 14px;border-radius:12px 12px 0 0">
+  const seccion = (titulo, sub) => `<div style="background:var(--success-600);color:var(--content1);padding:9px 14px;border-radius:12px 12px 0 0">
     <div style="font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700">${esc(titulo)}</div>
     ${sub ? `<div style="font-size:11.5px;opacity:.85;margin-top:2px">${sub}</div>` : ""}</div>`;
 
   function encabezados(cols, nPiso) {
     return `<tr>
-      <th style="position:sticky;left:0;background:var(--blanco,#fff);z-index:2;text-align:left;padding:9px 10px;min-width:150px"></th>
-      ${cols.map((p, i) => `<th style="padding:8px 6px;text-align:center;color:#fff;background:${i < nPiso ? "#173a34" : "#7b7b74"};min-width:88px">
+      <th style="position:sticky;left:0;background:var(--blanco,var(--content1));z-index:2;text-align:left;padding:9px 10px;min-width:150px"></th>
+      ${cols.map((p, i) => `<th style="padding:8px 6px;text-align:center;color:var(--content1);background:${i < nPiso ? "var(--foreground)" : "var(--default-500)"};min-width:88px">
         <div style="font-size:13px;font-weight:700;${p.cuentas ? "" : "opacity:.5"}">${esc(p.mesero.split(" ")[0])}</div>
         <div style="font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.8">${p.cuentas ? esc(rolDe(p.mesero) || (i < nPiso ? "piso" : "no compite")) : "sin turnos"}</div>
       </th>`).join("")}
-      <th style="padding:8px 6px;text-align:center;color:#fff;background:#5c2018;min-width:82px;font-size:13px">Equipo</th>
+      <th style="padding:8px 6px;text-align:center;color:var(--content1);background:var(--danger-700);min-width:82px;font-size:13px">Equipo</th>
     </tr>`;
   }
 
@@ -428,10 +428,10 @@ export function render(el) {
         else if (v >= meta * 0.75) { bg = AMBAR; col = A_TXT; }
         else { bg = ROJO; col = R_TXT; }
       }
-      return `<td style="padding:9px 6px;text-align:center;background:${esEq ? "#f6efe8" : bg || "transparent"};${col ? "color:" + col + ";" : ""}font-weight:${esEq || (meta != null && v >= meta) ? 700 : 500};font-size:13.5px">${p.cuentas || p.tCuentas ? fmt(v, p) : "—"}</td>`;
+      return `<td style="padding:9px 6px;text-align:center;background:${esEq ? "var(--default-50)" : bg || "transparent"};${col ? "color:" + col + ";" : ""}font-weight:${esEq || (meta != null && v >= meta) ? 700 : 500};font-size:13.5px">${p.cuentas || p.tCuentas ? fmt(v, p) : "—"}</td>`;
     };
-    return `<tr style="border-top:1px solid #ece7df">
-      <td style="position:sticky;left:0;background:var(--blanco,#fff);z-index:1;padding:9px 10px;font-weight:600;font-size:13.5px">
+    return `<tr style="border-top:1px solid var(--default-100)">
+      <td style="position:sticky;left:0;background:var(--blanco,var(--content1));z-index:1;padding:9px 10px;font-weight:600;font-size:13.5px">
         ${esc(etiqueta)}${infoK ? ico(infoK) : ""}
         ${subEt ? `<div class="sub" style="font-size:10.5px;font-weight:400">${esc(subEt)}</div>` : ""}
       </td>
@@ -473,10 +473,10 @@ export function render(el) {
         else if (v >= meta * 0.75) { bg = AMBAR; col = A_TXT; }
         else { bg = ROJO; col = R_TXT; }
       }
-      return `<td style="padding:9px 6px;text-align:center;background:${esEq ? "#f6efe8" : bg || "transparent"};${col ? "color:" + col + ";" : ""}font-weight:${esEq || (meta > 0 && v >= meta) ? 700 : 500};font-size:13.5px">${p.cuentas ? fmtCri(c)(v) : "—"}</td>`;
+      return `<td style="padding:9px 6px;text-align:center;background:${esEq ? "var(--default-50)" : bg || "transparent"};${col ? "color:" + col + ";" : ""}font-weight:${esEq || (meta > 0 && v >= meta) ? 700 : 500};font-size:13.5px">${p.cuentas ? fmtCri(c)(v) : "—"}</td>`;
     };
-    return `<tr style="border-top:1px solid #ece7df">
-      <td style="position:sticky;left:0;background:var(--blanco,#fff);z-index:1;padding:9px 10px;font-weight:600;font-size:13.5px">
+    return `<tr style="border-top:1px solid var(--default-100)">
+      <td style="position:sticky;left:0;background:var(--blanco,var(--content1));z-index:1;padding:9px 10px;font-weight:600;font-size:13.5px">
         ${esc(c.nombre)}${INFO[c.id] ? ico(c.id) : (c.nota ? icoTexto(c) : "")}
         ${sub ? `<div class="sub" style="font-size:10.5px;font-weight:400">${esc(sub)}</div>` : ""}
       </td>
@@ -493,10 +493,10 @@ export function render(el) {
       const n = p.nota;
       const col = n == null ? "" : n >= 90 ? V_TXT : n >= 70 ? A_TXT : R_TXT;
       const bg = n == null ? "" : n >= 90 ? VERDE : n >= 70 ? AMBAR : ROJO;
-      return `<td style="padding:11px 6px;text-align:center;background:${esEq ? "#f6efe8" : bg};${col ? "color:" + col + ";" : ""}font-weight:800;font-size:17px">${n == null || !p.cuentas ? "—" : n}</td>`;
+      return `<td style="padding:11px 6px;text-align:center;background:${esEq ? "var(--default-50)" : bg};${col ? "color:" + col + ";" : ""}font-weight:800;font-size:17px">${n == null || !p.cuentas ? "—" : n}</td>`;
     };
     return `<tr style="border-top:2px solid var(--linea)">
-      <td style="position:sticky;left:0;background:var(--blanco,#fff);z-index:1;padding:11px 10px;font-weight:800;font-size:14px">
+      <td style="position:sticky;left:0;background:var(--blanco,var(--content1));z-index:1;padding:11px 10px;font-weight:800;font-size:14px">
         Calificación${ico("nota")}
         <div class="sub" style="font-size:10.5px;font-weight:400">${esc(conMeta.map((c) => c.nombre.split(" ")[0] + "×" + c.peso).join(" · "))}</div>
       </td>
@@ -558,7 +558,7 @@ export function render(el) {
     const dif = Math.abs(corte - ordenes) / Math.max(corte, ordenes);
     if (dif < 0.05) return "";                       // diferencias chicas son ruido de redondeo
     const faltaAqui = ordenes < corte;
-    return `<div class="card" style="border-left:4px solid var(--amarillo,#b8860b)">
+    return `<div class="card" style="border-left:4px solid var(--amarillo,var(--warning-600))">
       <b>Este total no cuadra con el de Inicio.</b>
       <p class="sub" style="margin:6px 0 0">
         Aquí (reporte de órdenes): <b>${money(ordenes)}</b> ·
@@ -621,9 +621,9 @@ export function render(el) {
     if (!pts.length) pts.push(`<b>Todo en meta.</b> Ningún indicador del equipo está por debajo. Buen momento para subir la meta.`);
 
     return `<div class="card">
-      <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:#5c2018;margin-bottom:10px">Focos de coaching · ${esc(r.txt)}</div>
+      <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--danger-700);margin-bottom:10px">Focos de coaching · ${esc(r.txt)}</div>
       ${pts.slice(0, 5).map((t) => `<div style="display:flex;gap:9px;margin-bottom:11px;font-size:13.5px;line-height:1.5">
-        <span style="color:var(--naranja,#c0622a)">▸</span><div>${t}</div></div>`).join("")}
+        <span style="color:var(--naranja,var(--danger-500))">▸</span><div>${t}</div></div>`).join("")}
     </div>`;
   }
 
@@ -645,14 +645,14 @@ export function render(el) {
     const enJuego = CRI.filter((c) => c.compite && num(c.meta) > 0);
     const podio = (c) => lista.filter((p) => compite(p.mesero) && !p.chica)
       .sort((a, b) => num(b.val[c.id]) - num(a.val[c.id]));
-    const MED = ["🥇", "🥈", "🥉"];
+    const MED = ["1º", "2º", "3º"];   // el lugar, escrito. Antes eran medallas emoji.
     const tarj = (c) => {
       const arr = podio(c);
       const h = `<h3 style="margin:0 0 8px;font-size:13.5px">${esc(c.nombre)}${INFO[c.id] ? ico(c.id) : ""}</h3>`;
       if (!arr.length) return `<div>${h}<div class="sub">Sin muestra suficiente.</div></div>`;
       return `<div>${h}${arr.map((p, i) => `
-        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #ece7df">
-          <span style="width:20px">${MED[i] || ""}</span>
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--default-100)">
+          <span style="width:22px;font-weight:700;font-size:11.5px;color:var(--gris)">${MED[i] || ""}</span>
           <span style="flex:1;min-width:0;font-weight:${i === 0 ? 700 : 500};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.mesero.split(" ")[0])}</span>
           <span class="sub" style="font-size:11px">${Math.round(num(p.uds[c.id]))} uds</span>
           <b style="min-width:48px;text-align:right;color:${num(p.val[c.id]) >= num(c.meta) ? V_TXT : A_TXT}">${fmtCri(c)(num(p.val[c.id]))}</b>
@@ -660,19 +660,19 @@ export function render(el) {
     };
     const fuera = lista.filter((p) => p.chica && compite(p.mesero));
     return `<div class="card">
-      <h2 style="margin-top:0">🏁 Marcador · ${esc(r.txt)}${ico("marcador")}</h2>
+      <h2 style="margin-top:0">Marcador · ${esc(r.txt)}${ico("marcador")}</h2>
       ${enJuego.length
         ? `<div style="display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">${enJuego.map(tarj).join("")}</div>`
-        : `<div class="sub">Ningún criterio está marcado para competir. Actívalos en ⚙️ abajo.</div>`}
+        : `<div class="sub">Ningún criterio está marcado para competir. Actívalos en los ajustes de abajo.</div>`}
       ${fuera.length ? `<p class="sub" style="margin:12px 2px 0;font-size:11.5px">Fuera del podio por muestra chica (menos de ${MIN_CUENTAS} cuentas):
         ${esc(fuera.map((p) => `${p.mesero.split(" ")[0]} (${p.cuentas})`).join(", "))}.</p>` : ""}
-      ${r.corto ? `<p class="sub" style="margin:8px 2px 0;font-size:11.5px">⚠️ Una semana son ~45 cuentas por persona: con esa muestra un mal martes cambia al líder. <b>El marcador que cuenta es el del mes.</b></p>` : ""}
+      ${r.corto ? `<p class="sub" style="margin:8px 2px 0;font-size:11.5px">Una semana son ~45 cuentas por persona: con esa muestra un mal martes cambia al líder. <b>El marcador que cuenta es el del mes.</b></p>` : ""}
     </div>`;
   }
 
   // ── Selector y ajustes ────────────────────────────────────────
   function selector(r) {
-    const op = (k, t) => `<button data-p="${k}" class="btn sec chico" style="flex:1${k === periodo ? ";background:var(--verde,#0e3a39);color:#fff;border-color:transparent" : ""}">${t}</button>`;
+    const op = (k, t) => `<button data-p="${k}" class="btn sec chico" style="flex:1${k === periodo ? ";background:var(--verde,var(--foreground));color:var(--content1);border-color:transparent" : ""}">${t}</button>`;
     const semanas = semanasConDatos();
     return `<div class="card" style="padding:10px">
       <div class="fila" style="gap:6px">${op("semana", "Semana")}${op("mes", "Este mes")}${op("mespasado", "Mes pasado")}${op("todo", "Todo")}</div>
@@ -868,7 +868,7 @@ export function render(el) {
     if (!faltan.length) return "";
     const total = faltan.length + dias.size;
     const dm = (f) => { const [, m, dd] = f.split("-"); return `${+dd} ${MES_CORTO[+m - 1]}`; };
-    return `<div class="card" style="border-left:4px solid var(--rojo,#b3261e)">
+    return `<div class="card" style="border-left:4px solid var(--rojo,var(--danger-600))">
       <b>Faltan ${faltan.length} de ${total} días en este periodo.</b>
       <p class="sub" style="margin:6px 0 0">Sin órdenes de: ${esc(faltan.map(dm).join(", "))}.</p>
       <p class="sub" style="margin:6px 0 0"><b>Todo lo de abajo está incompleto</b> — los totales, el marcador
@@ -888,18 +888,18 @@ export function render(el) {
   }
 
   function avisoBebidas() {
-    return `<div class="card" style="border-left:4px solid var(--naranja,#c0622a)">
+    return `<div class="card" style="border-left:4px solid var(--naranja,var(--danger-500))">
       <b>Las bebidas salen en cero.</b>
       <p class="sub" style="margin:6px 0 0">Los spritz y limonadas SÍ vienen en tu Excel — el problema es que la
       base todavía no tiene dónde guardarlos. Corre las <b>dos</b> líneas en el SQL Editor:</p>
-      <div style="background:var(--fondo-2,#f6f6f4);border-radius:8px;padding:9px 11px;margin:8px 0;font-family:ui-monospace,monospace;font-size:11.5px;overflow-x:auto">
+      <div style="background:var(--fondo-2,var(--content2));border-radius:8px;padding:9px 11px;margin:8px 0;font-family:ui-monospace,monospace;font-size:11.5px;overflow-x:auto">
         <div style="white-space:nowrap">alter table public.ordenes_mesero add column if not exists bebidas int not null default 0;</div>
         <div style="white-space:nowrap;margin-top:4px">notify pgrst, 'reload schema';</div>
       </div>
       <p class="sub" style="margin:0">La segunda es la que suele faltar: Supabase guarda en memoria la forma de
       cada tabla, y sin refrescarla sigue creyendo que esa columna no existe aunque ya la hayas creado.</p>
       <p class="sub" style="margin:8px 0 0">Después vuelve a subir el reporte en <b>Insumos → Importar</b>.
-      Si al terminar aparece un ⚠️ hablando de bebidas, es que la base sigue sin verla.</p>
+      Si al terminar aparece un aviso hablando de bebidas, es que la base sigue sin verla.</p>
     </div>`;
   }
 

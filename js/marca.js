@@ -58,7 +58,7 @@ function aplicarPWA(nombre, logo) {
       description: "Control financiero para tu restaurante — por Platify",
       start_url: homeAbs, scope: homeAbs,
       display: "standalone", orientation: "portrait",
-      background_color: "#f1fbfa", theme_color: "#f1fbfa", lang: "es-MX",
+      background_color: "var(--content2)", theme_color: "var(--content2)", lang: "es-MX",
       icons: iconos,
     };
     const blob = new Blob([JSON.stringify(man)], { type: "application/manifest+json" });
@@ -100,7 +100,7 @@ export function abrirPersonalizar() {
       </div>
       <label class="sub" style="display:block;margin:0 2px 4px">Nombre para el ícono</label>
       <input id="nom" value="${escapar(nombreActual)}" placeholder="Ej. Cremina" maxlength="24" />
-      <p class="sub" style="font-size:11px;margin:10px 2px 0;line-height:1.5">📱 <b>iPhone:</b> toca Compartir → <b>Agregar a inicio</b> y verás este nombre y logo. Si ya la tenías guardada, bórrala y agrégala de nuevo para que tome tu logo.</p>
+      <p class="sub" style="font-size:11px;margin:10px 2px 0;line-height:1.5"><b>iPhone:</b> toca Compartir → <b>Agregar a inicio</b> y verás este nombre y logo. Si ya la tenías guardada, bórrala y agrégala de nuevo para que tome tu logo.</p>
       <button class="btn" id="guardar" style="margin-top:16px">Guardar</button>
       <button class="btn sec" id="cerrar" style="margin-top:8px">Cerrar</button>
       <div id="msg"></div>
@@ -162,7 +162,7 @@ function comprimir(file, max) {
           const c = document.createElement("canvas");
           c.width = max; c.height = max;
           const ctx = c.getContext("2d");
-          ctx.fillStyle = "#ffffff";
+          ctx.fillStyle = "#ffffff";   // canvas, no CSS: aquí una variable no resuelve
           ctx.fillRect(0, 0, max, max);
           const s = Math.min(img.width, img.height);
           const sx = (img.width - s) / 2, sy = (img.height - s) / 2;

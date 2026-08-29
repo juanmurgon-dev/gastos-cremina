@@ -7,11 +7,15 @@
 import * as store from "../store.js";
 import { money } from "../store.js";
 import { parsearCSV, descargarCSV } from "../csv.js";
+import { ic } from "../iconos.js";
+
+// Señal al inicio de una fila (antes eran emoji).
+const sena = (n, col) => `<span class="i-ic" style="color:${col};margin-right:6px">${ic(n, 13)}</span>`;
 
 const num = (x) => { const n = parseFloat(x); return isNaN(n) ? 0 : n; };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const colorMargen = (pct) => pct == null ? "var(--sub)" : pct >= 65 ? "var(--verde)" : pct >= 45 ? "#c9740a" : "var(--rojo)";
-const colorFood = (pct) => pct == null ? "var(--sub)" : pct <= 35 ? "var(--verde)" : pct <= 50 ? "#c9740a" : "var(--rojo)";
+const colorMargen = (pct) => pct == null ? "var(--sub)" : pct >= 65 ? "var(--verde)" : pct >= 45 ? "var(--warning-600)" : "var(--rojo)";
+const colorFood = (pct) => pct == null ? "var(--sub)" : pct <= 35 ? "var(--verde)" : pct <= 50 ? "var(--warning-600)" : "var(--rojo)";
 const IVA = 0.16; // precio de venta al público asumido con IVA; food cost sobre precio neto
 const redondo = (n) => Math.round(n * 100) / 100;
 
@@ -109,7 +113,7 @@ function areaDePrep(nom, catPlatillo) {
   }
   return usada ? "Cocina" : "";
 }
-const etiquetaArea = (a) => a === "Barra" ? "☕ Barra" : a === "Cocina" ? "🍳 Cocina" : "sin área";
+const etiquetaArea = (a) => a === "Barra" ? "Barra" : a === "Cocina" ? "Cocina" : "sin área";
 
 // Agrupa las filas de un CSV en recetas. Una fila por ingrediente; se agrupan por 'platillo'.
 function gruposDesdeCSV(objs) {
@@ -261,12 +265,12 @@ export function render(el) {
     cont.innerHTML = `
       <div class="card">
         <h2 style="margin-bottom:2px">Fichas técnicas</h2>
-        <p class="sub" style="margin-top:0">📝 Con receta: <b>${totCon}</b> · ✅ Terminadas: <b>${totOk}</b> · ➕ Falta: <b>${totSin}</b> · <span style="color:var(--rojo)">⚠️ Revisar: <b>${totRev}</b></span></p>
+        <p class="sub" style="margin-top:0">Con receta: <b>${totCon}</b> · Terminadas: <b>${totOk}</b> · Falta: <b>${totSin}</b> · <span style="color:var(--rojo)">Revisar: <b>${totRev}</b></span></p>
         <div class="fila" style="gap:8px;margin:8px 0 4px;flex-wrap:wrap">
-          <button class="btn sec chico" id="impcsv" style="flex:1">⬆ Importar CSV</button>
-          <button class="btn sec chico" id="plantilla" style="flex:1">⬇ Formato vacío</button>
-          <button class="btn sec chico" id="exptabla" style="flex:1 1 100%">⬇ Descargar recetas (tabla)</button>
-          <button class="btn sec chico" id="faltantes" style="flex:1 1 100%">🔎 Barrido: ingredientes sin costear</button>
+          <button class="btn sec chico" id="impcsv" style="flex:1">Importar CSV</button>
+          <button class="btn sec chico" id="plantilla" style="flex:1">Formato vacío</button>
+          <button class="btn sec chico" id="exptabla" style="flex:1 1 100%">Descargar recetas (tabla)</button>
+          <button class="btn sec chico" id="faltantes" style="flex:1 1 100%">Barrido: ingredientes sin costear</button>
         </div>
         <input type="file" id="fcsv" accept=".csv,text/csv" style="display:none" />
         <input id="bq" placeholder="Buscar platillo…" style="margin:6px 0 8px" value="${esc(st.q)}" />
@@ -278,9 +282,9 @@ export function render(el) {
           </select>
           <select id="forden" style="flex:1;margin-bottom:12px">
             <option value="venta"${st.orden === "venta" ? " selected" : ""}>↕ Más vendido</option>
-            <option value="costo"${st.orden === "costo" ? " selected" : ""}>💲 Más costoso</option>
-            <option value="margen"${st.orden === "margen" ? " selected" : ""}>📈 Mejor margen</option>
-            <option value="margenPeor"${st.orden === "margenPeor" ? " selected" : ""}>📉 Peor margen</option>
+            <option value="costo"${st.orden === "costo" ? " selected" : ""}>Más costoso</option>
+            <option value="margen"${st.orden === "margen" ? " selected" : ""}>Mejor margen</option>
+            <option value="margenPeor"${st.orden === "margenPeor" ? " selected" : ""}>Peor margen</option>
           </select>
         </div>
         <div id="lista"></div>
@@ -288,10 +292,10 @@ export function render(el) {
 
     const listaEl = cont.querySelector("#lista");
     const chipsEl = cont.querySelector("#chips");
-    const chip = (id, txt) => `<button class="fchip" data-f="${id}" style="border:1px solid var(--linea);background:${st.filtro === id ? "var(--verde)" : "#fff"};color:${st.filtro === id ? "#fff" : "var(--txt,#222)"};border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex:0 0 auto">${txt}</button>`;
+    const chip = (id, txt) => `<button class="fchip" data-f="${id}" style="border:1px solid var(--linea);background:${st.filtro === id ? "var(--verde)" : "var(--content1)"};color:${st.filtro === id ? "var(--content1)" : "var(--txt,var(--foreground))"};border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex:0 0 auto">${txt}</button>`;
 
     function pintarChips() {
-      chipsEl.innerHTML = chip("todas", `Todas (${filas0.length})`) + chip("con", `📝 Con receta (${totCon})`) + chip("ok", `✅ Terminadas (${totOk})`) + chip("sin", `➕ Falta (${totSin})`) + chip("revisar", `⚠️ Revisar (${totRev})`);
+      chipsEl.innerHTML = chip("todas", `Todas (${filas0.length})`) + chip("con", `Con receta (${totCon})`) + chip("ok", `Terminadas (${totOk})`) + chip("sin", `Falta (${totSin})`) + chip("revisar", `Revisar (${totRev})`);
       chipsEl.querySelectorAll(".fchip").forEach((c) => c.addEventListener("click", () => { st.filtro = c.dataset.f; pintarChips(); pintarLista(); }));
     }
     function pintarLista() {
@@ -311,8 +315,8 @@ export function render(el) {
         return `
           <button class="fila-item" data-p="${esc(p.producto)}" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--linea);padding:12px 2px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">
             <span style="min-width:0">
-              <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.completa ? "✅ " : (m.alerta ? "⚠️ " : "")}${esc(p.producto)}</b>
-              <span class="sub" style="font-size:12px">${p.esVariante ? "🔸 variante · " : ""}${esc(p.categoria || "")}${p.precio ? " · vende " + money(p.precio) + (p.deCarta ? "" : " <span title=\"Promedio de lo vendido. Captura el precio de carta en la ficha.\" style=\"opacity:.65\">prom.</span>") : ""}</span>
+              <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.completa ? sena("ok", "var(--verde)") : (m.alerta ? sena("alerta", "var(--ambar)") : "")}${esc(p.producto)}</b>
+              <span class="sub" style="font-size:12px">${p.esVariante ? "variante · " : ""}${esc(p.categoria || "")}${p.precio ? " · vende " + money(p.precio) + (p.deCarta ? "" : " <span title=\"Promedio de lo vendido. Captura el precio de carta en la ficha.\" style=\"opacity:.65\">prom.</span>") : ""}</span>
               ${m.alerta ? `<span class="sub" style="font-size:11px;color:var(--rojo);display:block;white-space:normal">${esc(m.alerta)}</span>` : ""}
             </span>
             <span style="text-align:right;white-space:nowrap">
@@ -343,7 +347,7 @@ export function render(el) {
         if (!grupos.length) alert("No encontré recetas en el CSV. Debe tener columnas 'platillo' e 'insumo'. Usa 'Descargar formato'.");
         else { const n = await store.importarRecetas(grupos); alert(`Listo: ${n} recetas/subrecetas importadas.`); pintar(); return; }
       } catch (e) { alert("Error al importar: " + (e.message || e)); }
-      fcsv.value = ""; const b2 = cont.querySelector("#impcsv"); if (b2) b2.textContent = "⬆ Importar CSV";
+      fcsv.value = ""; const b2 = cont.querySelector("#impcsv"); if (b2) b2.textContent = "Importar CSV";
     });
 
     pintarChips();
@@ -369,12 +373,12 @@ export function render(el) {
       <div class="card">
         <h2 style="margin-bottom:2px">Preparaciones base</h2>
         <p class="sub" style="margin-top:0">Salsas, masas, aderezos… que usas en varios platillos. Se costean una vez y se reutilizan como un insumo más.</p>
-        ${lista.length ? `<p class="sub" style="margin:6px 0 0">✅ Terminadas: <b>${listas}</b> · ⏳ En proceso: <b>${faltan}</b></p>` : ""}
+        ${lista.length ? `<p class="sub" style="margin:6px 0 0">Terminadas: <b>${listas}</b> · En proceso: <b>${faltan}</b></p>` : ""}
         <button class="btn" id="nueva" style="margin:8px 0 12px">＋ Nueva preparación</button>
         ${lista.length ? `<select id="fareaP" style="margin-bottom:10px">
           <option value="todas"${stPrep.area === "todas" ? " selected" : ""}>Todas las áreas (${lista.length})</option>
-          <option value="Cocina"${stPrep.area === "Cocina" ? " selected" : ""}>🍳 Cocina (${nCocina})</option>
-          <option value="Barra"${stPrep.area === "Barra" ? " selected" : ""}>☕ Barra de café y bebidas (${nBarra})</option>
+          <option value="Cocina"${stPrep.area === "Cocina" ? " selected" : ""}>Cocina (${nCocina})</option>
+          <option value="Barra"${stPrep.area === "Barra" ? " selected" : ""}>Barra de café y bebidas (${nBarra})</option>
           ${nSin ? `<option value="sin"${stPrep.area === "sin" ? " selected" : ""}>Sin área (${nSin})</option>` : ""}
         </select>` : ""}
         ${lista.length ? `<div id="chipsP" class="fila" style="gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px"></div>` : ""}
@@ -383,11 +387,11 @@ export function render(el) {
 
     const lp = cont.querySelector("#lp");
     const chipsEl = cont.querySelector("#chipsP");
-    const chip = (id, txt) => `<button class="pchip" data-f="${id}" style="border:1px solid var(--linea);background:${stPrep.filtro === id ? "var(--verde)" : "#fff"};color:${stPrep.filtro === id ? "#fff" : "var(--txt,#222)"};border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex:0 0 auto">${txt}</button>`;
+    const chip = (id, txt) => `<button class="pchip" data-f="${id}" style="border:1px solid var(--linea);background:${stPrep.filtro === id ? "var(--verde)" : "var(--content1)"};color:${stPrep.filtro === id ? "var(--content1)" : "var(--txt,var(--foreground))"};border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex:0 0 auto">${txt}</button>`;
 
     function pintarChips() {
       if (!chipsEl) return;
-      chipsEl.innerHTML = chip("todas", `Todas (${lista.length})`) + chip("ok", `✅ Terminadas (${listas})`) + chip("falta", `⏳ En proceso (${faltan})`);
+      chipsEl.innerHTML = chip("todas", `Todas (${lista.length})`) + chip("ok", `Terminadas (${listas})`) + chip("falta", `En proceso (${faltan})`);
       chipsEl.querySelectorAll(".pchip").forEach((c) => c.addEventListener("click", () => { stPrep.filtro = c.dataset.f; pintarChips(); pintarLista(); }));
     }
 
@@ -412,7 +416,7 @@ export function render(el) {
             <button class="chkPrep" data-p="${esc(nom)}" aria-pressed="${completa}"
               title="${completa ? "Terminada — toca para marcarla en proceso" : "En proceso — toca para marcarla terminada"}"
               style="flex:0 0 auto;width:26px;height:26px;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;padding:0;
-                     border:1.5px solid ${completa ? "var(--verde)" : "var(--linea)"};background:${completa ? "var(--verde)" : "#fff"};color:#fff">${completa ? "✓" : ""}</button>
+                     border:1.5px solid ${completa ? "var(--verde)" : "var(--linea)"};background:${completa ? "var(--verde)" : "var(--content1)"};color:var(--content1)">${completa ? "✓" : ""}</button>
             <button class="abrirPrep" data-p="${esc(nom)}" style="flex:1;min-width:0;text-align:left;background:none;border:none;padding:8px 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">
               <span style="min-width:0">
                 <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nom)}</b>
@@ -484,7 +488,7 @@ export function render(el) {
   // Café…) y, para las preparaciones, si son de cocina o de barra.
   function grupoDeReceta(g, catPlatillo) {
     if (g.esPrep) return areaDePrep(g.producto, catPlatillo) === "Barra"
-      ? "☕ Preparaciones de barra" : "🍳 Preparaciones de cocina";
+      ? "Preparaciones de barra" : "Preparaciones de cocina";
     return catPlatillo.get(g.producto) || "Sin categoría";
   }
 
@@ -536,7 +540,7 @@ export function render(el) {
           <option value="todas"${stBar.grupo === "todas" ? " selected" : ""}>Todas las áreas (${todas.length})</option>
           ${listaAreas.map(([g, c]) => `<option value="${esc(g)}"${stBar.grupo === g ? " selected" : ""}>${esc(g)} — ${c.n} receta${c.n === 1 ? "" : "s"}${c.mal ? ", " + c.mal + " con faltantes" : ""}</option>`).join("")}
         </select>
-        <button class="btn sec chico" id="csvF" style="margin-top:10px">⬇ Exportar el barrido (CSV)</button>
+        <button class="btn sec chico" id="csvF" style="margin-top:10px">Exportar el barrido (CSV)</button>
       </div>
 
       ${culpables.length ? `<div class="card">
@@ -547,19 +551,19 @@ export function render(el) {
           <span class="sub" style="font-size:11.5px;white-space:nowrap">${esc(c.motivo)}</span>
           <span class="val" style="width:auto;white-space:nowrap">${c.recetas.size} receta${c.recetas.size === 1 ? "" : "s"}</span>
         </div>`).join("")}
-      </div>` : `<div class="card"><div class="ok-box">✅ Ninguna receta tiene ingredientes sin costear.</div></div>`}
+      </div>` : `<div class="card"><div class="ok-box">Ninguna receta tiene ingredientes sin costear.</div></div>`}
 
       ${vistas.map((r) => `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
           <button class="linkbtn abrirR" data-p="${esc(r.producto)}" data-prep="${r.esPrep ? "1" : ""}" style="text-align:left;font-weight:800;font-size:15px;color:var(--verde);background:none;border:none;padding:0;cursor:pointer">
-            ${r.nFalta ? "⚠️ " : "✅ "}${esc(r.producto)}${r.esPrep ? " <span class=\"sub\" style=\"font-weight:600\">(preparación)</span>" : ""}
+            ${r.nFalta ? sena("alerta", "var(--ambar)") : sena("ok", "var(--verde)")}${esc(r.producto)}${r.esPrep ? " <span class=\"sub\" style=\"font-weight:600\">(preparación)</span>" : ""}
           </button>
           <span class="sub" style="white-space:nowrap;font-size:12px;${r.nFalta ? "color:var(--rojo);font-weight:700" : ""}">${r.nFalta ? r.nFalta + " de " + r.items.length + " sin costear" : r.items.length + " ingredientes"}</span>
         </div>
         <div class="sub" style="font-size:11.5px;margin-top:1px">${esc(r.grupo)}</div>
         <div style="margin-top:8px">
           ${r.items.map((i) => `<div style="display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px dashed var(--linea)">
-            <span style="flex:1;min-width:0;${i.falta ? "color:var(--rojo);font-weight:700" : ""}">${i.falta ? "🔴 " : ""}${esc(i.insumo)}</span>
+            <span style="flex:1;min-width:0;${i.falta ? "color:var(--rojo);font-weight:700" : ""}">${esc(i.insumo)}</span>
             <span class="sub" style="white-space:nowrap;font-size:12px">${esc(String(i.cantidad ?? ""))} ${esc(i.unidad || "")}</span>
             <span class="val" style="width:96px;text-align:right;white-space:nowrap;${i.falta ? "color:var(--rojo)" : ""}">${i.falta ? esc(i.falta.corto) : money(i.costo)}</span>
           </div>`).join("")}
@@ -651,8 +655,8 @@ export function render(el) {
                <label class="campo"><span>Área</span>
                  <select id="areaPrep">
                    <option value=""${!/^(cocina|barra)$/i.test(categoria) ? " selected" : ""}>Deducir sola (por dónde se usa)</option>
-                   <option value="Cocina"${/^cocina$/i.test(categoria) ? " selected" : ""}>🍳 Cocina</option>
-                   <option value="Barra"${/^barra$/i.test(categoria) ? " selected" : ""}>☕ Barra de café y bebidas</option>
+                   <option value="Cocina"${/^cocina$/i.test(categoria) ? " selected" : ""}>Cocina</option>
+                   <option value="Barra"${/^barra$/i.test(categoria) ? " selected" : ""}>Barra de café y bebidas</option>
                  </select>
                </label>
                <div class="fila" style="gap:8px">
@@ -701,7 +705,7 @@ export function render(el) {
             <div class="sub" style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--verde);font-weight:700;margin-bottom:6px">Foto del platillo</div>
             <label style="display:block;border:2px dashed var(--linea);border-radius:12px;padding:14px;text-align:center;cursor:pointer">
               <input type="file" id="foto" accept="image/*" style="display:none" />
-              ${foto ? `<img src="${foto}" alt="platillo" style="max-width:100%;max-height:220px;border-radius:10px" />` : `<span class="sub">📸 Toca para subir una foto</span>`}
+              ${foto ? `<img src="${foto}" alt="platillo" style="max-width:100%;max-height:220px;border-radius:10px" />` : `<span class="sub">Toca para subir una foto</span>`}
             </label>
             ${foto ? `<button class="btn sec chico" id="quitarFoto" style="margin-top:8px;color:var(--rojo)">Quitar foto</button>` : ""}
           </div>
@@ -721,13 +725,13 @@ export function render(el) {
             <textarea id="obs" rows="4" placeholder="Notas de preparación, almacenamiento, cuidados…" style="width:100%;font-family:inherit;font-size:14px;padding:10px;border-radius:10px;border:1px solid var(--linea);resize:vertical">${esc(observaciones)}</textarea>
           </div>
 
-          <label id="lblCompleta" style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px;border-radius:12px;border:1.5px solid ${completa ? "var(--verde)" : "var(--linea)"};background:${completa ? "#eafaf0" : "#fff"};cursor:pointer">
+          <label id="lblCompleta" style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px;border-radius:12px;border:1.5px solid ${completa ? "var(--verde)" : "var(--linea)"};background:${completa ? "var(--success-100)" : "var(--content1)"};cursor:pointer">
             <input type="checkbox" id="completa" ${completa ? "checked" : ""} style="width:20px;height:20px;flex:0 0 auto;accent-color:var(--verde)" />
-            <span style="min-width:0"><b style="font-size:14px">✅ Receta terminada</b><br><span class="sub" style="font-size:11.5px">Márcala cuando esté 100% verificada (ingredientes, cantidades y costo correctos).</span></span>
+            <span style="min-width:0"><b style="font-size:14px">Receta terminada</b><br><span class="sub" style="font-size:11.5px">Márcala cuando esté 100% verificada (ingredientes, cantidades y costo correctos).</span></span>
           </label>
 
-          <button class="btn" id="guardar" style="margin-top:12px">💾 Guardar ficha</button>
-          <button class="btn sec" id="fichaPdf" style="margin-top:8px">📄 Ficha técnica (PDF)</button>
+          <button class="btn" id="guardar" style="margin-top:12px">Guardar ficha</button>
+          <button class="btn sec" id="fichaPdf" style="margin-top:8px">Ficha técnica (PDF)</button>
           ${existentes.length ? `<button class="btn sec chico" id="borrar" style="margin-top:6px;color:var(--rojo)">Borrar receta</button>` : ""}
           <div id="msg" class="sub" style="text-align:center;margin-top:8px;min-height:1em"></div>
         </div>`;
@@ -744,7 +748,7 @@ export function render(el) {
           ? `<select class="rin" style="flex:1;min-width:0"><option value="">— elige subreceta o platillo —</option>${prepsDisp().map((p) => `<option value="${esc(p)}"${p === it.insumo ? " selected" : ""}>${esc(p)}</option>`).join("")}</select>`
           : `<input class="rin" list="dl-insumos" placeholder="Nombre del insumo" value="${esc(it.insumo)}" style="flex:1;min-width:0" />`;
         return `
-          <div data-i="${i}" style="border:1px solid var(--linea);border-radius:12px;padding:12px;margin-top:10px;background:#fff">
+          <div data-i="${i}" style="border:1px solid var(--linea);border-radius:12px;padding:12px;margin-top:10px;background:var(--content1)">
             <div class="fila" style="gap:8px;align-items:center">
               ${campo}
               <button class="rx" title="Quitar" style="background:none;border:none;color:var(--rojo);cursor:pointer;font-size:20px;width:26px;flex:0 0 auto">×</button>
@@ -756,7 +760,7 @@ export function render(el) {
             </div>
             <div class="fila" style="justify-content:space-between;align-items:center;margin-top:8px">
               <span class="sub" style="font-size:11.5px">
-                ${precioU ? money(precioU) + (uCompra ? "/" + esc(uCompra) : "") : `<span style="color:var(--rojo)">${it.insumo ? (it.modo === "subreceta" ? "esta subreceta cuesta $0 — cuéstala primero" : "sin precio de compra") : ""}</span>`}${num(it.merma) > 0 ? ` · neta ${redondo(neta)} ${esc(uLinea)}` : ""}${it.modo === "subreceta" ? " 🧪" : ""}${precioU && uLinea && it.modo !== "subreceta" && !store.unidadesCompatibles(uLinea, uCompra) ? ` <b style="color:var(--rojo)">⚠️ unidad de compra: ${esc(uCompra || "sin unidad")} — no convierte con ${esc(uLinea)}</b>` : ""}
+                ${precioU ? money(precioU) + (uCompra ? "/" + esc(uCompra) : "") : `<span style="color:var(--rojo)">${it.insumo ? (it.modo === "subreceta" ? "esta subreceta cuesta $0 — cuéstala primero" : "sin precio de compra") : ""}</span>`}${num(it.merma) > 0 ? ` · neta ${redondo(neta)} ${esc(uLinea)}` : ""}${it.modo === "subreceta" ? ` <span class="sub" style="font-size:11px">(subreceta)</span>` : ""}${precioU && uLinea && it.modo !== "subreceta" && !store.unidadesCompatibles(uLinea, uCompra) ? ` <b style="color:var(--rojo)">unidad de compra: ${esc(uCompra || "sin unidad")} — no convierte con ${esc(uLinea)}</b>` : ""}
               </span>
               <b style="font-size:15px">${linea ? money(linea) : "—"}</b>
             </div>
@@ -794,7 +798,7 @@ export function render(el) {
       // Pasos numerados
       const pasosEl = cont.querySelector("#pasos");
       pasosEl.innerHTML = pasos.map((p, i) => `
-        <div class="fila" style="gap:8px;align-items:flex-start;margin-bottom:6px;background:var(--paper,#f4efe2);border-radius:10px;padding:8px 10px;border-left:3px solid var(--verde)">
+        <div class="fila" style="gap:8px;align-items:flex-start;margin-bottom:6px;background:var(--paper,var(--content2));border-radius:10px;padding:8px 10px;border-left:3px solid var(--verde)">
           <b style="color:var(--verde);font-size:12px;flex:0 0 auto">${i + 1}.</b>
           <span style="flex:1;font-size:13px">${esc(p.descripcion)}${p.tiempo ? ` <span class="sub">· ${esc(String(p.tiempo))} min</span>` : ""}</span>
           <button class="pasoDel" data-i="${i}" style="background:none;border:none;color:var(--rojo);cursor:pointer;font-size:16px;flex:0 0 auto">×</button>
@@ -827,7 +831,7 @@ export function render(el) {
       if (chkC) chkC.addEventListener("change", (e) => {
         completa = e.target.checked;
         const l = cont.querySelector("#lblCompleta");
-        if (l) { l.style.borderColor = completa ? "var(--verde)" : "var(--linea)"; l.style.background = completa ? "#eafaf0" : "#fff"; }
+        if (l) { l.style.borderColor = completa ? "var(--verde)" : "var(--linea)"; l.style.background = completa ? "var(--success-100)" : "var(--content1)"; }
       });
       cont.querySelector("#guardar").addEventListener("click", guardar);
       cont.querySelector("#fichaPdf").addEventListener("click", () => fichaPDF({

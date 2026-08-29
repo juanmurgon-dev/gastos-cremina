@@ -11,10 +11,12 @@
 import * as store from "../store.js";
 import { num } from "../store.js";
 import { metricasMeseros, rangoMeseros } from "./meseros.js";
+import { ic } from "../iconos.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const NIVELES = ["bronce", "plata", "oro"];
-const MEDALLA = { bronce: "🥉", plata: "🥈", oro: "🥇" };
+// Nivel dibujado con puntos, no con medallas emoji: mismo peso en todos los sistemas.
+const MEDALLA = { bronce: "●○○", plata: "●●○", oro: "●●●" };
 const APROBAR = 0.7;   // 70% para pasar el quiz
 
 export function render(el) {
@@ -91,7 +93,7 @@ export function render(el) {
     if (quiz) return pintarQuiz();
     if (obs) return pintarObs();
 
-    const tab = (k, t) => `<button data-t="${k}" class="btn sec chico" style="flex:1${k === sub ? ";background:var(--verde,#0e3a39);color:#fff;border-color:transparent" : ""}">${t}</button>`;
+    const tab = (k, t) => `<button data-t="${k}" class="btn sec chico" style="flex:1${k === sub ? ";background:var(--verde,var(--foreground));color:var(--content1);border-color:transparent" : ""}">${t}</button>`;
     el.innerHTML = `
       <div class="card" style="padding:10px"><div class="fila" style="gap:6px">
         ${tab("tablero", "Tablero")}${tab("evaluar", "Evaluar")}${tab("personas", "Personas")}
@@ -123,7 +125,7 @@ export function render(el) {
             <td style="padding:8px 4px">${esc(p.nombre)}<div class="sub" style="font-size:10.5px">${esc(p.puesto || "")}</div></td>
             ${cs.map((c) => {
               const n = nivelDe(p, c);
-              return `<td style="padding:8px 4px;text-align:center;font-size:18px" title="${n ? esc(n) : "sin nivel"}">${n ? MEDALLA[n] : "—"}</td>`;
+              return `<td style="padding:8px 4px;text-align:center;font-size:12px;letter-spacing:.12em" title="${n ? esc(n) : "sin nivel"}">${n ? MEDALLA[n] : "—"}</td>`;
             }).join("")}
           </tr>`).join("")}</tbody>
         </table></div>
@@ -145,8 +147,8 @@ export function render(el) {
       <label class="campo"><span>Nivel</span><select id="cpNivel">${NIVELES.map((n) => `<option value="${n}">${MEDALLA[n]} ${n}</option>`).join("")}</select></label>
       <div id="cpEstado" class="sub" style="margin:6px 2px 12px"></div>
       <div class="fila" style="gap:8px">
-        <button class="btn" id="cpQuiz" style="flex:1">📝 Pasar quiz</button>
-        <button class="btn sec" id="cpObs" style="flex:1">👀 Observación</button>
+        <button class="btn" id="cpQuiz" style="flex:1">Pasar quiz</button>
+        <button class="btn sec" id="cpObs" style="flex:1">Observación</button>
       </div>
     </div>`;
   }
@@ -208,9 +210,9 @@ export function render(el) {
       const pct = total ? quiz.aciertos / total : 0;
       const paso = pct >= APROBAR;
       el.innerHTML = `<div class="card" style="text-align:center">
-        <div style="font-size:46px">${paso ? "🎉" : "💪"}</div>
+        <div style="line-height:0;margin-bottom:6px;color:${paso ? "var(--verde)" : "var(--ambar)"}">${ic(paso ? "ok" : "sube", 42)}</div>
         <h2 style="margin:6px 0">${quiz.aciertos} de ${total}</h2>
-        <div style="font-size:26px;font-weight:800;color:${paso ? "var(--verde,#0e7a4a)" : "var(--rojo,#b3261e)"}">${Math.round(pct * 100)}%</div>
+        <div style="font-size:26px;font-weight:800;color:${paso ? "var(--verde,var(--success-600))" : "var(--rojo,var(--danger-600))"}">${Math.round(pct * 100)}%</div>
         <p class="sub">${paso ? "Aprobado" : `No aprobado — se necesita ${Math.round(APROBAR * 100)}%`}</p>
         <p class="sub" style="margin-top:10px">${esc(quiz.persona.nombre)} · ${esc(quiz.comp.nombre)} · ${esc(quiz.nivel)}</p>
         <div class="fila" style="gap:8px;margin-top:14px">
@@ -241,10 +243,10 @@ export function render(el) {
       <h2 style="margin:6px 0 14px;font-size:17px;line-height:1.35">${esc(q.pregunta)}</h2>
       <div style="display:grid;gap:8px">
         ${ops.map((o) => {
-          let estilo = "border:1px solid var(--linea);background:var(--blanco,#fff)";
+          let estilo = "border:1px solid var(--linea);background:var(--blanco,var(--content1))";
           if (eleg) {
-            if (o.k === q.correcta) estilo = "border:2px solid var(--verde,#0e7a4a);background:#eafaf0";
-            else if (o.k === eleg) estilo = "border:2px solid var(--rojo,#b3261e);background:#fdecea";
+            if (o.k === q.correcta) estilo = "border:2px solid var(--verde,var(--success-600));background:var(--success-100)";
+            else if (o.k === eleg) estilo = "border:2px solid var(--rojo,var(--danger-600));background:var(--danger-100)";
             else estilo = "border:1px solid var(--linea);opacity:.55";
           }
           return `<button data-op="${esc(o.k)}"${eleg ? " disabled" : ""} style="${estilo};border-radius:12px;padding:13px 14px;text-align:left;font-size:15px;line-height:1.35;cursor:${eleg ? "default" : "pointer"};min-height:48px">
@@ -252,7 +254,7 @@ export function render(el) {
           </button>`;
         }).join("")}
       </div>
-      ${eleg ? `<div style="margin-top:14px;padding:12px;border-radius:12px;background:var(--fondo-2,#f6f6f4)">
+      ${eleg ? `<div style="margin-top:14px;padding:12px;border-radius:12px;background:var(--fondo-2,var(--content2))">
         <div class="sub" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Por qué</div>
         <div style="font-size:14px;line-height:1.45">${esc(q.explicacion || "—")}</div>
       </div>

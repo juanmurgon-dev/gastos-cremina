@@ -142,7 +142,7 @@ export function montar(el) {
           <div class="stat"><div class="n" style="color:${laborPct ? primeCol : "var(--gris)"}">${laborPct ? Math.round(laborPct) + "%" : "—"}</div><div class="l">Labor (de fijos)</div></div>
           <div class="stat"><div class="n" style="color:${utilCol}">${Math.round(margenAct)}%</div><div class="l">Utilidad hoy</div></div>
         </div>
-        <div style="margin-top:12px;padding:10px;border-radius:10px;background:var(--fondo-2, #f6f6f4);display:flex;justify-content:space-between;align-items:center">
+        <div style="margin-top:12px;padding:10px;border-radius:10px;background:var(--fondo-2, var(--content2));display:flex;justify-content:space-between;align-items:center">
           <div><b>Prime cost</b> (food + labor)<div class="sub" style="font-size:11.5px">Meta ≤ 60–65%. ${laborPct ? "" : "Agrega tu nómina a gastos fijos para verlo."}</div></div>
           <div style="font-size:clamp(16px,6vw,22px);font-weight:800;color:${laborPct ? primeCol : "var(--gris)"};white-space:nowrap">${laborPct ? Math.round(prime) + "%" : "—"}</div>
         </div>
@@ -152,7 +152,7 @@ export function montar(el) {
         <h2 style="margin-bottom:4px">Cuánto subir los precios</h2>
         <div class="sub" style="margin-bottom:10px">Para cubrir todo y quedarte con ${uMin}–${uMax}% de utilidad.</div>
         ${necesita ? `
-          <div style="text-align:center;padding:14px;border-radius:12px;background:var(--fondo-2, #f6f6f4)">
+          <div style="text-align:center;padding:14px;border-radius:12px;background:var(--fondo-2, var(--content2))">
             <div style="font-size:clamp(20px,7.5vw,32px);font-weight:800;color:var(--naranja);overflow-wrap:anywhere">+${xLo.toFixed(1)}% a +${xHi.toFixed(1)}%</div>
             <div class="sub">aumento uniforme sobre todos los precios</div>
           </div>
@@ -163,8 +163,8 @@ export function montar(el) {
             <span class="sub">(bonito: ${money(rEj.loB)}–${money(rEj.hiB)})</span>
           </div>
         ` : `
-          <div style="text-align:center;padding:14px;border-radius:12px;background:#eafaf0">
-            <div style="font-size:20px;font-weight:800;color:var(--verde)">Ya cubres tu utilidad objetivo ✓</div>
+          <div style="text-align:center;padding:14px;border-radius:12px;background:var(--success-100)">
+            <div style="font-size:20px;font-weight:800;color:var(--verde)">Ya cubres tu utilidad objetivo</div>
             <div class="sub">Tu margen (${Math.round(margenAct)}%) ya está en la banda ${uMin}–${uMax}%. No necesitas subir.</div>
           </div>`}
       </div>

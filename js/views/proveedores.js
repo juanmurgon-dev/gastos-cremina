@@ -34,9 +34,9 @@ export function render(el, ctx) {
     <p class="sub" style="margin:2px 2px 12px">Tu lista de proveedores con sus datos. Al capturar un ticket, la app lo clasifica con el proveedor de aquí (o el más parecido) y crea la ficha si es nuevo.</p>
     <div class="fila" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">
       <button class="btn" id="pAgregar" style="flex:1 1 140px">＋ Agregar proveedor</button>
-      <button class="btn sec" id="pSubir" style="flex:1 1 140px">⬆ Subir CSV</button>
+      <button class="btn sec" id="pSubir" style="flex:1 1 140px">Subir CSV</button>
     </div>
-    <button class="btn sec chico" id="pPlantilla" style="margin-bottom:12px">⬇ Descargar plantilla CSV</button>
+    <button class="btn sec chico" id="pPlantilla" style="margin-bottom:12px">Descargar plantilla CSV</button>
     <input id="pBuscar" placeholder="Buscar proveedor…" style="margin-bottom:10px" />
     <div id="pConteo" class="sub" style="margin:0 2px 8px"></div>
     <div id="pLista"></div>
@@ -76,12 +76,12 @@ export function render(el, ctx) {
   function tarjeta(p) {
     const tel = soloDigitos(p.telefono);
     const filas = [];
-    if (p.telefono) filas.push(`<a href="https://wa.me/${tel}" target="_blank" rel="noopener" class="sub" style="text-decoration:none">💬 ${esc(p.telefono)}</a>`);
-    if (p.correo) filas.push(`<a href="mailto:${esc(p.correo)}" class="sub" style="text-decoration:none">✉️ ${esc(p.correo)}</a>`);
-    if (p.direccion) filas.push(`<span class="sub">📍 ${esc(p.direccion)}</span>`);
+    if (p.telefono) filas.push(`<a href="https://wa.me/${tel}" target="_blank" rel="noopener" class="sub" style="text-decoration:none">${esc(p.telefono)}</a>`);
+    if (p.correo) filas.push(`<a href="mailto:${esc(p.correo)}" class="sub" style="text-decoration:none">${esc(p.correo)}</a>`);
+    if (p.direccion) filas.push(`<span class="sub">${esc(p.direccion)}</span>`);
     return `<div class="ticket" style="cursor:pointer" data-edit="${esc(p.id)}">
       <div class="cab">
-        <span class="prov" style="font-size:14px">🏪 ${esc(p.nombre)}</span>
+        <span class="prov" style="font-size:14px">${esc(p.nombre)}</span>
         <span class="sub">editar ›</span>
       </div>
       ${filas.length ? `<div class="meta" style="display:flex;flex-direction:column;gap:2px;margin-top:4px">${filas.join("")}</div>`
@@ -93,14 +93,14 @@ export function render(el, ctx) {
   function bloqueTickets(p) {
     const ts = store.ticketsDeProveedor(p.nombre);
     const total = ts.reduce((a, t) => a + store.gastoTicket(t), 0);
-    if (!ts.length) return `<div class="sub" style="margin:8px 2px 2px">🧾 Sin tickets todavía de este proveedor.</div>`;
+    if (!ts.length) return `<div class="sub" style="margin:8px 2px 2px">Sin tickets todavía de este proveedor.</div>`;
     const filas = ts.slice(0, 80).map((t) => {
       const nl = (t.lineas || []).length;
       return `<div class="barra-row" style="gap:8px;border-bottom:1px solid var(--linea);padding:7px 10px;margin:0">
-        <span style="flex:1;min-width:0">🧾 ${esc(t.fecha || "sin fecha")}${nl ? ` · <span class="sub">${nl} línea(s)</span>` : ""}</span>
+        <span style="flex:1;min-width:0">${esc(t.fecha || "sin fecha")}${nl ? ` · <span class="sub">${nl} línea(s)</span>` : ""}</span>
         <span style="font-variant-numeric:tabular-nums;font-weight:600">${esc(store.money(store.gastoTicket(t)))}</span></div>`;
     }).join("");
-    return `<div class="sub" style="margin:10px 2px 6px">🧾 <b>${ts.length}</b> ticket(s) · <b>${esc(store.money(total))}</b> en compras</div>
+    return `<div class="sub" style="margin:10px 2px 6px"><b>${ts.length}</b> ticket(s) · <b>${esc(store.money(total))}</b> en compras</div>
       <div style="max-height:34vh;overflow:auto;border:1px solid var(--linea);border-radius:12px">${filas}${ts.length > 80 ? `<div class="sub" style="padding:7px 10px">…y ${ts.length - 80} más</div>` : ""}</div>`;
   }
 
@@ -123,7 +123,7 @@ export function render(el, ctx) {
         ${editando ? bloqueTickets(p) : ""}
         <div id="fMsg"></div>
         <button class="btn" id="fGuardar" style="margin-top:12px">${editando ? "Guardar cambios" : "Agregar"}</button>
-        ${editando ? `<button class="btn sec" id="fUnir" style="margin-top:8px">🔀 Unir con otro proveedor</button>` : ""}
+        ${editando ? `<button class="btn sec" id="fUnir" style="margin-top:8px">Unir con otro proveedor</button>` : ""}
         ${editando ? `<button class="btn sec" id="fBorrar" style="margin-top:8px;color:var(--rojo)">Borrar proveedor</button>` : ""}
         <button class="btn sec" id="fCerrar" style="margin-top:8px">Cancelar</button>
       </div>`;
@@ -194,7 +194,7 @@ export function render(el, ctx) {
       lista.innerHTML = vis.length
         ? vis.map((p) => `<button type="button" class="barra-row" data-uid="${esc(p.id)}"
             style="width:100%;gap:8px;border:none;border-bottom:1px solid var(--linea);padding:10px;margin:0;background:none;text-align:left;cursor:pointer">
-            <span style="flex:1;min-width:0">🏪 <b>${esc(p.nombre)}</b>${p.telefono ? ` · <span class="sub">${esc(p.telefono)}</span>` : ""}</span>
+            <span style="flex:1;min-width:0"><b>${esc(p.nombre)}</b>${p.telefono ? ` · <span class="sub">${esc(p.telefono)}</span>` : ""}</span>
             <span class="sub">unir ›</span></button>`).join("")
         : `<div class="sub" style="padding:10px">Sin resultados.</div>`;
       lista.querySelectorAll("[data-uid]").forEach((b) =>
@@ -222,7 +222,7 @@ export function render(el, ctx) {
         btn.textContent = "Uniendo…";
         try {
           await store.fusionarProveedores(origenF, destino);
-          msg.innerHTML = `<div class="ok-box" style="margin-top:10px">✅ Listo. Quedó <b>${esc(destino.nombre)}</b>.</div>`;
+          msg.innerHTML = `<div class="ok-box" style="margin-top:10px">Listo. Quedó <b>${esc(destino.nombre)}</b>.</div>`;
           setTimeout(() => { cerrar(); document.querySelectorAll(".modal-bg").forEach((m) => m.remove()); }, 900);
         } catch (e) {
           cuerpo.querySelectorAll("button").forEach((b) => (b.disabled = false));
@@ -281,7 +281,7 @@ export function render(el, ctx) {
       const btn = bg.querySelector("#impOk"); btn.disabled = true; btn.textContent = "Importando…";
       try {
         const r = await store.importarProveedoresDir(filas);
-        bg.querySelector("#impMsg").innerHTML = `<div class="ok-box" style="margin-top:10px">✅ Listo: ${r.nuevos} nuevo(s), ${r.actualizados} actualizado(s).</div>`;
+        bg.querySelector("#impMsg").innerHTML = `<div class="ok-box" style="margin-top:10px">Listo: ${r.nuevos} nuevo(s), ${r.actualizados} actualizado(s).</div>`;
         setTimeout(cerrar, 1100);
       } catch (e) {
         btn.disabled = false; btn.textContent = `Importar ${filas.length}`;

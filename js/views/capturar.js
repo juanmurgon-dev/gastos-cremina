@@ -3,6 +3,7 @@ import { supabase } from "../supabase-init.js";
 import * as store from "../store.js";
 import { crearEditor } from "./ticket-editor.js";
 import { leerConTesseract, parsearTicketLocal } from "../ocr.js";
+import { ic } from "../iconos.js";
 
 export function render(el, ctx) {
   const user = ctx.user;
@@ -17,10 +18,10 @@ export function render(el, ctx) {
         <h2 style="margin-bottom:6px">Registrar un ticket</h2>
         <p class="sub" style="margin:0 0 16px">Toma la foto del recibo o elígela de tu galería, y yo saco los artículos.</p>
         <label class="btn" style="margin-bottom:10px">
-          📸 Tomar / elegir foto
+          ${ic("camara",18)} Tomar / elegir foto
           <input id="file" type="file" accept="image/*" hidden />
         </label>
-        <button class="btn sec" id="btn-texto">✍️ Escribir a mano</button>
+        <button class="btn sec" id="btn-texto">Escribir a mano</button>
       </div>
     </div>
 
@@ -44,14 +45,14 @@ Cilantro 15"></textarea>
         <img id="preview" style="max-width:100%;border-radius:12px;margin-bottom:12px" />
         <div class="fila">
           <button class="btn sec" id="otra">Otra foto</button>
-          <button class="btn" id="analizar">🔍 Analizar ticket</button>
+          <button class="btn" id="analizar">${ic("lupa",17)} Analizar ticket</button>
         </div>
       </div>
     </div>
 
     <div id="paso-cargando" hidden>
       <div class="card" style="text-align:center;padding:40px">
-        <div class="spinner" style="margin:0 auto 14px;border-color:#f0d3c7;border-top-color:var(--naranja)"></div>
+        <div class="spinner" style="margin:0 auto 14px;border-color:var(--danger-200);border-top-color:var(--naranja)"></div>
         <p class="sub" id="carg-txt" style="margin:0">Leyendo el ticket…</p>
       </div>
     </div>
@@ -59,8 +60,8 @@ Cilantro 15"></textarea>
     <div id="paso-revisar" hidden>
       <div id="msg"></div>
       <div id="editores"></div>
-      <button class="btn sec" id="mejorar-ia" hidden style="margin-top:6px">🤖 Mejorar con IA</button>
-      <button class="btn" id="guardar" style="margin-top:10px">✅ Guardar</button>
+      <button class="btn sec" id="mejorar-ia" hidden style="margin-top:6px">${ic("chispa",16)} Mejorar con IA</button>
+      <button class="btn" id="guardar" style="margin-top:10px">Guardar</button>
       <button class="btn sec" id="descartar" style="margin-top:10px">Descartar</button>
     </div>
   `;
@@ -196,7 +197,7 @@ Cilantro 15"></textarea>
     (tickets.length ? tickets : [{ lineas: [{}] }]).forEach((t) => {
       const card = document.createElement("div");
       card.className = "card";
-      if (t.aviso) card.innerHTML = `<div class="aviso-box">⚠️ ${t.aviso}</div>`;
+      if (t.aviso) card.innerHTML = `<div class="aviso-box">${t.aviso}</div>`;
       const holder = document.createElement("div");
       card.appendChild(holder);
       cont.appendChild(card);
@@ -244,15 +245,15 @@ Cilantro 15"></textarea>
       const unif = guardados.filter((g) => g.typed && g.final && g.typed !== g.final);
       let extra = "";
       if (provs.length) extra += ` Proveedor: <b>${provs.map(esc).join(", ")}</b>.`;
-      if (unif.length) extra += `<br><span style="color:var(--sea-txt)">🔗 Unifiqué "${esc(unif[0].typed)}" → "${esc(unif[0].final)}".</span>`;
-      el.querySelector("#msg").innerHTML = `<div class="ok-box">✅ Guardado.${extra}</div>`;
+      if (unif.length) extra += `<br><span style="color:var(--verde)">Unifiqué "${esc(unif[0].typed)}" → "${esc(unif[0].final)}".</span>`;
+      el.querySelector("#msg").innerHTML = `<div class="ok-box">Guardado.${extra}</div>`;
       // ¿El gasto coincide con pendientes de alguna requisición? → sugerir marcarlos comprados.
       const candidatos = store.cruzarGastoRequis(lineasGasto);
       if (candidatos.length) confirmarComprados(candidatos, fechaGasto);
       else setTimeout(reset, 900);
     } catch (err) {
       alert("No pude guardar: " + ((err && err.message) || err));
-      btn.disabled = false; btn.textContent = "✅ Guardar";
+      btn.disabled = false; btn.textContent = "Guardar";
     }
   });
 
@@ -263,7 +264,7 @@ Cilantro 15"></textarea>
     bg.className = "modal-bg";
     bg.innerHTML = `
       <div class="modal">
-        <h2>Cruzar con tu requisición 🛒</h2>
+        <h2>Cruzar con tu requisición</h2>
         <p class="sub" style="margin:-8px 0 12px">Este gasto coincide con estos <b>pendientes</b>. Marca los que ya compraste y pasan a <b>Comprado</b>.</p>
         <div id="ccList">
           ${cands.map((c, i) => `
@@ -275,7 +276,7 @@ Cilantro 15"></textarea>
               </span>
             </label>`).join("")}
         </div>
-        <button class="btn" id="ccOk" style="margin-top:14px">✅ Marcar comprado</button>
+        <button class="btn" id="ccOk" style="margin-top:14px">Marcar comprado</button>
         <button class="btn sec" id="ccNo" style="margin-top:8px">Ahora no</button>
       </div>`;
     document.body.appendChild(bg);
@@ -297,7 +298,7 @@ Cilantro 15"></textarea>
     el.querySelector("#file").value = "";
     el.querySelector("#txt").value = "";
     el.querySelector("#mejorar-ia").hidden = true;
-    const g = el.querySelector("#guardar"); g.disabled = false; g.textContent = "✅ Guardar";
+    const g = el.querySelector("#guardar"); g.disabled = false; g.textContent = "Guardar";
     paso("inicio");
   }
 }

@@ -9,6 +9,7 @@ import * as ritmo from "./ritmo.js";
 import * as requisicion from "./requisicion.js";
 import { verFoto } from "../lightbox.js";
 import * as plan from "../plan.js";
+import { ic } from "../iconos.js";
 
 // Comprime una foto (para que pese poco antes de guardarla en base64).
 function comprimirFoto(file, max = 640) {
@@ -69,7 +70,7 @@ function renderPrecios(el) {
 
   el.innerHTML = `
     <p class="sub" style="margin:2px 2px 8px">Precio más reciente de cada insumo y cómo cambió. Toca uno para ver su historial.</p>
-    <p class="sub" style="margin:0 2px 12px;font-size:11.5px">Palomea ✅ el nombre <b>oficial</b> de un insumo: los tickets que entren escritos parecido (80% o más) se guardarán con ese nombre, para que no se te abra un insumo nuevo por una tilde.</p>
+    <p class="sub" style="margin:0 2px 12px;font-size:11.5px">Palomea el nombre <b>oficial</b> de un insumo: los tickets que entren escritos parecido (80% o más) se guardarán con ese nombre, para que no se te abra un insumo nuevo por una tilde.</p>
     <input id="buscar" placeholder="Buscar insumo o SKU…" style="margin-bottom:10px" />
     <div class="fila" style="margin-bottom:14px">
       <select id="area">
@@ -86,7 +87,7 @@ function renderPrecios(el) {
         <option value="baja">Mayor baja ▼</option>
       </select>
     </div>
-    <button class="btn sec chico" id="exp" style="margin-bottom:12px">⬇ Exportar CSV</button>
+    <button class="btn sec chico" id="exp" style="margin-bottom:12px">${ic("descargar",15)} Exportar CSV</button>
     <div id="conteo" class="sub" style="margin:0 2px 8px"></div>
     <div id="lista"></div>`;
 
@@ -151,7 +152,7 @@ function renderPrecios(el) {
             <span class="monto" style="font-size:14px">${money(i.precioActual)}${i.unidad ? `<span class="sub" style="font-weight:400">/${i.unidad}</span>` : ""}</span>
           </div>
           <div class="meta" style="display:flex;justify-content:space-between;align-items:center">
-            <span><span class="chip" style="background:${COLOR_AREA[i.area] || "#9c9482"}">${i.area || "otro"}</span> · ${i.veces} compra(s)${i.codigo ? ` · <span class="sub">SKU ${escapar(i.codigo)}</span>` : ""}${i.presentacion ? ` · <span class="sub">📦 ${escapar(i.presentacion)}</span>` : ""}${store.esOficial(i.nombre) ? ` · <span class="sub" style="color:var(--verde);font-weight:700" title="Nombre oficial: absorbe los parecidos">✔ oficial</span>` : ""}${etiquetaCriterio(i)}${i.mezclado ? ` · <span class="sub" style="color:#b06a00" title="Hay compras en otra unidad que no se pueden comparar">⚠️ unidades</span>` : ""}</span>
+            <span><span class="chip" style="background:${COLOR_AREA[i.area] || "var(--default-500)"}">${i.area || "otro"}</span> · ${i.veces} compra(s)${i.codigo ? ` · <span class="sub">SKU ${escapar(i.codigo)}</span>` : ""}${i.presentacion ? ` · <span class="sub">${escapar(i.presentacion)}</span>` : ""}${store.esOficial(i.nombre) ? ` · <span class="sub" style="color:var(--verde);font-weight:700" title="Nombre oficial: absorbe los parecidos">oficial</span>` : ""}${etiquetaCriterio(i)}${i.mezclado ? ` · <span class="sub" style="color:var(--warning-700)" title="Hay compras en otra unidad que no se pueden comparar">${ic("alerta",11)} unidades</span>` : ""}</span>
             <span>${flecha}</span>
           </div>
         </div>`;
@@ -273,7 +274,7 @@ function renderPrecios(el) {
           <div class="stat"><div class="n" style="font-size:16px">${money(gastoTot)}</div><div class="l">Gasto total</div></div>
         </div>
 
-        <div class="titulo-seccion" style="margin-top:16px">⚖️ Precio que se usa para costear</div>
+        <div class="titulo-seccion" style="margin-top:16px">Precio que se usa para costear</div>
         <div class="fila" style="gap:8px;align-items:flex-end">
           <label class="campo" style="flex:1.5;margin:0"><span>Criterio</span>
             <select id="crModo">
@@ -286,7 +287,7 @@ function renderPrecios(el) {
             <input id="crFijo" type="number" inputmode="decimal" step="any" min="0" value="${escapar(String(store.num(item.criterioValor) || store.num(item.precioActual) || ""))}" /></label>
         </div>
         <div class="sub" id="crOut" style="font-size:11.5px;margin:5px 0 2px"></div>
-        ${store.maestroDe(item.nombre) ? `<div class="sub" style="font-size:11px;color:#b06a00;margin-bottom:4px">Ojo: este insumo tiene <b>Registro Maestro</b> (más abajo), y ése manda sobre todo lo de aquí.</div>` : ""}
+        ${store.maestroDe(item.nombre) ? `<div class="sub" style="font-size:11px;color:var(--warning-700);margin-bottom:4px">Ojo: este insumo tiene <b>Registro Maestro</b> (más abajo), y ése manda sobre todo lo de aquí.</div>` : ""}
 
         <div class="titulo-seccion" style="margin-top:16px">Compras (${asc.length})</div>
         <div>
@@ -298,19 +299,19 @@ function renderPrecios(el) {
               <span class="etq" style="width:auto">${fechaBonita(r.fecha)}</span>
               <span class="sub" style="flex:1;text-align:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapar(r.proveedor || "—")}</span>
               <span style="flex:0 0 auto;text-align:right">
-                <span class="val"${vb == null ? ' style="color:#b06a00"' : ""}>${money(vb != null ? vb : r.precio)}${vb != null && uMuestra ? "/" + escapar(uMuestra) : r.unidad ? "/" + escapar(r.unidad) : ""}</span>
+                <span class="val"${vb == null ? ' style="color:var(--warning-700)"' : ""}>${money(vb != null ? vb : r.precio)}${vb != null && uMuestra ? "/" + escapar(uMuestra) : r.unidad ? "/" + escapar(r.unidad) : ""}</span>
                 ${dif ? `<div class="sub" style="font-size:10px;margin-top:-2px">ticket: ${store.num(r.cantidad) || "?"} ${escapar(r.unidad || "")} · ${money(r.monto)}</div>` : ""}
-                ${vb == null ? `<div class="sub" style="font-size:10px;margin-top:-2px;color:#b06a00">no compara${r.deducido ? ` · parece que trae ${r.deducido}` : ""}</div>` : ""}
+                ${vb == null ? `<div class="sub" style="font-size:10px;margin-top:-2px;color:var(--warning-700)">no compara${r.deducido ? ` · parece que trae ${r.deducido}` : ""}</div>` : ""}
               </span>
               ${r.ticketId
-                ? `<button type="button" class="edToggle" data-ix="${ix}" title="Corregir esta compra" style="flex:0 0 auto;background:none;border:none;cursor:pointer;font-size:15px;padding:0 2px;line-height:1">✏️</button>`
-                : `<span style="flex:0 0 auto;opacity:.28;font-size:15px">✏️</span>`}
+                ? `<button type="button" class="edToggle" data-ix="${ix}" title="Corregir esta compra" style="flex:0 0 auto;background:none;border:none;cursor:pointer;line-height:0;color:var(--gris);padding:0 2px">${ic("editar",16)}</button>`
+                : `<span style="flex:0 0 auto;opacity:.25;line-height:0">${ic("editar",16)}</span>`}
               ${r.fotoTicket
-                ? `<a href="${escapar(r.fotoTicket)}" target="_blank" rel="noopener" title="Ver foto del ticket" style="flex:0 0 auto;text-decoration:none;font-size:16px" onclick="event.stopPropagation()">🧾</a>`
-                : `<span title="Este ticket no tiene foto" style="flex:0 0 auto;opacity:.28;font-size:16px">🧾</span>`}
+                ? `<a href="${escapar(r.fotoTicket)}" target="_blank" rel="noopener" title="Ver foto del ticket" style="flex:0 0 auto;text-decoration:none;line-height:0;color:var(--gris)" onclick="event.stopPropagation()">${ic("ticket",16)}</a>`
+                : `<span title="Este ticket no tiene foto" style="flex:0 0 auto;opacity:.25;line-height:0">${ic("ticket",16)}</span>`}
             </div>
             ${r.ticketId ? `
-            <div class="edCompra" data-ix="${ix}" data-t="${escapar(r.ticketId)}" style="display:none;border:1px solid var(--linea);border-left:3px solid var(--verde);border-radius:8px;padding:9px 10px;margin:2px 0 8px;background:#fbfaf6">
+            <div class="edCompra" data-ix="${ix}" data-t="${escapar(r.ticketId)}" style="display:none;border:1px solid var(--linea);border-left:3px solid var(--verde);border-radius:8px;padding:9px 10px;margin:2px 0 8px;background:var(--content2)">
               <div class="sub" style="font-size:11px;margin-bottom:6px">Corrige lo que trae de verdad. <b>Lo pagado no se toca</b> salvo que lo cambies; el precio unitario se recalcula solo.</div>
               <div class="fila" style="gap:6px">
                 <label class="campo" style="flex:1;margin:0"><span>Cantidad</span><input class="ecCant" type="number" inputmode="decimal" step="any" min="0" value="${escapar(String(store.num(r.cantidad) || ""))}" /></label>
@@ -319,17 +320,17 @@ function renderPrecios(el) {
               </div>
               <div class="sub ecCalc" style="font-size:11.5px;margin:2px 0 7px"></div>
               <div class="fila" style="gap:6px">
-                <button type="button" class="btn chico ecSave" style="flex:1;margin:0">💾 Guardar esta compra</button>
+                <button type="button" class="btn chico ecSave" style="flex:1;margin:0">Guardar esta compra</button>
                 <button type="button" class="btn sec chico ecUsar" data-p="${vb != null ? vb : store.num(r.precio)}" style="flex:0 0 auto;margin:0" title="Costear con el precio de esta compra">Usar éste</button>
                 <button type="button" class="btn sec chico ecTicket" style="flex:0 0 auto;margin:0">Abrir ticket</button>
               </div>
             </div>` : ""}`; }).join("")}
         </div>
-        ${provs.length ? `<div class="titulo-seccion" style="margin-top:16px">📦 Comparativa por proveedor${base ? " · costo por " + base : ""}</div>
+        ${provs.length ? `<div class="titulo-seccion" style="margin-top:16px">Comparativa por proveedor${base ? " · costo por " + base : ""}</div>
         <div class="sub" style="font-size:11px;margin:-4px 0 6px">Se compara por <b>costo por ${base || "unidad"}</b> (normalizado con la presentación). Pon la presentación con su cantidad: ej. <b>1.5 kg</b>, <b>4 kg</b>, o para huevo la caja/cartera como <b>300</b> o <b>12</b> (piezas). Así compara aunque cada proveedor traiga distinta presentación.</div>
         ${provs.map((p) => {
           const skuVal = store.skuProvDe(item.nombre, p.proveedor) || p.codigo;
-          return `<div class="prov-row" data-prov="${escapar(p.proveedor)}" data-precio="${p.precio}" data-unidad="${escapar(p.unidad || "")}" style="border:1px solid var(--linea);border-radius:10px;padding:10px;margin-top:6px;background:#fff">
+          return `<div class="prov-row" data-prov="${escapar(p.proveedor)}" data-precio="${p.precio}" data-unidad="${escapar(p.unidad || "")}" style="border:1px solid var(--linea);border-radius:10px;padding:10px;margin-top:6px;background:var(--content1)">
             <div class="fila" style="justify-content:space-between;align-items:baseline;gap:8px">
               <b style="font-size:13.5px;flex:1;min-width:0">${escapar(p.label)} <span class="barato-tag" style="color:var(--verde);font-weight:600;font-size:11px"></span></b>
               <span class="cost-out" style="white-space:nowrap"></span>
@@ -341,11 +342,11 @@ function renderPrecios(el) {
               <input class="edSkuP" value="${escapar(skuVal)}" placeholder="SKU" style="flex:1;min-width:0" />
             </div>
             <div class="fila prov-foto" style="gap:8px;margin-top:8px;align-items:center">
-              <div class="foto-thumb" style="width:52px;height:52px;flex:0 0 auto;border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:#f6f4ee;display:flex;align-items:center;justify-content:center">
-                <span class="foto-vacia sub" style="font-size:18px">📷</span>
+              <div class="foto-thumb" style="width:52px;height:52px;flex:0 0 auto;border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:var(--content2);display:flex;align-items:center;justify-content:center">
+                <span class="foto-vacia sub" style="line-height:0;opacity:.4">${ic("camara",20)}</span>
                 <img class="foto-img" alt="presentación" style="display:none;width:100%;height:100%;object-fit:cover;cursor:pointer" />
               </div>
-              <label class="btn sec chico foto-sube" style="flex:1;margin:0;cursor:pointer;text-align:center"><span class="foto-lbl">📷 Subir foto de la presentación</span>
+              <label class="btn sec chico foto-sube" style="flex:1;margin:0;cursor:pointer;text-align:center"><span class="foto-lbl">Subir foto de la presentación</span>
                 <input type="file" class="foto-file" accept="image/*" style="display:none" />
               </label>
               <button type="button" class="btn sec chico foto-quita" style="flex:0 0 auto;color:var(--rojo);display:none">Quitar</button>
@@ -353,7 +354,7 @@ function renderPrecios(el) {
           </div>`;
         }).join("")}` : ""}
 
-        <div class="titulo-seccion" style="margin-top:16px">⚖️ Precio por unidad (para recetas)</div>
+        <div class="titulo-seccion" style="margin-top:16px">Precio por unidad (para recetas)</div>
         <div class="sub" style="font-size:11px;margin:-4px 0 6px">Cuánto pagas y cuánto trae, para costear recetas por unidad. Elige la unidad base: <b>g</b> (crema 4000 g), <b>pza</b> (huevo 300), <b>ml</b>, etc. Manda sobre el ticket.</div>
         <div class="fila" style="gap:8px;align-items:flex-end">
           <label class="campo" style="flex:1;margin:0"><span>Compra (Pz)</span><input id="mPz" type="number" inputmode="decimal" step="any" min="0" value="${escapar(String(mae.compra_pz != null ? mae.compra_pz : 1))}" /></label>
@@ -361,18 +362,18 @@ function renderPrecios(el) {
           <label class="campo" style="width:72px;margin:0"><span>Unidad</span>${selU(maeU)}</label>
         </div>
         <label class="campo"><span>Precio total pagado</span><input id="mTot" type="number" inputmode="decimal" step="any" min="0" value="${escapar(String(mae.precio_total != null ? mae.precio_total : ""))}" /></label>
-        <div style="text-align:center;padding:8px;border-radius:10px;background:#eafaf0;margin-bottom:4px">
+        <div style="text-align:center;padding:8px;border-radius:10px;background:var(--success-100);margin-bottom:4px">
           <span class="sub">Precio por unidad (recetas)</span>
-          <div id="mPg" style="font-size:19px;font-weight:800;color:#16514f">${pgFmt(calcPg(mae.precio_total, mae.compra_pz != null ? mae.compra_pz : 1, mae.gramos_pz), maeU)}</div>
+          <div id="mPg" style="font-size:19px;font-weight:800;color:var(--success-700)">${pgFmt(calcPg(mae.precio_total, mae.compra_pz != null ? mae.compra_pz : 1, mae.gramos_pz), maeU)}</div>
         </div>
 
-        <div class="titulo-seccion" style="margin-top:16px">✏️ Corregir insumo</div>
+        <div class="titulo-seccion" style="margin-top:16px">Corregir insumo</div>
         <div class="fila" style="gap:8px">
           <input id="edN" value="${escapar(item.nombre)}" placeholder="Nombre" style="flex:2" />
           <input id="edU" value="${escapar(item.unidad || "")}" placeholder="Unidad" style="flex:1" />
         </div>
         <div class="sub" style="font-size:11px;margin-top:4px">Cambia el nombre o la unidad (L, kg, g, ml, pza…). Se corrigen todos los tickets de este insumo y las recetas se recalculan solas.</div>
-        <button class="btn" id="edSave" style="margin-top:8px">💾 Guardar cambios</button>
+        <button class="btn" id="edSave" style="margin-top:8px">Guardar cambios</button>
         <button class="btn sec" data-cerrar style="margin-top:8px">Cerrar</button>
       </div>`;
     document.body.appendChild(bg);
@@ -400,7 +401,7 @@ function renderPrecios(el) {
         const v = calc(modo);
         out.innerHTML = v > 0
           ? `Las recetas van a costear con <b>${money(v)}</b>${uTxt}.`
-          : `<span style="color:#b06a00">Pon un precio para poder costear.</span>`;
+          : `<span style="color:var(--warning-700)">Pon un precio para poder costear.</span>`;
       };
       const guarda = async () => {
         try { await store.guardarCriterioPrecio(item.nombre, sel.value, fijo.value); }
@@ -434,7 +435,7 @@ function renderPrecios(el) {
       const out = caja.querySelector(".ecCalc");
       out.innerHTML = cant > 0 && monto > 0
         ? `Queda en <b>${money(monto / cant)}</b> por ${escapar(uni || "unidad")}.`
-        : `<span style="color:#b06a00">Pon cantidad y total para calcular el precio unitario.</span>`;
+        : `<span style="color:var(--warning-700)">Pon cantidad y total para calcular el precio unitario.</span>`;
     }
     bg.querySelectorAll(".edCompra").forEach((caja) => {
       caja.querySelectorAll(".ecCant, .ecUni, .ecMonto").forEach((i) => i.addEventListener("input", () => calcEd(caja)));
@@ -454,7 +455,7 @@ function renderPrecios(el) {
           });
           cerrar(); pintar(); abrir(key);   // se reabre con los números ya recalculados
         } catch (e) {
-          b.disabled = false; b.textContent = "💾 Guardar esta compra";
+          b.disabled = false; b.textContent = "Guardar esta compra";
           alert("No se pudo guardar: " + ((e && e.message) || e));
         }
       });
@@ -481,9 +482,9 @@ function renderPrecios(el) {
           : `<b>${money(d.precio)}</b><span class="sub">/${escapar(d.unidad || "u")}</span>`;
         d.r.querySelector(".barato-tag").textContent = barato ? "· más barato" : "";
         d.r.style.border = "1px solid " + (barato ? "var(--verde)" : "var(--linea)");
-        d.r.style.background = barato ? "#eafaf0" : "#fff";
+        d.r.style.background = barato ? "var(--success-100)" : "var(--content1)";
         const cc = d.r.querySelector(".cost-compra");
-        if (cc) cc.innerHTML = `Compra: ${money(d.precio)}/${escapar(d.unidad || "u")}${d.cb == null && base ? ` · <span style="color:#b06a00">agrega la presentación (ej. 1.5 ${base}) para comparar</span>` : ""}`;
+        if (cc) cc.innerHTML = `Compra: ${money(d.precio)}/${escapar(d.unidad || "u")}${d.cb == null && base ? ` · <span style="color:var(--warning-700)">agrega la presentación (ej. 1.5 ${base}) para comparar</span>` : ""}`;
       }
     }
     bg.querySelectorAll(".edPres").forEach((inp) => inp.addEventListener("input", recompara));
@@ -494,8 +495,8 @@ function renderPrecios(el) {
       const setThumb = (row, dataUrl) => {
         const img = row.querySelector(".foto-img"), vacia = row.querySelector(".foto-vacia");
         const quita = row.querySelector(".foto-quita"), lbl = row.querySelector(".foto-lbl");
-        if (dataUrl) { img.src = dataUrl; img.style.display = "block"; vacia.style.display = "none"; quita.style.display = ""; lbl.textContent = "📷 Cambiar foto"; }
-        else { img.removeAttribute("src"); img.style.display = "none"; vacia.style.display = ""; quita.style.display = "none"; lbl.textContent = "📷 Subir foto de la presentación"; }
+        if (dataUrl) { img.src = dataUrl; img.style.display = "block"; vacia.style.display = "none"; quita.style.display = ""; lbl.textContent = "Cambiar foto"; }
+        else { img.removeAttribute("src"); img.style.display = "none"; vacia.style.display = ""; quita.style.display = "none"; lbl.textContent = "Subir foto de la presentación"; }
       };
       const rows = [...bg.querySelectorAll(".prov-row")];
       rows.forEach((row) => {
@@ -541,7 +542,7 @@ function renderPrecios(el) {
         } else if (mae.id) { await store.borrarIngredienteMaestro(mae.id); }
         cerrar(); pintar();
         alert(`Listo: se corrigieron ${n} ticket(s). Presentación, SKU y precio/g guardados.`);
-      } catch (e) { b.disabled = false; b.textContent = "💾 Guardar cambios"; alert("Error: " + ((e && e.message) || e)); }
+      } catch (e) { b.disabled = false; b.textContent = "Guardar cambios"; alert("Error: " + ((e && e.message) || e)); }
     });
   }
 
@@ -567,14 +568,14 @@ function grafica(asc) {
   const Y = (v) => padT + (1 - (v - min) / (max - min)) * (H - padT - padB);
   const line = asc.map((r, i) => `${X(i).toFixed(1)},${Y(val(r)).toFixed(1)}`).join(" ");
   const area = `${X(0).toFixed(1)},${(H - padB).toFixed(1)} ${line} ${X(n - 1).toFixed(1)},${(H - padB).toFixed(1)}`;
-  const dots = asc.map((r, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(val(r)).toFixed(1)}" r="2.6" fill="#ff9f1c"/>`).join("");
+  const dots = asc.map((r, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(val(r)).toFixed(1)}" r="2.6" fill="var(--warning-500)"/>`).join("");
   return `
-    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;background:#eafaf8;border-radius:12px">
+    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;background:var(--secondary-100);border-radius:12px">
       <polygon points="${area}" fill="rgba(46,196,182,.16)"/>
-      <polyline points="${line}" fill="none" stroke="#2ec4b6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <polyline points="${line}" fill="none" stroke="var(--secondary-500)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
       ${dots}
-      <text x="${padL + 2}" y="${H - 6}" font-size="8" fill="#3f827b">${fechaCorta(asc[0].fecha)}</text>
-      <text x="${W - padR - 2}" y="${H - 6}" font-size="8" fill="#3f827b" text-anchor="end">${fechaCorta(asc[n - 1].fecha)}</text>
+      <text x="${padL + 2}" y="${H - 6}" font-size="8" fill="var(--default-500)">${fechaCorta(asc[0].fecha)}</text>
+      <text x="${W - padR - 2}" y="${H - 6}" font-size="8" fill="var(--default-500)" text-anchor="end">${fechaCorta(asc[n - 1].fecha)}</text>
     </svg>`;
 }
 
@@ -583,7 +584,7 @@ function grafica(asc) {
 const NOMBRE_CRITERIO = { barato: "más barato", caro: "más caro", promedio: "promedio", fijo: "precio fijo" };
 function etiquetaCriterio(i) {
   const n = NOMBRE_CRITERIO[i.criterio];
-  return n ? ` · <span class="sub" title="Precio elegido para costear">⚖️ ${n}</span>` : "";
+  return n ? ` · <span class="sub" title="Precio elegido para costear">${n}</span>` : "";
 }
 
 // Aviso arriba del análisis: por qué el precio se ve como se ve.
@@ -597,16 +598,16 @@ function avisoPrecio(item, uMuestra) {
     const lista = sin.slice(0, 4).map((r) =>
       `<li>${fechaBonita(r.fecha)} · ${escapar(r.proveedor || "sin proveedor")} — ${money(r.precio)}${r.unidad ? "/" + escapar(r.unidad) : ""}${
         r.deducido ? ` <b>(parece que trae ${r.deducido} ${escapar(uMuestra || "")})</b>` : ""}</li>`).join("");
-    return `<div style="${caja};background:#fff6e5;border:1px solid #f0d9a8;color:#7a4d00">
-      ⚠️ <b>Hay compras que no se pueden comparar</b> porque vienen en otra unidad.
+    return `<div style="${caja};background:var(--warning-100);border:1px solid var(--warning-200);color:var(--warning-800)">
+      <b>Hay compras que no se pueden comparar</b> porque vienen en otra unidad.
       El precio y la tendencia de arriba se calculan solo con las que sí están en <b>${escapar(uMuestra || "la misma unidad")}</b>,
       para no marcar subidas ni bajadas falsas.
       <ul style="margin:6px 0 0 16px;padding:0">${lista}${sin.length > 4 ? `<li>y ${sin.length - 4} más…</li>` : ""}</ul>
-      <div style="margin-top:6px">Toca <b>✏️</b> en esa compra y corrige la cantidad y la unidad (ej. 1 caja → <b>6 L</b>). Lo pagado no se mueve.</div></div>`;
+      <div style="margin-top:6px">Toca el lápiz de esa compra y corrige la cantidad y la unidad (ej. 1 caja → <b>6 L</b>). Lo pagado no se mueve.</div></div>`;
   }
   if (item.normalizado && item.veces > 1) {
-    return `<div style="${caja};background:#eafaf0;border:1px solid #bfe6cd;color:#16514f">
-      ✅ Las ${item.veces} compras están comparadas <b>por ${escapar(uMuestra || "unidad")}</b>, sin importar si el proveedor facturó por caja o por pieza.</div>`;
+    return `<div style="${caja};background:var(--success-100);border:1px solid var(--success-200);color:var(--success-700)">
+      Las ${item.veces} compras están comparadas <b>por ${escapar(uMuestra || "unidad")}</b>, sin importar si el proveedor facturó por caja o por pieza.</div>`;
   }
   const crudos = (item.registros || []).map((r) => store.num(r.precio)).filter((n) => n > 0);
   if (crudos.length < 2) return "";
@@ -614,12 +615,12 @@ function avisoPrecio(item, uMuestra) {
   if (!(min > 0) || max / min < 3) return "";
   const razon = max / min;
   const cerca = [2, 3, 4, 6, 8, 10, 12, 20, 24, 30, 48, 60, 100].find((n) => Math.abs(razon - n) / n < 0.06);
-  return `<div style="${caja};background:#fff6e5;border:1px solid #f0d9a8;color:#7a4d00">
-    ⚠️ El precio unitario está brincando: de <b>${money(min)}</b> a <b>${money(max)}</b>${cerca ? `, justo <b>${cerca}×</b>` : ""}.
+  return `<div style="${caja};background:var(--warning-100);border:1px solid var(--warning-200);color:var(--warning-800)">
+    El precio unitario está brincando: de <b>${money(min)}</b> a <b>${money(max)}</b>${cerca ? `, justo <b>${cerca}×</b>` : ""}.
     ${cerca
       ? `Eso casi siempre es que un ticket registró la <b>caja de ${cerca}</b> y otro la pieza suelta.`
       : `Suele ser que un ticket registró la caja o el bulto y otro la unidad suelta.`}
-    <br>Toca <b>✏️</b> en la compra que esté mal y pon la cantidad y unidad reales.</div>`;
+    <br>Toca el lápiz de la compra que esté mal y pon la cantidad y unidad reales.</div>`;
 }
 
 function escapar(s) {

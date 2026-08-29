@@ -38,10 +38,10 @@ function cardPrediccion(p) {
   const cab = p.meta > 0 ? `Llevas <b>${money(p.gastoSemana)}</b> de tu meta <b>${money(p.meta)}</b>.` : "";
   if (!p.pendientes.length) {
     return `<div class="card"><h2>Predicción de la semana</h2>
-      <p class="sub" style="margin:6px 0 0">${cab} Según tu ritmo, ahorita no traes pedidos vencidos. 👍</p></div>`;
+      <p class="sub" style="margin:6px 0 0">${cab} Según tu ritmo, ahorita no traes pedidos vencidos.</p></div>`;
   }
   const aviso = p.seValePasar
-    ? `⚠️ ${cab} Con lo que aún te falta pedir (~<b>${money(p.costoPendiente)}</b>) llegarías a <b>${money(p.proyectado)}</b> — por encima de tu meta.`
+    ? `${cab} Con lo que aún te falta pedir (~<b>${money(p.costoPendiente)}</b>) llegarías a <b>${money(p.proyectado)}</b> — por encima de tu meta.`
     : (p.meta > 0
         ? `${cab} Según tu ritmo aún te falta pedir ~<b>${money(p.costoPendiente)}</b> (quedarías en ${money(p.proyectado)}).`
         : `Según tu ritmo, aún te falta pedir ~<b>${money(p.costoPendiente)}</b>.`);

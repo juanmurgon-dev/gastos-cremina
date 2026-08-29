@@ -163,7 +163,7 @@ function filaMiembro(m) {
           .filter((x) => x.id === m.rol || x.id !== "owner" || estado.miRol === "owner")
           .map((x) => `<option value="${x.id}"${x.id === m.rol ? " selected" : ""}>${esc(x.txt)}</option>`).join("")}
       </select>
-      <button class="linkbtn" data-clave="${esc(m.usuario)}" style="font-size:11.5px">🔑 Clave</button>
+      <button class="linkbtn" data-clave="${esc(m.usuario)}" style="font-size:11.5px">Clave</button>
       ${m.soyYo ? "" : `<button class="linkbtn" data-quitar="${esc(m.usuario)}" style="color:var(--rojo);font-size:11.5px">Quitar</button>`}
     </div>
     <div class="sub" style="font-size:11px;margin-top:4px">${esc(p.desc)}${m.area ? " · " + esc(m.area) : ""}</div>

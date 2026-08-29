@@ -8,6 +8,7 @@
 import * as store from "../store.js";
 import { money } from "../store.js";
 import * as info from "../info.js";
+import { ic } from "../iconos.js";
 
 const ES_CORTESIA = /pan de cortes[íi]a/i;
 // La leche/temperatura no es el grupo principal (para no confundir el desglose).
@@ -21,11 +22,11 @@ function escapar(s) {
 
 // Color según qué tan sano es el margen (%).
 function cColor(pct) {
-  if (pct == null) return "#7ea8a2";
-  if (pct < 15) return "#e5484d";
-  if (pct < 30) return "#ff9f1c";
-  if (pct < 45) return "#2ec4b6";
-  return "#148b7f";
+  if (pct == null) return "var(--default-400)";
+  if (pct < 15) return "var(--danger-500)";
+  if (pct < 30) return "var(--warning-500)";
+  if (pct < 45) return "var(--secondary-500)";
+  return "var(--success-600)";
 }
 
 // Elige el grupo modificador principal de un platillo (igual que en Ventas).
@@ -148,12 +149,12 @@ export function render(el) {
       <div class="card">
         <div class="row-stats">
           <div class="stat"><div class="n" style="color:${cColor(margenProm)}">${margenProm == null ? "—" : Math.round(margenProm) + "%"}</div><div class="l">Margen prom.${info.icono("margen")}</div></div>
-          <div class="stat"><div class="n" style="font-size:15px">${mina ? escapar(mina.label) : "—"}</div><div class="l">🏆 Mina de oro${info.icono("minaOro")}</div></div>
+          <div class="stat"><div class="n" style="font-size:15px">${mina ? escapar(mina.label) : "—"}</div><div class="l">Mina de oro${info.icono("minaOro")}</div></div>
           <div class="stat"><div class="n">${sinCosto.length}</div><div class="l">Sin costo</div></div>
         </div>
         ${margenProm == null
-          ? `<p class="sub" style="margin:10px 2px 0">Captura el costo de cada variante (o un costo base del platillo). Empieza por los más vendidos 👇</p>`
-          : (bajos ? `<p class="sub" style="margin:10px 2px 0">⚠️ ${bajos} con margen bajo (&lt;30%).</p>` : "")}
+          ? `<p class="sub" style="margin:10px 2px 0">Captura el costo de cada variante (o un costo base del platillo). Empieza por los más vendidos.</p>`
+          : (bajos ? `<p class="sub" style="margin:10px 2px 0;color:var(--ambar)">${ic("alerta",13)} ${bajos} con margen bajo (&lt;30%).</p>` : "")}
       </div>
 
       ${conCosto.length ? `<div class="card">
@@ -166,7 +167,7 @@ export function render(el) {
         <h2>Falta capturar costo${sinCosto.length ? ` (${sinCosto.length})` : ""}</h2>
         ${sinCosto.length
           ? `<div id="ls">${sinCosto.slice(0, 60).map((it, i) => filaSinCosto(it, conCosto.length + i)).join("")}</div>`
-          : `<div class="sub">¡Todo tiene costo! 🎉</div>`}
+          : `<div class="sub">Todo tiene costo cargado.</div>`}
       </div>`;
 
     root.querySelector("#per").addEventListener("change", (e) => { periodo = e.target.value; pintar(); });
@@ -176,13 +177,13 @@ export function render(el) {
 
   function fila(it, idx) {
     const w = Math.max(0, Math.min(100, it.margenPct || 0));
-    const nota = it.heredado ? ` · <span style="color:#7ea8a2">costo base</span>` : "";
-    return `<div data-idx="${idx}" style="cursor:pointer;padding:10px 2px;border-top:1px solid #eef2f1">
+    const nota = it.heredado ? ` · <span style="color:var(--default-400)">costo base</span>` : "";
+    return `<div data-idx="${idx}" style="cursor:pointer;padding:10px 2px;border-top:1px solid var(--default-200)">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">
         <b style="font-size:15px">${escapar(it.label)}</b>
         <span style="color:${cColor(it.margenPct)};font-weight:700">${Math.round(it.margenPct)}%</span>
       </div>
-      <div style="height:8px;background:#eef2f1;border-radius:6px;overflow:hidden;margin:6px 0">
+      <div style="height:8px;background:var(--default-200);border-radius:6px;overflow:hidden;margin:6px 0">
         <div style="height:100%;width:${w}%;background:${cColor(it.margenPct)};border-radius:6px"></div>
       </div>
       <div class="sub" style="display:flex;justify-content:space-between;gap:8px;font-size:12px">
@@ -193,7 +194,7 @@ export function render(el) {
   }
 
   function filaSinCosto(it, idx) {
-    return `<div data-idx="${idx}" style="cursor:pointer;padding:10px 2px;border-top:1px solid #eef2f1;display:flex;justify-content:space-between;gap:10px;align-items:center">
+    return `<div data-idx="${idx}" style="cursor:pointer;padding:10px 2px;border-top:1px solid var(--default-200);display:flex;justify-content:space-between;gap:10px;align-items:center">
       <div><b style="font-size:15px">${escapar(it.label)}</b><div class="sub" style="font-size:12px">Precio ${money(it.precio)} · ${it.unidades} vend. · ${money(it.venta)}</div></div>
       <span class="btn sec chico" style="pointer-events:none;flex:none">Poner costo</span>
     </div>`;

@@ -31,7 +31,7 @@ export function abrirProveedores() {
       ${grupos.length
         ? `<div class="titulo-seccion">Sugerencias (${grupos.length})</div>
            <div id="pvSug">${grupos.map(grupoHTML).join("")}</div>`
-        : `<div class="ok-box">No detecté proveedores duplicados. 👌</div>`}
+        : `<div class="ok-box">No detecté proveedores duplicados.</div>`}
       <div class="titulo-seccion" style="margin-top:16px">Todos los proveedores (${todos.length})</div>
       <div id="pvTodos">${todos.length ? todos.map(filaTodos).join("") : `<div class="sub">Aún no hay proveedores en los tickets.</div>`}</div>
       ${todos.length ? `<div class="card" style="margin-top:10px;padding:12px">

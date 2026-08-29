@@ -3,13 +3,14 @@ import * as store from "../store.js";
 import { COLOR_AREA, money, totalTicket, fechaBonita } from "../store.js";
 import { crearEditor } from "./ticket-editor.js";
 import { descargarCSV } from "../csv.js";
+import { ic } from "../iconos.js";
 
 export function render(el) {
   let orden = "gasto";   // "gasto" = lista por fecha del ticket · "subida" = agrupado por día de subida
   el.innerHTML = `
     <div class="segmented" style="font-size:12.5px;margin-bottom:10px"><button data-o="gasto">Fecha del gasto</button><button data-o="subida">Día de subida</button></div>
     <input id="buscar" placeholder="Buscar proveedor o artículo…" style="margin-bottom:10px" />
-    <button class="btn sec chico" id="exp" style="margin-bottom:14px">⬇ Exportar CSV</button>
+    <button class="btn sec chico" id="exp" style="margin-bottom:14px">${ic("descargar",15)} Exportar CSV</button>
     <div id="lista"></div>`;
 
   const lista = el.querySelector("#lista");
@@ -62,7 +63,7 @@ export function render(el) {
         (t.lineas || []).some((l) => store.coincide(l.descripcion, q)));
     }
     if (!ts.length) {
-      lista.innerHTML = `<div class="vacio">${q ? "Sin resultados." : "Aún no hay tickets. Captura el primero en 📸."}</div>`;
+      lista.innerHTML = `<div class="vacio">${q ? "Sin resultados." : "Aún no hay tickets. Captura el primero desde Insumos → Capturar."}</div>`;
       return;
     }
     if (orden === "subida") {
@@ -75,7 +76,7 @@ export function render(el) {
       }
       lista.innerHTML = [...grupos.entries()].map(([dia, arr]) => {
         const tot = arr.reduce((a, t) => a + totalTicket(t), 0);
-        const cab = dia ? "📥 Subidos el " + fechaBonita(dia) : "📥 Sin fecha de subida";
+        const cab = dia ? "Subidos el " + fechaBonita(dia) : "Sin fecha de subida";
         return `<div class="sub" style="font-weight:700;margin:14px 2px 8px;display:flex;justify-content:space-between">
             <span>${cab}</span><span>${arr.length} ticket(s) · ${money(tot)}</span></div>
           ${arr.map(filaHTML).join("")}`;
@@ -90,8 +91,8 @@ export function render(el) {
   function filaHTML(t) {
     const areas = [...new Set((t.lineas || []).map((l) => l.area))];
     const chips = areas.map((a) =>
-      `<span class="chip" style="background:${COLOR_AREA[a] || "#8a8f98"}">${a}</span>`).join(" ");
-    const subido = t.creadoEn ? " · 📥 subido " + fechaBonita((t.creadoEn || "").slice(0, 10)) : "";
+      `<span class="chip" style="background:${COLOR_AREA[a] || "var(--default-500)"}">${a}</span>`).join(" ");
+    const subido = t.creadoEn ? " · subido " + fechaBonita((t.creadoEn || "").slice(0, 10)) : "";
     return `
       <div class="ticket" data-id="${t.id}">
         <div class="cab">
@@ -100,7 +101,7 @@ export function render(el) {
         </div>
         <div class="meta">${fechaBonita(t.fecha)} · ${(t.lineas || []).length} líneas${subido}</div>
         <div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${chips}</div>
-        ${t.aviso ? `<div class="aviso">⚠️ ${escapar(t.aviso)}</div>` : ""}
+        ${t.aviso ? `<div class="aviso">${ic("alerta",13)} ${escapar(t.aviso)}</div>` : ""}
       </div>`;
   }
 
@@ -113,18 +114,18 @@ export function render(el) {
     bg.innerHTML = `
       <div class="modal">
         <h2>Corregir ticket</h2>
-        ${t.fotoUrl ? `<a href="${t.fotoUrl}" target="_blank" class="pill" style="margin-bottom:12px">📷 Ver foto</a>` : ""}
+        ${t.fotoUrl ? `<a href="${t.fotoUrl}" target="_blank" class="pill" style="margin-bottom:12px">${ic("camara",14)} Ver foto</a>` : ""}
         <div id="editor"></div>
         <div class="sub" style="margin:10px 2px 4px">
-          ${t.creadoEn ? "📥 Subido el <b>" + fechaHora(t.creadoEn) + "</b>" : ""}
-          ${t.creadoPor ? "<br>🧾 Registrado por <b>" + escapar(t.creadoPor) + "</b>" : ""}
-          ${t.editadoPor ? "<br>✏️ Última edición por <b>" + escapar(t.editadoPor) + "</b>" + (t.editadoEn ? " · " + fechaHora(t.editadoEn) : "") : ""}
+          ${t.creadoEn ? "Subido el <b>" + fechaHora(t.creadoEn) + "</b>" : ""}
+          ${t.creadoPor ? "<br>Registrado por <b>" + escapar(t.creadoPor) + "</b>" : ""}
+          ${t.editadoPor ? "<br>Última edición por <b>" + escapar(t.editadoPor) + "</b>" + (t.editadoEn ? " · " + fechaHora(t.editadoEn) : "") : ""}
         </div>
         <div class="fila" style="margin-top:6px">
           <button class="btn sec" data-cerrar>Cerrar</button>
           <button class="btn" data-guardar>Guardar</button>
         </div>
-        <button class="btn peligro" data-borrar style="margin-top:10px">🗑️ Borrar ticket</button>
+        <button class="btn peligro" data-borrar style="margin-top:10px">${ic("basura",15)} Borrar ticket</button>
       </div>`;
     document.body.appendChild(bg);
 

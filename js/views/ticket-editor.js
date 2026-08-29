@@ -25,8 +25,8 @@ function lineaHTML(l = {}) {
     </div>
     <div class="fila">
       <label class="campo"><span>Área</span>
-        <select data-f="area" data-area style="font-weight:600;color:#fff;border:none;background:${COLOR_AREA[AREAS.includes(l.area) ? l.area : "otro"]}">${
-          AREAS.map((a) => `<option value="${a}"${a === (l.area || "otro") ? " selected" : ""} style="background:#fff;color:#22201a">${a}</option>`).join("")}</select></label>
+        <select data-f="area" data-area style="font-weight:600;color:var(--content1);border:none;background:${COLOR_AREA[AREAS.includes(l.area) ? l.area : "otro"]}">${
+          AREAS.map((a) => `<option value="${a}"${a === (l.area || "otro") ? " selected" : ""} style="background:var(--content1);color:var(--foreground)">${a}</option>`).join("")}</select></label>
       <label class="campo"><span>Tipo</span>
         <select data-f="tipo">${opciones(TIPOS, l.tipo || "operativo")}</select></label>
       <label class="campo"><span>Monto total</span>

@@ -5,6 +5,7 @@ import { money, num } from "../store.js";
 import * as dashCompras from "./dash-compras.js";
 import * as info from "../info.js";
 import * as plan from "../plan.js";
+import { ic } from "../iconos.js";
 
 // Inicio se adapta al ROL: compras ve su tablero; los demás (owner/gerente/
 // staff/single-tenant) ven el resumen financiero de siempre.
@@ -166,10 +167,24 @@ function insumosDestacados() {
   return { masGasto, masSubio };
 }
 
+// Marcas de línea. Sustituyen a los emoji: un emoji lo dibuja el sistema
+// operativo — se ve distinto en iOS y en Android y mete color fuera de la
+// paleta. Estas heredan el color que les pasemos y siempre pesan igual.
+const marca = (n, col, px = 15) => `<span class="i-ic" style="color:${col};margin-right:7px">${ic(n, px)}</span>`;
+const M = {
+  alerta: marca("alerta", "var(--rojo)"),
+  baja:   marca("baja",   "var(--rojo)"),
+  sube:   marca("sube",   "var(--verde)"),
+  precio: marca("sube",   "var(--ambar)"),
+  compra: marca("ticket", "var(--gris)"),
+  meta:   marca("idea",   "var(--ambar)"),
+  bien:   marca("ok",     "var(--verde)")
+};
+
 // Mini-tarjeta para los vistazos operativos.
 function tile(icon, label, big, sub, color, tip) {
-  return `<div style="background:rgba(46,196,182,.07);border:1px solid var(--linea);border-radius:14px;padding:13px 14px;min-width:0">
-    <div class="sub" style="font-size:11.5px;font-weight:600">${icon} ${label}${tip ? info.iconoTip(tip) : ""}</div>
+  return `<div style="background:var(--superficie-2);border:1px solid var(--linea);border-radius:8px;padding:13px 14px;min-width:0">
+    <div class="sub" style="font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em">${icon}${label}${tip ? info.iconoTip(tip) : ""}</div>
     <div style="font-size:16px;font-weight:700;letter-spacing:-.01em;margin-top:3px;line-height:1.2;color:${color || "var(--tinta)"};overflow-wrap:anywhere">${big}</div>
     <div class="sub" style="font-size:12px;margin-top:3px">${sub}</div>
   </div>`;
@@ -196,13 +211,13 @@ function cardVistazo(tp, ins, cd, pulso) {
       sub2 = `${fechaCorta(pulso.fecha)} · sin comparación`;
       col2 = "var(--tinta)";
     }
-    tiles.push(tile("📅", lbl, money(pulso.venta), sub2, col2,
+    tiles.push(tile(marca("reloj", "var(--gris)", 13), lbl, money(pulso.venta), sub2, col2,
       { t: "Venta del día", q: "La venta del último día que ya tiene corte de caja cargado.",
         d: `Día tomado: ${fechaCorta(pulso.fecha)}. Se compara contra el mismo día (${diaSem}) de la semana pasada. Sale de tus cortes de caja.` }));
   }
   if (cd && cd.subidas.length) {
     const s = cd.subidas[0];
-    tiles.push(tile("🚀", "Subiendo · semana", esc(s.nombre),
+    tiles.push(tile(marca("sube", "var(--verde)", 13), "Subiendo · semana", esc(s.nombre),
       `▲ ${Math.round(s.rise * 100)}% · ${Math.round(s.prev)}→${Math.round(s.cur)} vendidos`, "var(--verde)",
       { t: "Subiendo · semana", q: "El producto que más creció en unidades vendidas.",
         c: "Compara las unidades de la semana reciente contra la anterior (subió ≥15%).",
@@ -210,18 +225,18 @@ function cardVistazo(tp, ins, cd, pulso) {
   }
   if (cd && cd.caidas.length) {
     const c = cd.caidas[0];
-    tiles.push(tile("📉", "Cayendo · semana", esc(c.nombre),
+    tiles.push(tile(marca("baja", "var(--rojo)", 13), "Cayendo · semana", esc(c.nombre),
       `▼ ${Math.round(Math.abs(c.drop) * 100)}% · ${Math.round(c.prev)}→${Math.round(c.cur)} vendidos`, "var(--rojo)",
       { t: "Cayendo · semana", q: "El platillo de cocina que más bajó en unidades.",
         c: "Solo Comida y Desayunos; excluye bebidas, postres y consumo de colaboradores (cayó ≥15%).",
         d: `Semanas comparadas: ${cd.cur} (reciente) vs ${cd.prev} (anterior). Sale de tus reportes de venta por producto.` }));
   }
-  if (ins && ins.masSubio) tiles.push(tile("📈", "Insumo que más subió", esc(ins.masSubio.nombre),
+  if (ins && ins.masSubio) tiles.push(tile(marca("sube", "var(--ambar)", 13), "Insumo que más subió", esc(ins.masSubio.nombre),
     `▲ ${money(ins.masSubio.cambio)} · ${money(ins.masSubio.precioActual)}${ins.masSubio.unidad ? "/" + esc(ins.masSubio.unidad) : ""}`, "var(--rojo)",
     { t: "Insumo que más subió", q: "El insumo de costo de venta cuyo precio más aumentó.",
       c: "Compara el precio de su compra más reciente contra la anterior.",
       d: "Sale de TODOS tus tickets (histórico, no una sola semana). Solo insumos de costo de venta, no gas/luz/renta." }));
-  if (ins && ins.masGasto) tiles.push(tile("💸", "En lo que más gastas", esc(ins.masGasto.nombre),
+  if (ins && ins.masGasto) tiles.push(tile(marca("ventas", "var(--gris)", 13), "En lo que más gastas", esc(ins.masGasto.nombre),
     `${kmoney(ins.masGasto.gasto)} · ${ins.masGasto.veces} compra(s)`, "var(--naranja)",
     { t: "En lo que más gastas", q: "El insumo de costo de venta en el que llevas más dinero.",
       c: "Suma el monto de todas tus compras de ese insumo.",
@@ -363,9 +378,9 @@ function bloqueCanal(c, modoLbl) {
   if (!tot) return "";
   const pct = (v) => Math.round(v / tot * 100);
   const tp = (venta, gente) => gente > 0 ? money(venta / gente) : "—";
-  const st = (ic, etq, n, p, sub) => `<div class="stat" style="min-width:0">
+  const st = (etq, n, p, sub) => `<div class="stat" style="min-width:0">
     <div class="n" style="font-size:clamp(15px,5vw,21px)">${n.toLocaleString("es-MX")}</div>
-    <div class="l">${ic} ${etq} · ${p}%</div>
+    <div class="l">${etq} · ${p}%</div>
     <div class="sub" style="font-size:10.5px;margin-top:2px">${sub}</div></div>`;
   return `<div style="border-top:1px solid var(--linea);margin-top:14px;padding-top:12px">
     <div class="sub" style="margin:0 0 8px">Dónde estuvo la gente${info.iconoTip({
@@ -375,8 +390,8 @@ function bloqueCanal(c, modoLbl) {
       d: "Sale del reporte de órdenes (el Excel de 2 hojas), no del reporte de productos — es el único que distingue el canal. Si el número no cuadra con los comensales de arriba, es porque ese sale del encabezado del otro reporte.",
     })}</div>
     <div class="row-stats">
-      ${st("🍽️", "En mesa", c.comedor, pct(c.comedor), `${c.ctasComedor} mesas · ${tp(c.ventaComedor, c.comedor)} p/persona`)}
-      ${st("🥡", "Para llevar", c.llevar, pct(c.llevar), `${c.ctasLlevar} órdenes · ${tp(c.ventaLlevar, c.llevar)} p/persona`)}
+      ${st("En mesa", c.comedor, pct(c.comedor), `${c.ctasComedor} mesas · ${tp(c.ventaComedor, c.comedor)} p/persona`)}
+      ${st("Para llevar", c.llevar, pct(c.llevar), `${c.ctasLlevar} órdenes · ${tp(c.ventaLlevar, c.llevar)} p/persona`)}
     </div>
   </div>`;
 }
@@ -479,23 +494,23 @@ function renderOwner(el) {
     const tp = topProductos(), ins = insumosDestacados(), cd = movimientosProductos(), pulso = store.pulsoDiario();
 
     const acc = [];
-    if (metaWk > 0 && wk.gastoVar > metaWk) acc.push(`🔴 Te pasaste de tu meta de compras por <b>${money(wk.gastoVar - metaWk)}</b>. Frena pedidos que no sean urgentes.`);
+    if (metaWk > 0 && wk.gastoVar > metaWk) acc.push(`${M.alerta}Te pasaste de tu meta de compras por <b>${money(wk.gastoVar - metaWk)}</b>. Frena pedidos que no sean urgentes.`);
     const pred = store.prediccionCompras();
     if (pred.pendientes.length) {
       const nombres = pred.pendientes.slice(0, 3).map((x) => esc(x.nombre)).join(", ");
       acc.push(pred.seValePasar
-        ? `🧾 Vas en <b>${money(pred.gastoSemana)}</b> de tu meta <b>${money(pred.meta)}</b>, pero según tu ritmo aún te falta pedir <b>${nombres}</b> (~${money(pred.costoPendiente)}). Ojo, te pasarías del presupuesto.`
-        : `🧾 Según tu ritmo de compras, aún te falta pedir <b>${nombres}</b> (~${money(pred.costoPendiente)}).`);
+        ? `${M.compra}Vas en <b>${money(pred.gastoSemana)}</b> de tu meta <b>${money(pred.meta)}</b>, pero según tu ritmo aún te falta pedir <b>${nombres}</b> (~${money(pred.costoPendiente)}). Ojo, te pasarías del presupuesto.`
+        : `${M.compra}Según tu ritmo de compras, aún te falta pedir <b>${nombres}</b> (~${money(pred.costoPendiente)}).`);
     }
-    if (wk.venta > 0 && cWk > 45) acc.push(`🔴 Tu costo de insumos va en <b>${Math.round(cWk)}%</b> (sano ≤35%). Sube precio, ajusta porciones o baja mermas.`);
+    if (wk.venta > 0 && cWk > 45) acc.push(`${M.alerta}Tu costo de insumos va en <b>${Math.round(cWk)}%</b> (sano ≤35%). Sube precio, ajusta porciones o baja mermas.`);
     if (prevWk && prevWk.venta > 0 && ((wk.venta - prevWk.venta) / prevWk.venta * 100) <= -12)
-      acc.push(`🔻 La venta bajó <b>${Math.round(Math.abs((wk.venta - prevWk.venta) / prevWk.venta * 100))}%</b> vs. la semana pasada. Activa una promo o busca a tus clientes frecuentes.`);
-    if (cd && cd.caidas.length) { const c = cd.caidas[0]; acc.push(`🔻 <b>${esc(c.nombre)}</b> se vendía bien y cayó <b>${Math.round(Math.abs(c.drop) * 100)}%</b> (${Math.round(c.prev)}→${Math.round(c.cur)}). ¿Se agotó, subió de precio o hay que promocionarlo?`); }
-    if (cd && cd.subidas.length) { const s = cd.subidas[0]; acc.push(`🚀 <b>${esc(s.nombre)}</b> subió <b>${Math.round(s.rise * 100)}%</b> en ventas (${Math.round(s.prev)}→${Math.round(s.cur)}). ¡Ojo del bueno! Dale más salida mientras está caliente.`); }
-    if (ins && ins.masSubio) acc.push(`📈 <b>${esc(ins.masSubio.nombre)}</b> subió <b>${money(ins.masSubio.cambio)}</b> por ${esc(ins.masSubio.unidad || "unidad")}. Renegocia con tu proveedor o ajústalo en el menú.`);
-    if (tp && (tp.topFood || tp.topBebida)) { const names = [tp.topFood && tp.topFood.producto, tp.topBebida && tp.topBebida.producto].filter(Boolean).map(esc).join(" y "); acc.push(`🏆 Empuja <b>${names}</b>: es lo que más vendes. Recomiéndalo u ofrécelo en combo.`); }
-    if (wk.venta > 0 && beDia > 0 && ventaDiaAct > 0 && ventaDiaAct < beDia) acc.push(`🎯 Necesitas vender <b>${money(beDia)}/día</b> para no perder; vas en <b>${money(ventaDiaAct)}/día</b>. Enfócate en subir el ticket promedio.`);
-    if (!acc.length) acc.push(`✅ Vas en rango sano. Mantén el ritmo y registra tus cortes cada día.`);
+      acc.push(`${M.baja}La venta bajó <b>${Math.round(Math.abs((wk.venta - prevWk.venta) / prevWk.venta * 100))}%</b> vs. la semana pasada. Activa una promo o busca a tus clientes frecuentes.`);
+    if (cd && cd.caidas.length) { const c = cd.caidas[0]; acc.push(`${M.baja}<b>${esc(c.nombre)}</b> se vendía bien y cayó <b>${Math.round(Math.abs(c.drop) * 100)}%</b> (${Math.round(c.prev)}→${Math.round(c.cur)}). ¿Se agotó, subió de precio o hay que promocionarlo?`); }
+    if (cd && cd.subidas.length) { const s = cd.subidas[0]; acc.push(`${M.sube}<b>${esc(s.nombre)}</b> subió <b>${Math.round(s.rise * 100)}%</b> en ventas (${Math.round(s.prev)}→${Math.round(s.cur)}). ¡Ojo del bueno! Dale más salida mientras está caliente.`); }
+    if (ins && ins.masSubio) acc.push(`${M.precio}<b>${esc(ins.masSubio.nombre)}</b> subió <b>${money(ins.masSubio.cambio)}</b> por ${esc(ins.masSubio.unidad || "unidad")}. Renegocia con tu proveedor o ajústalo en el menú.`);
+    if (tp && (tp.topFood || tp.topBebida)) { const names = [tp.topFood && tp.topFood.producto, tp.topBebida && tp.topBebida.producto].filter(Boolean).map(esc).join(" y "); acc.push(`${M.sube}Empuja <b>${names}</b>: es lo que más vendes. Recomiéndalo u ofrécelo en combo.`); }
+    if (wk.venta > 0 && beDia > 0 && ventaDiaAct > 0 && ventaDiaAct < beDia) acc.push(`${M.meta}Necesitas vender <b>${money(beDia)}/día</b> para no perder; vas en <b>${money(ventaDiaAct)}/día</b>. Enfócate en subir el ticket promedio.`);
+    if (!acc.length) acc.push(`${M.bien}Vas en rango sano. Mantén el ritmo y registra tus cortes cada día.`);
     const accTop = acc.slice(0, 3);
 
     const seg = (k, t) => `<button data-modo="${k}"${modo === k ? ' class="act"' : ""}>${t}</button>`;
@@ -514,11 +529,11 @@ function renderOwner(el) {
           <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(14px,4.4vw,19px);color:${costoCol}">${ingreso > 0 ? Math.round(foodCost) + "%" : "—"}</div><div class="l">Food cost${info.icono("costoInsumos")}</div></div>
         </div>
         <div class="sub" style="margin-top:8px;font-size:11.5px">Food cost = gasto variable ÷ ingreso. El gasto operativo no entra.</div>
-        ${per.sinDesglose > 0 ? `<div class="sub" style="margin-top:6px;font-size:11.5px;color:var(--amarillo,#8a6d1a)">
-          ⚠️ ${per.sinDesglose} ticket(s) por ${money(per.montoSinDesglose)} se guardaron sin desglose de líneas.
+        ${per.sinDesglose > 0 ? `<div class="sub" style="margin-top:6px;font-size:11.5px;color:var(--amarillo,var(--warning-700))">
+          ${M.alerta}${per.sinDesglose} ticket(s) por ${money(per.montoSinDesglose)} se guardaron sin desglose de líneas.
           Sin líneas no se puede saber qué parte era insumo, así que cuentan completos como variable y
           <b>el food cost sale más alto de lo real</b>. Ábrelos en Insumos → Tickets y desglósalos.</div>` : ""}
-        ${gfSem === 0 ? `<div class="sub" style="margin-top:8px;font-size:12px">💡 Registra tus gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : ""}
+        ${gfSem === 0 ? `<div class="sub" style="margin-top:8px;font-size:12px">${M.meta}Registra tus gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : ""}
       </div>`;
 
     cards.comensales = hayKpi ? `<div class="card">
@@ -535,7 +550,7 @@ function renderOwner(el) {
     cards.rentabilidad = `<div class="card">
         <h2 style="margin-bottom:4px">Rentabilidad por área${info.iconoTip({ t: "Rentabilidad por área", q: "Cuánto entra (ventas) vs cuánto gastas, en cocina y barra.", c: "Ingreso = ventas del área (Cocina: desayunos, comida, entradas, postres · Barra: café, bebidas, mimosas, refrescos). Gasto = SOLO el costo de venta de esa área — los insumos que entran al plato o al vaso. La limpieza, el gas y los desechables NO cuentan aquí, aunque se hayan comprado para la cocina. Deja% = (ingreso − gasto) / ingreso.", d: "El ingreso sale de tus reportes de venta; el gasto, de tus tickets. Necesita que tus tickets tengan el ÁREA marcada." })}</h2>
         <p class="sub" style="margin:0 0 10px">¿Te deja más la cocina o la barra?</p>
-        ${hayArea ? `${(ingArea.cocina || gastoArea.cocina) ? bloqueArea("🍳 Cocina", ingArea.cocina, gastoArea.cocina) : ""}${(ingArea.barra || gastoArea.barra) ? bloqueArea("☕ Barra", ingArea.barra, gastoArea.barra) : ""}`
+        ${hayArea ? `${(ingArea.cocina || gastoArea.cocina) ? bloqueArea("Cocina", ingArea.cocina, gastoArea.cocina) : ""}${(ingArea.barra || gastoArea.barra) ? bloqueArea("Barra", ingArea.barra, gastoArea.barra) : ""}`
           : `<div class="sub">Sin datos por área en este periodo. Necesitas ventas cargadas y tickets con su área marcada.</div>`}
       </div>`;
 
@@ -548,9 +563,9 @@ function renderOwner(el) {
         <div class="leyenda"><span><i style="background:var(--verde-claro)"></i>Ingreso</span><span>% = costo insumos</span></div>
       </div>`;
 
-    cards.actuar = `<div class="card" style="border-left:4px solid var(--flame)">
-        <h2 style="margin-bottom:10px">Para actuar</h2>
-        ${accTop.map((a) => `<div style="font-size:13.5px;padding:8px 0;border-bottom:1px solid var(--linea);line-height:1.45">${a}</div>`).join("")}
+    cards.actuar = `<div class="slab">
+        <h2 style="margin-bottom:9px">Para actuar</h2>
+        ${accTop.map((a, i) => `<div style="font-size:13.5px;padding:9px 0;line-height:1.45${i < accTop.length - 1 ? ";border-bottom:1px solid rgba(14,58,57,.13)" : ""}">${a}</div>`).join("")}
       </div>`;
 
     cards.vistazo = esSemActual ? cardVistazo(tp, ins, cd, pulso) : "";
@@ -570,8 +585,8 @@ function renderOwner(el) {
     // En modo acomodar, cada tarjeta se queda visible con ▲▼ en su esquina y borde punteado.
     const wrapAcom = (html, k, i) => `<div style="position:relative;outline:2px dashed var(--naranja);outline-offset:-3px;border-radius:16px">
         <div style="position:absolute;top:7px;right:7px;display:flex;gap:5px;z-index:3">
-          <button class="btn sec chico" data-mv="up" data-k="${k}"${i === 0 ? " disabled style='opacity:.3'" : ""}>▲</button>
-          <button class="btn sec chico" data-mv="down" data-k="${k}"${i === visibles.length - 1 ? " disabled style='opacity:.3'" : ""}>▼</button>
+          <button class="btn sec chico" data-mv="up" data-k="${k}"${i === 0 ? " disabled style='opacity:.3'" : ""} aria-label="Subir">${ic("arriba", 15)}</button>
+          <button class="btn sec chico" data-mv="down" data-k="${k}"${i === visibles.length - 1 ? " disabled style='opacity:.3'" : ""} aria-label="Bajar">${ic("abajo", 15)}</button>
         </div>${html}</div>`;
     const cuerpo = acomodando
       ? visibles.map((k, i) => wrapAcom(cards[k], k, i)).join("")
@@ -581,15 +596,15 @@ function renderOwner(el) {
       <div class="card" style="padding:12px">
         <div class="segmented" style="font-size:12px">${seg("dia", "Día")}${seg("semana", "Semana")}${seg("mes", "Mes")}${seg("año", "Año")}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px">
-          <button class="btn sec chico" id="ant" title="Periodo anterior"${acomodando ? " disabled style='opacity:.35'" : ""}>◀</button>
+          <button class="btn sec chico" id="ant" title="Periodo anterior" aria-label="Periodo anterior"${acomodando ? " disabled style='opacity:.35'" : ""}>${ic("izq", 16)}</button>
           <div style="flex:1;text-align:center">
             <div style="font-weight:700;font-size:14px">${esc(r.etiqueta)}</div>
             <div class="sub" style="font-size:11px">${r.esActual ? "En curso" : ""}</div>
           </div>
-          <button class="btn sec chico" id="sig" title="Periodo siguiente"${(off === 0 || acomodando) ? " disabled style='opacity:.35'" : ""}>▶</button>
+          <button class="btn sec chico" id="sig" title="Periodo siguiente" aria-label="Periodo siguiente"${(off === 0 || acomodando) ? " disabled style='opacity:.35'" : ""}>${ic("der", 16)}</button>
         </div>
-        <div style="text-align:center;margin-top:10px"><button class="btn sec chico" id="acomodar">${acomodando ? "✓ Listo, así queda" : "↕ Acomodar tarjetas"}</button></div>
-        ${acomodando ? `<div class="sub" style="text-align:center;font-size:11px;margin-top:6px">Mueve cada tarjeta con ▲▼ de su esquina</div>` : ""}
+        <div style="text-align:center;margin-top:10px"><button class="btn sec chico" id="acomodar">${acomodando ? "Listo, así queda" : "Acomodar tarjetas"}</button></div>
+        ${acomodando ? `<div class="sub" style="text-align:center;font-size:11px;margin-top:6px">Mueve cada tarjeta con los cheurones de su esquina</div>` : ""}
       </div>
       ${cuerpo}`;
 

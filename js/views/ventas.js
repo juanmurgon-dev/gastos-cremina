@@ -5,6 +5,10 @@ import { money, fechaBonita } from "../store.js";
 import * as importar from "./importar.js";
 import * as info from "../info.js";
 import { descargarCSV } from "../csv.js";
+import { ic } from "../iconos.js";
+
+// Marca de línea para las recomendaciones (antes eran emoji).
+const sena = (n, col) => `<span class="i-ic" style="color:${col};margin-right:7px">${ic(n, 15)}</span>`;
 
 function kmoney(n) {
   const a = Math.abs(n);
@@ -16,7 +20,7 @@ function escapar(s) {
   return String(s || "—").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-const PALETA = ["#2ec4b6", "#ff9f1c", "#ffbf69", "#148b7f", "#0f3f3a", "#7ad9cf", "#e88910"];
+const PALETA = ["var(--secondary-500)", "var(--warning-500)", "var(--warning-400)", "var(--success-600)", "var(--foreground)", "var(--secondary-300)", "var(--warning-600)"];
 const ES_CORTESIA = /pan de cortes[íi]a/i;   // cortesía, no cuenta como venta
 const MES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 let vistaVenta = "semana";   // "semana" | "mes" — se recuerda entre redibujos
@@ -84,7 +88,7 @@ function resumen(cont) {
     : columnas(semanas, "venta", "var(--verde-claro)", "Semana");
 
   cont.innerHTML = `
-    <button class="btn sec chico" id="expC" style="margin-bottom:12px">⬇ Exportar cortes CSV</button>
+    <button class="btn sec chico" id="expC" style="margin-bottom:12px">${ic("descargar",15)} Exportar cortes CSV</button>
     <div class="card">
       <div class="row-stats">
         <div class="stat"><div class="n">${kmoney(ventaTotal)}</div><div class="l">Venta histórica${info.icono("ventaHistorica")}</div></div>
@@ -109,9 +113,9 @@ function resumen(cont) {
     </div>
     <div class="card">
       <h2>Cómo te pagan${info.icono("mezclaPago")}</h2>
-      ${mezcla("Efectivo", efectivoT, mezclaTot, "#2ec4b6")}
-      ${mezcla("Tarjeta", tarjetaT, mezclaTot, "#ff9f1c")}
-      ${mezcla("Transferencia", transfT, mezclaTot, "#3f8a5c")}
+      ${mezcla("Efectivo", efectivoT, mezclaTot, "var(--secondary-500)")}
+      ${mezcla("Tarjeta", tarjetaT, mezclaTot, "var(--warning-500)")}
+      ${mezcla("Transferencia", transfT, mezclaTot, "var(--success-600)")}
     </div>
     <div class="card"><h2>Cortes de caja</h2>${cortes.slice(0, 40).map(filaCorte).join("")}</div>`;
   cont.querySelectorAll("#vtog button").forEach((b) => b.addEventListener("click", () => {
@@ -265,7 +269,7 @@ function productos(cont) {
 
     let q = "", cat = "todas";
     pc.innerHTML = `
-      <button class="btn sec chico" id="expP" style="margin-bottom:12px">⬇ Exportar CSV (${escapar(etiqueta())})</button>
+      <button class="btn sec chico" id="expP" style="margin-bottom:12px">${ic("descargar",15)} Exportar CSV (${escapar(etiqueta())})</button>
       ${Object.keys(porCat).length ? `<div class="card"><h2>Venta por categoría</h2>${barrasCat(porCat)}</div>` : ""}
       ${(usaVar && lecheEnt.length) ? `<div class="card"><h2>Leche más pedida</h2>
         <p class="sub" style="margin-top:-4px">Total de bebidas por tipo de leche</p>${barrasLeche(lecheEnt)}</div>` : ""}
@@ -371,12 +375,12 @@ function rentabilidad(cont) {
     const cCost = (p, ideal) => p === 0 ? "var(--gris)" : p <= ideal ? "var(--verde)" : p <= ideal + 8 ? "var(--amarillo)" : "var(--rojo)";
 
     const recs = [];
-    if (foodVenta > 0 && foodCost > 35) recs.push(`🍳 El costo de <b>comida</b> es ${Math.round(foodCost)}% (ideal ≤35%). Revisa porciones, mermas o precios.`);
-    if (barVenta > 0 && barCost > 25) recs.push(`☕ El costo de <b>barra</b> es ${Math.round(barCost)}% (ideal ≤25%). Revisa recetas/mermas o precios.`);
-    if (ventaMenu > 0 && costoTotal > 40) recs.push(`⚠️ Tu costo de venta total va en ${Math.round(costoTotal)}%; apunta a ≤35–40%.`);
-    if (store.gastoFijoMensual() === 0) recs.push(`📌 Registra tus <b>gastos fijos</b> (pestaña Proyec.) para ver la utilidad neta real.`);
-    else if (utilNeta < 0) recs.push(`🔴 En este periodo cierras con pérdida de ${money(-utilNeta)}. Sube venta o baja costos.`);
-    if (!recs.length) recs.push(`✅ Tus costos se ven sanos en este periodo. ¡Bien!`);
+    if (foodVenta > 0 && foodCost > 35) recs.push(`${sena("alerta","var(--ambar)")}El costo de <b>comida</b> es ${Math.round(foodCost)}% (ideal ≤35%). Revisa porciones, mermas o precios.`);
+    if (barVenta > 0 && barCost > 25) recs.push(`${sena("alerta","var(--ambar)")}El costo de <b>barra</b> es ${Math.round(barCost)}% (ideal ≤25%). Revisa recetas/mermas o precios.`);
+    if (ventaMenu > 0 && costoTotal > 40) recs.push(`${sena("alerta","var(--rojo)")}Tu costo de venta total va en ${Math.round(costoTotal)}%; apunta a ≤35–40%.`);
+    if (store.gastoFijoMensual() === 0) recs.push(`${sena("idea","var(--ambar)")}Registra tus <b>gastos fijos</b> (pestaña Proyec.) para ver la utilidad neta real.`);
+    else if (utilNeta < 0) recs.push(`${sena("baja","var(--rojo)")}En este periodo cierras con pérdida de ${money(-utilNeta)}. Sube venta o baja costos.`);
+    if (!recs.length) recs.push(`${sena("ok","var(--verde)")}Tus costos se ven sanos en este periodo.`);
 
     cont.querySelector("#rc").innerHTML = `
       <div class="card">
@@ -578,6 +582,6 @@ function filaCorte(c) {
       <span class="prov" style="font-size:14px">${fechaBonita(c.fecha)}</span>
       <span class="monto" style="font-size:14px">${money(c.ventas_total)}</span></div>
     <div class="meta" style="display:flex;justify-content:space-between;align-items:center">
-      <span>💵 ${kmoney(store.num(c.efectivo))} · 💳 ${kmoney(store.num(c.tarjeta))}${store.num(c.transferencia) ? " · 🔁 " + kmoney(store.num(c.transferencia)) : ""}</span>
+      <span>Efectivo ${kmoney(store.num(c.efectivo))} · Tarjeta ${kmoney(store.num(c.tarjeta))}${store.num(c.transferencia) ? " · Transfer. " + kmoney(store.num(c.transferencia)) : ""}</span>
       ${difTxt}</div></div>`;
 }

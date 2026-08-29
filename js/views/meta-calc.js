@@ -52,9 +52,9 @@ export function montar(el) {
       if (eco) eco.textContent = "Guardando…";
       try {
         await store.guardarVentaSemana(lunesPasado(), v);
-        if (eco) eco.textContent = "✅ Guardado";
+        if (eco) eco.textContent = "Guardado";
       } catch (e) {
-        if (eco) eco.textContent = "⚠️ no se guardó: " + ((e && e.message) || e);
+        if (eco) eco.textContent = "No se guardó: " + ((e && e.message) || e);
         return;   // no repintar: se perdería lo que acaba de escribir
       }
       pintar();
@@ -66,7 +66,7 @@ export function montar(el) {
       usar.disabled = true; usar.textContent = "Guardando…";
       try {
         await store.guardarMetaSemana(toISO(lunesDe(new Date())), sug);  // meta de esta semana en adelante
-        usar.textContent = "✅ Guardado como meta";
+        usar.textContent = "Guardado como meta";
       } catch (e) {
         alert("No pude guardar: " + ((e && e.message) || e));
         usar.disabled = false; usar.textContent = "Usar como meta semanal";

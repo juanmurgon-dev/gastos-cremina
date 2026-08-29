@@ -162,15 +162,15 @@ export function render(el) {
         <p class="sub" style="margin:8px 0 0">${sinPrecios
           ? `Escribe lo que te falta y cuánto necesitas. Toca el chip <b>↻</b> para marcar lo que ya pediste.`
           : `Toca el chip <b>↻</b> de cada insumo para cambiar su estatus (Pendiente → Pedido → Comprado). Puedes editar nombre, cantidad, unidad y precio directo en la lista.`}</p>
-        <button class="btn" id="rqGuardar" style="margin-top:10px">💾 Guardar requisición</button>
+        <button class="btn" id="rqGuardar" style="margin-top:10px">Guardar requisición</button>
         <div id="rqSaveMsg"></div>
       </div>
 
       <div class="card">
-        <h2>📋 Pegar pedido completo</h2>
+        <h2>Pegar pedido completo</h2>
         <p class="sub" style="margin-top:-4px">Pega el mensaje de lo que necesitas (una línea por insumo o separado por comas) y la app lo desglosa solo.</p>
         <textarea id="rqPegar" rows="4" placeholder="Ej.&#10;5 kg tomate&#10;2 cajas de leche&#10;1 manojo cilantro&#10;3 aguacate"></textarea>
-        <button class="btn" id="rqDesglosar" style="margin-top:10px">✨ Desglosar pedido</button>
+        <button class="btn" id="rqDesglosar" style="margin-top:10px">Desglosar pedido</button>
       </div>
 
       <div class="card">
@@ -215,7 +215,7 @@ export function render(el) {
       if (hit && !$("#rqUni").value) $("#rqUni").value = hit.unidad || "";
       // Propone el área con la que ya se compra ese insumo; se puede cambiar.
       const sa = $("#rqArea");
-      if (sa && hit) { sa.value = areaDe(nom); sa.style.background = colorArea(sa.value); sa.style.color = "#fff"; }
+      if (sa && hit) { sa.value = areaDe(nom); sa.style.background = colorArea(sa.value); sa.style.color = "var(--content1)"; }
       if (!$("#rqSku").value.trim()) { const cod = store.codigoDeInsumo(nom); if (cod) $("#rqSku").value = cod; }
     });
     // SKU → insumo: al escribir un código conocido, llena el insumo y la unidad.
@@ -420,8 +420,8 @@ export function render(el) {
   }
   const colorArea = (a) => COLOR_AREA[a] || COLOR_AREA.otro;
   const selArea = (attrs, sel) =>
-    `<select ${attrs} title="Área a la que va este insumo" style="flex:0 0 auto;width:104px;font-weight:600;color:#fff;border:none;background:${colorArea(sel)}">${
-      AREAS.map((a) => `<option value="${a}"${a === sel ? " selected" : ""} style="background:#fff;color:#22201a">${a}</option>`).join("")}</select>`;
+    `<select ${attrs} title="Área a la que va este insumo" style="flex:0 0 auto;width:104px;font-weight:600;color:var(--content1);border:none;background:${colorArea(sel)}">${
+      AREAS.map((a) => `<option value="${a}"${a === sel ? " selected" : ""} style="background:var(--content1);color:var(--foreground)">${a}</option>`).join("")}</select>`;
 
   function pintarItems() {
     const cont = el.querySelector("#rqLista");
@@ -433,7 +433,7 @@ export function render(el) {
     for (const [prov, list] of grupos()) {
       html += `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <h2 style="margin:0">🏪 ${esc(prov)}</h2>${sinPrecios ? "" : `<span class="val">${money(totalDe(list))}</span>`}</div>
+          <h2 style="margin:0">${esc(prov)}</h2>${sinPrecios ? "" : `<span class="val">${money(totalDe(list))}</span>`}</div>
         <div style="margin-top:8px">${list.map(filaItem).join("")}</div>
       </div>`;
     }
@@ -443,9 +443,9 @@ export function render(el) {
         <div class="stat"><div class="n">${editing.items.length}</div><div class="l">Insumos</div></div>
       </div>
       <div class="fila" style="margin-top:12px;gap:8px;flex-wrap:wrap">
-        <button class="btn" id="rqWa">📋 Copiar para WhatsApp</button>
-        <button class="btn sec" id="rqCsv">⬇ Exportar CSV</button>
-        <button class="btn sec" id="rqPdf" title="Abre la impresión: elige 'Guardar como PDF'">📄 Guardar PDF</button>
+        <button class="btn" id="rqWa">Copiar para WhatsApp</button>
+        <button class="btn sec" id="rqCsv">Exportar CSV</button>
+        <button class="btn sec" id="rqPdf" title="Abre la impresión: elige 'Guardar como PDF'">Guardar PDF</button>
       </div>
       ${sinPrecios ? "" : `<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;cursor:pointer">
         <input type="checkbox" id="rqConPrecios" checked style="width:16px;height:16px;accent-color:var(--verde);flex:none" />
@@ -542,7 +542,7 @@ export function render(el) {
           ${provs.map((p) => `<option value="${esc(p.proveedor)}"${p.proveedor === it.proveedor ? " selected" : ""}>${esc(p.proveedor)} · ${money(p.precio)}</option>`).join("")}
           ${otros.length ? `<optgroup label="Otros proveedores">${otros.map((n) => `<option value="${esc(n)}"${n === it.proveedor ? " selected" : ""}>${esc(n)}</option>`).join("")}</optgroup>` : ""}
           ${it.proveedor && !conPrecio.has(it.proveedor) && !otros.includes(it.proveedor) ? `<option value="${esc(it.proveedor)}" selected>${esc(it.proveedor)}</option>` : ""}
-          <option value="__otro__">✏️ Otro proveedor…</option>
+          <option value="__otro__">Otro proveedor…</option>
         </select>`
       : `<input data-f="prov" value="${esc(it.proveedor)}" placeholder="Proveedor" style="flex:1 1 100px;min-width:0" />`;
     const ie = estatusInfo(it.estatus);
@@ -553,11 +553,11 @@ export function render(el) {
     return `<div class="barra-row" data-i="${idx}" style="gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--linea);border-left:4px solid ${colorArea(area)};padding:8px 0 8px 8px;margin-left:-8px">
       <span class="etq" style="width:100%;display:flex;align-items:center;gap:8px">
         <button data-f="estat" class="chip" title="Toca para cambiar el estatus" style="background:${ie.c};border:none;cursor:pointer;flex:none;display:inline-flex;align-items:center;gap:5px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.28);padding:6px 11px">${ie.t} <span style="font-size:12px;opacity:.9">↻</span></button>
-        <button type="button" data-foto data-n="${esc(it.nombre)}" data-prov="${esc(it.proveedor || "")}" title="Ver la foto de la presentación" style="display:none;flex:0 0 auto;width:34px;height:34px;padding:0;border-radius:8px;border:1px solid var(--linea);background:#f6f4ee;overflow:hidden;cursor:pointer">
+        <button type="button" data-foto data-n="${esc(it.nombre)}" data-prov="${esc(it.proveedor || "")}" title="Ver la foto de la presentación" style="display:none;flex:0 0 auto;width:34px;height:34px;padding:0;border-radius:8px;border:1px solid var(--linea);background:var(--content2);overflow:hidden;cursor:pointer">
           <img alt="" style="width:100%;height:100%;object-fit:cover;display:block" />
         </button>
         <span style="position:relative;flex:1;min-width:0">
-          <input data-f="nom" value="${esc(it.nombre)}" autocomplete="off" title="Editar nombre del insumo" style="width:100%;font-weight:600;font-size:14px;border:1px solid var(--linea);border-radius:8px;padding:6px 8px;background:#fff" />
+          <input data-f="nom" value="${esc(it.nombre)}" autocomplete="off" title="Editar nombre del insumo" style="width:100%;font-weight:600;font-size:14px;border:1px solid var(--linea);border-radius:8px;padding:6px 8px;background:var(--content1)" />
           <div data-sug style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--blanco);border:1px solid var(--linea);border-radius:12px;box-shadow:var(--sombra);max-height:230px;overflow-y:auto;margin-top:4px;text-align:left"></div>
         </span>
         ${sinPrecios ? "" : `<span class="val" style="margin-left:auto;white-space:nowrap">${money(montoDe(it))}</span>`}</span>
@@ -598,8 +598,8 @@ export function render(el) {
     const txt = textoWa();
     try {
       await navigator.clipboard.writeText(txt);
-      const b = el.querySelector("#rqWa"); b.textContent = "✅ Copiado";
-      setTimeout(() => { b.textContent = "📋 Copiar para WhatsApp"; }, 1600);
+      const b = el.querySelector("#rqWa"); b.textContent = "Copiado";
+      setTimeout(() => { b.textContent = "Copiar para WhatsApp"; }, 1600);
     } catch (e) { alert("Copia esto y pégalo:\n\n" + txt); }
   }
   function exportarCsv() {
@@ -716,7 +716,7 @@ export function render(el) {
       console.warn("PDF directo falló, uso impresión:", err);
       imprimirPdf(conPrecios);
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = txtOrig || "📄 Guardar PDF"; }
+      if (btn) { btn.disabled = false; btn.textContent = txtOrig || "Guardar PDF"; }
     }
   }
 
@@ -803,7 +803,7 @@ export function render(el) {
     if (explicito && msg) msg.innerHTML = `<div class="sub" style="margin-top:6px">Guardando…</div>`;
     try {
       await store.guardarRequisicion(editing);
-      if (explicito && msg) msg.innerHTML = `<div class="ok-box" style="margin-top:6px">✅ Guardado. Puedes volver y editarla cuando quieras.</div>`;
+      if (explicito && msg) msg.innerHTML = `<div class="ok-box" style="margin-top:6px">Guardado. Puedes volver y editarla cuando quieras.</div>`;
     } catch (e) {
       if (explicito && msg) msg.innerHTML = `<div class="error-box" style="margin-top:6px">No pude guardar. ¿Corriste <b>requisiciones.sql</b> en Supabase? (${esc((e && e.message) || e)})</div>`;
       // sin `explicito` queda local y se reintenta al siguiente cambio

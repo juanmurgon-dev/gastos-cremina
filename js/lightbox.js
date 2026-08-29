@@ -6,6 +6,8 @@
 //
 // Se cierra tocando el fondo, con la ✕ o con Escape.
 
+import { ic } from "./iconos.js";
+
 let abierto = null;
 
 export function verFoto(src, titulo) {
@@ -26,7 +28,7 @@ export function verFoto(src, titulo) {
       <span style="flex:1;min-width:0;font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
         String(titulo || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))
       }</span>
-      <a data-baja download="foto.jpg" title="Descargar" style="flex:0 0 auto;color:#fff;text-decoration:none;font-size:20px;padding:4px 8px">⬇</a>
+      <a data-baja download="foto.jpg" title="Descargar" style="flex:0 0 auto;color:#fff;text-decoration:none;line-height:0;padding:6px 8px">${ic("descargar",19)}</a>
       <button data-cerrar aria-label="Cerrar" style="flex:0 0 auto;background:none;border:none;color:#fff;font-size:26px;line-height:1;cursor:pointer;padding:2px 8px">✕</button>
     </div>
     <img data-img alt="${titulo ? "Foto de " + String(titulo).replace(/"/g, "") : "Foto"}"

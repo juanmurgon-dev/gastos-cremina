@@ -4,6 +4,7 @@
 import * as store from "../store.js";
 import { money, num } from "../store.js";
 import * as plan from "../plan.js";
+import { ic } from "../iconos.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // Unidades estándar (mismas que convierten en recetas: kg↔g, L↔ml, pza). Texto libre no,
@@ -49,7 +50,7 @@ function inyectarCSS() {
   if (document.getElementById("inv-css")) return;
   const st = document.createElement("style"); st.id = "inv-css";
   st.textContent = `
-    .inv-in{font-size:16px;min-height:44px;padding:8px 10px;border:1px solid var(--linea);border-radius:10px;background:var(--fondo,#fff);width:100%;box-sizing:border-box}
+    .inv-in{font-size:16px;min-height:44px;padding:8px 10px;border:1px solid var(--linea);border-radius:10px;background:var(--fondo,var(--content1));width:100%;box-sizing:border-box}
     input[type="date"].inv-in{-webkit-appearance:none;appearance:none;min-width:0;display:block;text-align:left}
     input[type="date"].inv-in::-webkit-date-and-time-value{text-align:left;margin:0}
     input[type="date"].inv-in::-webkit-calendar-picker-indicator{margin:0}
@@ -59,10 +60,10 @@ function inyectarCSS() {
     .inv-grid{display:grid;grid-template-columns:1fr auto 1fr auto;gap:6px;align-items:center}
     .inv-lbl{font-size:11px;color:var(--gris);display:block;margin-bottom:2px}
     details.inv-cat{border-bottom:1px solid var(--linea)}
-    details.inv-cat>summary{list-style:none;cursor:pointer;padding:12px;min-height:44px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;background:var(--fondo-2,#f6f6f4)}
+    details.inv-cat>summary{list-style:none;cursor:pointer;padding:12px;min-height:44px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;background:var(--fondo-2,var(--content2))}
     details.inv-cat>summary::-webkit-details-marker{display:none}
     .inv-btn44{min-height:44px;min-width:44px}
-    .inv-sug{margin-top:4px;font-size:12px;color:#16514f;background:#eafaf0;border:1px solid #b8e6cd;border-radius:8px;padding:4px 8px;min-height:32px;width:100%;cursor:pointer}
+    .inv-sug{margin-top:4px;font-size:12px;color:var(--success-700);background:var(--success-100);border:1px solid var(--success-200);border-radius:8px;padding:4px 8px;min-height:32px;width:100%;cursor:pointer}
     .inv-foot{padding-bottom:env(safe-area-inset-bottom,0)}
   `;
   document.head.appendChild(st);
@@ -151,8 +152,8 @@ async function screenConteo(cont) {
         <div style="min-width:0">
           <div class="sub" style="font-size:11.5px">Conteo ${esc(borrador.fecha)} · borrador</div>
           ${jefe
-            ? `<div style="font-size:clamp(18px,6vw,26px);font-weight:800;color:#16514f"><span id="inv-total">$0</span></div>`
-            : `<div style="font-size:clamp(16px,5vw,22px);font-weight:800;color:#16514f">${esc(store.miArea() || "tu área")}</div>`}
+            ? `<div style="font-size:clamp(18px,6vw,26px);font-weight:800;color:var(--success-700)"><span id="inv-total">$0</span></div>`
+            : `<div style="font-size:clamp(16px,5vw,22px);font-weight:800;color:var(--success-700)">${esc(store.miArea() || "tu área")}</div>`}
         </div>
         <div style="text-align:right">
           <div id="inv-status" class="sub" style="font-size:11.5px">&nbsp;</div>
@@ -160,11 +161,11 @@ async function screenConteo(cont) {
         </div>
       </div>
       <div class="sub" style="font-size:11px;margin-top:6px">${jefe
-        ? `💡 Captura todo <b>SIN IVA</b> (el IVA que pagas al proveedor se acredita, no es costo).`
-        : `💡 Anota <b>cuánto hay</b> de cada cosa. Se guarda solo conforme escribes.`}</div>
+        ? `Captura todo <b>SIN IVA</b> (el IVA que pagas al proveedor se acredita, no es costo).`
+        : `Anota <b>cuánto hay</b> de cada cosa. Se guarda solo conforme escribes.`}</div>
     </div>
 
-    ${jefe ? `<button class="btn sec" id="sugtodos" style="width:100%;margin:2px 0 8px">💡 Sugerir costos desde tickets (llena los vacíos)</button>` : ""}
+    ${jefe ? `<button class="btn sec" id="sugtodos" style="width:100%;margin:2px 0 8px">Sugerir costos desde tickets (llena los vacíos)</button>` : ""}
 
     ${cats.map((c, i) => `
       <details class="inv-cat" name="invcat" ${i === 0 ? "open" : ""} data-cat="${esc(c)}">
@@ -213,7 +214,7 @@ async function screenConteo(cont) {
     };
     store.guardarLinea(id, cambios)
       .then(() => setStatus("Guardado " + horaAhora()))
-      .catch(() => setStatus("⚠ error al guardar"));
+      .catch(() => setStatus("Error al guardar"));
   }
   cont.querySelectorAll("[data-linea]").forEach((row) => {
     const id = row.dataset.linea;
@@ -251,7 +252,7 @@ async function screenConteo(cont) {
     if (!items.length) { setStatus("No hay costos vacíos con sugerencia"); return; }
     setStatus("Guardando…");
     try { await store.guardarCostosLote(items); setStatus("Guardado " + horaAhora() + " · " + items.length + " costos"); }
-    catch (e) { setStatus("⚠ error al guardar"); }
+    catch (e) { setStatus("Error al guardar"); }
   };
 
   if (jefe) cont.querySelector("#cerrar").onclick = async (e) => {
@@ -301,7 +302,7 @@ function sugChip(l) {
   const sug = store.costoSugerido(l.nombre_snapshot);
   if (!(sug.precio > 0)) return "";
   if (Math.round(num(l.costo_unitario) * 100) === Math.round(sug.precio * 100)) return "";
-  return `<button type="button" class="inv-sug" data-sug="${sug.precio}" title="Sugerido de tus tickets: ${esc(sug.insumo)}">💡 ${money(sug.precio)}</button>`;
+  return `<button type="button" class="inv-sug" data-sug="${sug.precio}" title="Sugerido de tus tickets: ${esc(sug.insumo)}">${money(sug.precio)}</button>`;
 }
 
 function filaLinea(l, jefe = true) {
@@ -313,7 +314,7 @@ function filaLinea(l, jefe = true) {
         <div class="nom">${esc(l.nombre_snapshot)}</div>
         <div class="inv-grid" style="grid-template-columns:1fr 80px">
           <div><span class="inv-lbl">Cantidad</span><input class="inv-in inv-num inv-cant" type="number" inputmode="decimal" min="0" step="any" value="${num(l.cantidad) || ""}" placeholder="0" /></div>
-          <div><span class="inv-lbl">Unidad</span><div class="inv-in" style="min-height:44px;display:flex;align-items:center;justify-content:center;background:var(--fondo-2,#f6f6f4)">${esc(l.unidad_snapshot || "pza")}</div></div>
+          <div><span class="inv-lbl">Unidad</span><div class="inv-in" style="min-height:44px;display:flex;align-items:center;justify-content:center;background:var(--fondo-2,var(--content2))">${esc(l.unidad_snapshot || "pza")}</div></div>
         </div>
       </div>`;
   }
@@ -324,7 +325,7 @@ function filaLinea(l, jefe = true) {
         <div><span class="inv-lbl">Cantidad</span><input class="inv-in inv-num inv-cant" type="number" inputmode="decimal" min="0" step="any" value="${num(l.cantidad) || ""}" placeholder="0" /></div>
         <div style="width:62px"><span class="inv-lbl">Unidad</span>${selUnidad(l.unidad_snapshot, 'class="inv-in inv-uni" style="padding:8px 4px"')}</div>
         <div><span class="inv-lbl">Costo unit.</span><input class="inv-in inv-num inv-costo" type="number" inputmode="decimal" min="0" step="any" value="${num(l.costo_unitario) || ""}" placeholder="0" />${sugChip(l)}</div>
-        <div style="text-align:right;min-width:64px"><span class="inv-lbl">Valor</span><span class="inv-val" style="font-weight:700;color:#16514f">$0</span></div>
+        <div style="text-align:right;min-width:64px"><span class="inv-lbl">Valor</span><span class="inv-val" style="font-weight:700;color:var(--success-700)">$0</span></div>
       </div>
     </div>`;
 }
@@ -357,11 +358,11 @@ function screenCatalogo(cont) {
         <select class="inv-in" id="catf"><option value="">Todas las categorías</option>${cats.map((c) => `<option${c === catF ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
           <button class="btn sec" id="nuevo" style="flex:1">+ Nuevo artículo</button>
-          <button class="btn sec" id="costos" style="flex:1">💡 Costos desde tickets</button>
+          <button class="btn sec" id="costos" style="flex:1">Costos desde tickets</button>
         </div>
         <div id="nform"></div>
       </div>
-      ${grupos.map((g) => `<div class="card" style="padding:0"><div style="padding:10px 12px;font-weight:700;background:var(--fondo-2,#f6f6f4)">${esc(g)}</div>
+      ${grupos.map((g) => `<div class="card" style="padding:0"><div style="padding:10px 12px;font-weight:700;background:var(--fondo-2,var(--content2))">${esc(g)}</div>
         ${mapa.get(g).map((a, i, arr) => filaArt(a, i, arr.length)).join("")}</div>`).join("") || `<div class="card"><div class="sub">Sin artículos.</div></div>`}
     `;
     const busc = cont.querySelector("#busc");
@@ -375,7 +376,7 @@ function screenCatalogo(cont) {
         const r = await store.sugerirCostosCatalogo(true);
         render();
         alert(r.actualizados ? `Se rellenaron ${r.actualizados} costos desde tickets. Revisa que sean sin IVA.` : "No encontré precios en tickets para los artículos vacíos.");
-      } catch (err) { e.target.disabled = false; e.target.textContent = "💡 Costos desde tickets"; alert("No se pudo: " + (err.message || err)); }
+      } catch (err) { e.target.disabled = false; e.target.textContent = "Costos desde tickets"; alert("No se pudo: " + (err.message || err)); }
     };
 
     cont.querySelectorAll("[data-art]").forEach((row) => {
@@ -415,7 +416,7 @@ function filaArt(a, i, n) {
         <input class="inv-in" data-f="nombre" value="${esc(a.nombre)}" style="flex:1;min-height:40px" />
         <button class="btn sec chico inv-btn44" data-up ${i === 0 ? "disabled" : ""}>↑</button>
         <button class="btn sec chico inv-btn44" data-dn ${i === n - 1 ? "disabled" : ""}>↓</button>
-        <button class="btn peligro chico inv-btn44" data-del title="Borrar del catálogo">🗑</button>
+        <button class="btn peligro chico inv-btn44" data-del title="Borrar del catálogo" aria-label="Borrar">${ic("basura",15)}</button>
       </div>
       <div class="inv-grid" style="margin-top:6px;grid-template-columns:1fr 70px 1fr">
         <div><span class="inv-lbl">Costo unit. (sin IVA)</span><input class="inv-in inv-num" data-f="costo" type="number" inputmode="decimal" min="0" step="any" value="${num(a.costo_unitario) || ""}" placeholder="0" /></div>
@@ -513,7 +514,7 @@ function bloqueResultado(c) {
   const fila = (l, v, b) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--linea)"><span class="sub">${l}</span><span style="${b ? "font-weight:800" : ""}">${v}</span></div>`;
   return `
     <div class="card">
-      <div style="text-align:center;padding:10px;border-radius:12px;background:var(--fondo-2,#f6f6f4);margin-bottom:12px">
+      <div style="text-align:center;padding:10px;border-radius:12px;background:var(--fondo-2,var(--content2));margin-bottom:12px">
         <div class="sub">COGS del mes</div>
         <div style="font-size:clamp(26px,9vw,40px);font-weight:800;color:${col}">${pct != null ? pct.toFixed(1) + "%" : "—"}</div>
         <div class="sub">${money(c.cogs)} de costo${c.venta_neta > 0 ? " · sobre " + money(c.venta_neta) + " de venta" : ""}</div>

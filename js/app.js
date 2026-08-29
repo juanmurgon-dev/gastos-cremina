@@ -9,6 +9,7 @@ import * as preferencias from "./preferencias.js";
 import * as usuarios from "./usuarios.js";
 import * as proveedores from "./proveedores.js";
 import * as onboarding from "./onboarding.js";
+import { ic } from "./iconos.js";
 
 import * as inicio from "./views/inicio.js";
 import * as reportes from "./views/reportes.js";
@@ -18,16 +19,19 @@ import * as inventario from "./views/inventario.js";
 import * as capacitacion from "./views/capacitacion.js";
 
 // ⬇⬇ Al publicar una versión nueva: sube ESTE número y el CACHE en sw.js.
-export const APP_VERSION = "v3.208";
-export const APP_FECHA = "27 ago 2026";
+export const APP_VERSION = "v3.400";
+export const APP_FECHA = "29 ago 2026";
 
+// El icono ya no es un emoji: lo dibuja `iconos.js`. Un emoji lo pinta el
+// sistema operativo — cambia de estilo entre iOS y Android y mete colores
+// que no son de la paleta.
 const VISTAS = {
-  inicio:      { mod: inicio,      ic: "🏠", txt: "Inicio" },
-  ventas:      { mod: ventasHub,   ic: "💵", txt: "Ventas" },
-  insumos:     { mod: insumos,     ic: "📦", txt: "Insumos" },
-  inventario:  { mod: inventario,  ic: "📋", txt: "Inventario" },
-  reportes:    { mod: reportes,    ic: "📊", txt: "Gastos" },
-  equipo:      { mod: capacitacion, ic: "🎓", txt: "Equipo" }
+  inicio:      { mod: inicio,      ic: "inicio",     txt: "Inicio" },
+  ventas:      { mod: ventasHub,   ic: "ventas",     txt: "Ventas" },
+  insumos:     { mod: insumos,     ic: "insumos",    txt: "Insumos" },
+  inventario:  { mod: inventario,  ic: "inventario", txt: "Inventario" },
+  reportes:    { mod: reportes,    ic: "gastos",     txt: "Gastos" },
+  equipo:      { mod: capacitacion, ic: "equipo",    txt: "Equipo" }
 };
 
 // Pestañas visibles por rol. Los que NO están aquí (owner, admin, gerente) ven
@@ -157,7 +161,7 @@ function montarShell(user) {
     <div class="shell">
       <header class="top">
         <span id="marca" style="cursor:pointer" title="Personalizar tu marca"><img src="assets/platify-wordmark.png" alt="Platify" style="height:20px;width:auto;display:block" /></span>
-        <button class="hamb" id="menu" aria-label="Ajustes" title="Ajustes">☰</button>
+        <button class="hamb" id="menu" aria-label="Ajustes" title="Ajustes">${ic("ajustes", 21)}</button>
       </header>
       <main class="vista" id="vista"></main>
       <nav class="tabs" id="tabs"></nav>
@@ -239,7 +243,7 @@ function escaparHtml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;
 function etiquetaRol() {
   if (!store.state.multiTenant) return "";
   const rol = store.state.miRol;
-  if (!rol) return ` · <b style="color:var(--rojo,#b3261e)">sin rol asignado</b>`;
+  if (!rol) return ` · <b style="color:var(--rojo,var(--danger-600))">sin rol asignado</b>`;
   const area = store.state.miArea ? " · " + store.state.miArea : "";
   return ` · <b>${escaparHtml(rol + area)}</b>`;
 }
@@ -250,7 +254,7 @@ function abrirMenu() {
   // Repartir accesos es cosa del dueño y del administrador. Un gerente ve
   // todos los números pero no decide quién entra.
   const puedeAccesos = store.state.multiTenant && ["owner", "admin"].includes(store.state.miRol);
-  const badge = ENV === "staging" ? "🧪 STAGING · " : "";
+  const badge = ENV === "staging" ? "STAGING · " : "";
   const bg = document.createElement("div");
   bg.className = "modal-bg";
   bg.innerHTML = `
@@ -260,12 +264,12 @@ function abrirMenu() {
         ${escaparHtml(usuarioActual?.email || "")}${etiquetaRol()}
       </div>
       <div class="menu-lista">
-        ${puedePersonalizar ? `<button class="menu-item" data-a="marca"><span class="mi-ic">🎨</span><span class="mi-tx"><b>Personalizar marca</b><span class="sub">Cambiar logo y nombre del restaurante</span></span></button>` : ""}
-        ${puedePersonalizar ? `<button class="menu-item" data-a="prefs"><span class="mi-ic">⚙️</span><span class="mi-tx"><b>Preferencias</b><span class="sub">Cómo ves los datos de tu restaurante</span></span></button>` : ""}
-        ${puedeAccesos ? `<button class="menu-item" data-a="usuarios"><span class="mi-ic">👥</span><span class="mi-tx"><b>Equipo y accesos</b><span class="sub">Dar de alta, cambiar puesto o quitar acceso</span></span></button>` : ""}
-        <button class="menu-item" data-a="prov"><span class="mi-ic">🏪</span><span class="mi-tx"><b>Unificar proveedores</b><span class="sub">Juntar los que son el mismo</span></span></button>
-        <button class="menu-item" data-a="update"><span class="mi-ic">🔄</span><span class="mi-tx"><b>Buscar actualización</b><span class="sub">${badge}${APP_VERSION} · ${APP_FECHA}</span></span></button>
-        <button class="menu-item" data-a="salir"><span class="mi-ic">🚪</span><span class="mi-tx"><b>Cerrar sesión</b></span></button>
+        ${puedePersonalizar ? `<button class="menu-item" data-a="marca"><span class="mi-ic">${ic("marca", 20)}</span><span class="mi-tx"><b>Personalizar marca</b><span class="sub">Cambiar logo y nombre del restaurante</span></span></button>` : ""}
+        ${puedePersonalizar ? `<button class="menu-item" data-a="prefs"><span class="mi-ic">${ic("ajustes", 20)}</span><span class="mi-tx"><b>Preferencias</b><span class="sub">Cómo ves los datos de tu restaurante</span></span></button>` : ""}
+        ${puedeAccesos ? `<button class="menu-item" data-a="usuarios"><span class="mi-ic">${ic("usuarios", 20)}</span><span class="mi-tx"><b>Equipo y accesos</b><span class="sub">Dar de alta, cambiar puesto o quitar acceso</span></span></button>` : ""}
+        <button class="menu-item" data-a="prov"><span class="mi-ic">${ic("proveedor", 20)}</span><span class="mi-tx"><b>Unificar proveedores</b><span class="sub">Juntar los que son el mismo</span></span></button>
+        <button class="menu-item" data-a="update"><span class="mi-ic">${ic("actualizar", 20)}</span><span class="mi-tx"><b>Buscar actualización</b><span class="sub">${badge}${APP_VERSION} · ${APP_FECHA}</span></span></button>
+        <button class="menu-item" data-a="salir"><span class="mi-ic">${ic("salir", 20)}</span><span class="mi-tx"><b>Cerrar sesión</b></span></button>
       </div>
       <button class="btn sec" data-cerrar style="margin-top:14px">Cerrar</button>
     </div>`;
@@ -294,7 +298,7 @@ function pintarTabs() {
   tabs.innerHTML = tabsPermitidas().map((k) => {
     const v = VISTAS[k];
     const badge = k === "insumos" ? `<span class="tab-badge" data-badge="requisicion" hidden></span>` : "";
-    return `<a href="#/${k}" data-k="${k}"><span class="ic">${v.ic}</span>${v.txt}${badge}</a>`;
+    return `<a href="#/${k}" data-k="${k}"><span class="ic">${ic(v.ic)}</span>${v.txt}${badge}</a>`;
   }).join("");
   const clave = (location.hash.replace("#/", "") || "inicio");
   tabs.querySelectorAll("a").forEach((a) => a.classList.toggle("activo", a.dataset.k === clave));
@@ -462,7 +466,7 @@ async function buscarActualizacion() {
   setTimeout(() => {
     if (!v) return;
     if (swReg.waiting || swReg.installing) v.textContent = original;
-    else { v.textContent = "✓ al día"; setTimeout(() => { v.textContent = original; }, 1600); }
+    else { v.textContent = "Al día"; setTimeout(() => { v.textContent = original; }, 1600); }
   }, 1200);
 }
 
@@ -472,12 +476,12 @@ function bannerActualizar() {
   const bar = document.createElement("div");
   bar.id = "update-bar";
   bar.style.cssText =
-    "position:fixed;left:12px;right:12px;bottom:76px;z-index:9999;background:var(--verde,#0e3a39);" +
-    "color:#fff;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;" +
+    "position:fixed;left:12px;right:12px;bottom:76px;z-index:9999;background:var(--verde,var(--foreground));" +
+    "color:var(--content1);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;" +
     "box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:14px";
   bar.innerHTML =
-    `<span style="flex:1">✨ Hay una versión nueva de la app</span>
-     <button id="upd-btn" style="background:#fff;color:var(--verde,#0e3a39);border:none;border-radius:8px;
+    `<span style="flex:1">Hay una versión nueva de la app</span>
+     <button id="upd-btn" style="background:var(--content1);color:var(--verde,var(--foreground));border:none;border-radius:8px;
        padding:8px 14px;font-weight:700;cursor:pointer">Actualizar</button>`;
   document.body.appendChild(bar);
   document.getElementById("upd-btn").addEventListener("click", () => {

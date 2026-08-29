@@ -34,7 +34,7 @@ export function abrir() {
       ${paso === 1 ? pasoNegocio() : paso === 2 ? pasoPersona() : pasoPulso()}
       <div class="fila" style="margin-top:18px;gap:8px">
         ${paso > 1 ? `<button class="btn sec" id="atras" style="flex:1">Atrás</button>` : ""}
-        <button class="btn" id="next" style="flex:2">${paso < total ? "Siguiente" : "📈 Empezar a medir mi pulso"}</button>
+        <button class="btn" id="next" style="flex:2">${paso < total ? "Siguiente" : "Empezar a medir mi pulso"}</button>
       </div>
       <div id="oerr"></div>
     </div>`;
@@ -48,13 +48,13 @@ export function abrir() {
 
   function pasoNegocio() {
     return `
-      <h2 style="margin-bottom:4px">📈 Bienvenido a Platify</h2>
+      <h2 style="margin-bottom:4px">Bienvenido a Platify</h2>
       <p class="sub" style="margin-top:0">Cuéntanos de tu negocio para medir su pulso. Solo tú y tu equipo verán sus datos.</p>
       <label class="campo" style="margin-top:8px"><span>¿Cómo se llama tu negocio?</span>
         <input id="f_nombre" value="${esc(d.nombre)}" placeholder="Ej. Cremina Café" /></label>
       <label class="campo" style="margin-bottom:6px"><span>¿Qué tipo de negocio es?</span></label>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${TIPOS.map((t) => `<button type="button" data-tipo="${esc(t)}" class="btn sec chico" style="width:auto${t === d.tipo ? ";background:var(--naranja);color:#3a2500;border-color:transparent" : ""}">${esc(t)}</button>`).join("")}
+        ${TIPOS.map((t) => `<button type="button" data-tipo="${esc(t)}" class="btn sec chico" style="width:auto${t === d.tipo ? ";background:var(--naranja);color:var(--sobre-naranja);border-color:transparent" : ""}">${esc(t)}</button>`).join("")}
       </div>`;
   }
 
@@ -109,7 +109,7 @@ export function abrir() {
       location.reload();   // recarga limpia ya con el espacio nuevo
     } catch (e) {
       bg.querySelector("#oerr").innerHTML = `<div class="error-box" style="margin-top:10px">No pude crear tu espacio: ${esc((e && e.message) || e)}</div>`;
-      btn.disabled = false; btn.textContent = "📈 Empezar a medir mi pulso";
+      btn.disabled = false; btn.textContent = "Empezar a medir mi pulso";
     }
   }
 }

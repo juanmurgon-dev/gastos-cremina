@@ -7,6 +7,7 @@ import * as gastosFijos from "./gastos-fijos.js";
 import * as metaCalc from "./meta-calc.js";
 import * as precioAjuste from "./precio-ajuste.js";
 import * as plan from "../plan.js";
+import { ic } from "../iconos.js";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -52,7 +53,7 @@ function renderVariables(el) {
         <option value="todo">Todo el histórico</option>
       </select>
       <div id="ctrl"></div>
-      <button class="btn sec chico" id="exp" style="margin-top:10px">⬇ Exportar CSV (periodo)</button>
+      <button class="btn sec chico" id="exp" style="margin-top:10px">${ic("descargar",15)} Exportar CSV (periodo)</button>
     </div>
     <div id="cuerpo"></div>`;
 
@@ -145,9 +146,9 @@ function renderVariables(el) {
           <div class="stat"><div class="n">${lineas.length}</div><div class="l">Artículos</div></div>
         </div>
       </div>
-      <div class="card"><h2>Gasto por área</h2>${barras(porArea, total, (k) => COLOR_AREA[k] || "#9c9482")}</div>
-      <div class="card"><h2>Costo de venta vs. operativo</h2>${barras(porTipo, total, (k) => k === "costo de venta" ? "#2ec4b6" : "#ff9f1c")}</div>
-      <div class="card"><h2>Top proveedores</h2>${barras(porProv, total, () => "#16514f", 8)}</div>
+      <div class="card"><h2>Gasto por área</h2>${barras(porArea, total, (k) => COLOR_AREA[k] || "var(--default-500)")}</div>
+      <div class="card"><h2>Costo de venta vs. operativo</h2>${barras(porTipo, total, (k) => k === "costo de venta" ? "var(--secondary-500)" : "var(--warning-500)")}</div>
+      <div class="card"><h2>Top proveedores</h2>${barras(porProv, total, () => "var(--success-700)", 8)}</div>
       <div class="card"><h2>Gasto por semana (comparativo)</h2>${columnas(semanas)}</div>`;
   }
 
