@@ -411,7 +411,10 @@ function renderOwner(el) {
     const hayKpi = km.comensales > 0 || km.cuentas > 0;
 
     // ── Gasto por área (todas las líneas): cocina / barra / otro (piso+limpieza+otro) ──
-    const spa = store.sumaPor(store.lineasEnRango(r.desde, r.hasta), "area");
+    // Rentabilidad por área se mide con costo de venta, igual que el food
+    // cost: el ingreso de cocina se compara contra lo que la cocina METIÓ
+    // al plato, no contra su jabón y su gas.
+    const spa = store.sumaPor(store.lineasVariablesEnRango(r.desde, r.hasta), "area");
     const gastoArea = { cocina: spa.cocina || 0, barra: spa.barra || 0, otro: (spa.piso || 0) + (spa.limpieza || 0) + (spa.otro || 0) };
 
     // ── Rentabilidad por área: ingreso (categorías de venta) vs insumo (líneas costo de venta) ──
@@ -518,7 +521,7 @@ function renderOwner(el) {
       </div>` : "";
 
     cards.rentabilidad = `<div class="card">
-        <h2 style="margin-bottom:4px">Rentabilidad por área${info.iconoTip({ t: "Rentabilidad por área", q: "Cuánto entra (ventas) vs cuánto gastas, en cocina y barra.", c: "Ingreso = ventas del área (Cocina: desayunos, comida, entradas, postres · Barra: café, bebidas, mimosas, refrescos). Gasto = lo que gastaste en tickets de esa área. Deja% = (ingreso − gasto) / ingreso.", d: "El ingreso sale de tus reportes de venta; el gasto, de tus tickets. Necesita que tus tickets tengan el ÁREA marcada." })}</h2>
+        <h2 style="margin-bottom:4px">Rentabilidad por área${info.iconoTip({ t: "Rentabilidad por área", q: "Cuánto entra (ventas) vs cuánto gastas, en cocina y barra.", c: "Ingreso = ventas del área (Cocina: desayunos, comida, entradas, postres · Barra: café, bebidas, mimosas, refrescos). Gasto = SOLO el costo de venta de esa área — los insumos que entran al plato o al vaso. La limpieza, el gas y los desechables NO cuentan aquí, aunque se hayan comprado para la cocina. Deja% = (ingreso − gasto) / ingreso.", d: "El ingreso sale de tus reportes de venta; el gasto, de tus tickets. Necesita que tus tickets tengan el ÁREA marcada." })}</h2>
         <p class="sub" style="margin:0 0 10px">¿Te deja más la cocina o la barra?</p>
         ${hayArea ? `${(ingArea.cocina || gastoArea.cocina) ? bloqueArea("🍳 Cocina", ingArea.cocina, gastoArea.cocina) : ""}${(ingArea.barra || gastoArea.barra) ? bloqueArea("☕ Barra", ingArea.barra, gastoArea.barra) : ""}`
           : `<div class="sub">Sin datos por área en este periodo. Necesitas ventas cargadas y tickets con su área marcada.</div>`}

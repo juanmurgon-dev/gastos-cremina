@@ -345,11 +345,20 @@ function rentabilidad(cont) {
     }
     const ventaMenu = foodVenta + barVenta;
 
-    const lineas = store.lineasEnRango(desde, hasta);
+    // SOLO costo de venta. Antes entraba también lo operativo — limpieza,
+    // gas, desechables — y eso inflaba el food cost de cocina con gasto
+    // que no es insumo.
+    const lineas = store.lineasVariablesEnRango(desde, hasta);
     const gArea = {}; for (const l of lineas) gArea[l.area] = (gArea[l.area] || 0) + store.num(l.monto);
     const cocina = gArea.cocina || 0, barra = gArea.barra || 0;
     const gastoVar = lineas.reduce((a, l) => a + store.num(l.monto), 0);
     const otros = Math.max(0, gastoVar - cocina - barra);
+    // Lo operativo YA NO entra al costo de venta, pero sí se dice cuánto es.
+    // Sacarlo del cálculo y además esconderlo dejaría un hueco de dinero sin
+    // explicar entre esta pantalla y la de Gastos.
+    const operativo = store.lineasEnRango(desde, hasta)
+      .filter((l) => String(l.tipo || "").toLowerCase() === "operativo")
+      .reduce((a, l) => a + store.num(l.monto), 0);
     const foodCost = foodVenta > 0 ? cocina / foodVenta * 100 : 0;
     const barCost = barVenta > 0 ? barra / barVenta * 100 : 0;
     const costoTotal = ventaMenu > 0 ? gastoVar / ventaMenu * 100 : 0;
@@ -372,14 +381,16 @@ function rentabilidad(cont) {
     cont.querySelector("#rc").innerHTML = `
       <div class="card">
         <h2>Costo de venta</h2>
-        <p class="sub" style="margin-top:-4px">Cuánto te cuesta lo que vendes (menos % = mejor margen).</p>
+        <p class="sub" style="margin-top:-4px">Cuánto te cuestan los <b>insumos</b> de lo que vendes (menos % = mejor margen). Solo costo de venta — lo operativo no cuenta.</p>
         ${barCostRow("Comida (cocina)", foodVenta, foodCost, cCost(foodCost, 35))}
         ${barCostRow("Barra (café/bebidas)", barVenta, barCost, cCost(barCost, 25))}
         <div class="barra-row" style="border-top:1px solid var(--linea);margin-top:6px;padding-top:8px;font-weight:700">
           <span class="etq" style="width:auto;flex:1">Costo total de venta</span>
           <span class="val" style="color:${cCost(costoTotal, 38)}">${ventaMenu > 0 ? Math.round(costoTotal) + "%" : "—"}</span>
         </div>
-        ${otros > 0 ? `<div class="sub" style="margin-top:6px">+ ${money(otros)} de gasto operativo (piso, limpieza, otros).</div>` : ""}
+        ${otros > 0 ? `<div class="sub" style="margin-top:6px">+ ${money(otros)} de costo de venta en otras áreas (piso, limpieza, otros).</div>` : ""}
+        ${operativo > 0 ? `<div class="sub" style="margin-top:4px">No entra aquí: <b>${money(operativo)}</b> de gasto operativo
+          (limpieza, servicios, desechables). Este porcentaje mide solo lo que se va dentro del plato y del vaso.</div>` : ""}
       </div>
       <div class="card">
         <h2>Utilidad del periodo</h2>

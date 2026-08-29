@@ -1739,6 +1739,22 @@ export function lineasEnRango(desdeISO, hastaISO, porSubida = false) {
   return out;
 }
 
+// Solo las líneas de COSTO DE VENTA: lo que entra al platillo o a la bebida
+// que se vende. Es con lo que se mide el food cost.
+//
+// La distinción importa: un producto de limpieza o un tanque de gas marcados
+// como "cocina" son gasto de cocina, pero NO son costo de venta. Contarlos
+// dentro del food cost castiga al chef por gasto que no controla y hace que
+// el número deje de servir para lo único que sirve — saber si la cocina se
+// está pasando con los insumos.
+//
+// `tipo` siempre queda explícito al guardar (limpiarLinea lo normaliza a
+// "costo de venta" u "operativo"), así que aquí no hay líneas sin clasificar.
+export function lineasVariablesEnRango(desdeISO, hastaISO, porSubida = false) {
+  return lineasEnRango(desdeISO, hastaISO, porSubida)
+    .filter((l) => String(l.tipo || "").toLowerCase() === "costo de venta");
+}
+
 export function ticketsEnRango(desdeISO, hastaISO, porSubida = false) {
   return state.tickets.filter((t) => {
     const f = porSubida ? (t.creadoEn || "").slice(0, 10) : t.fecha;
