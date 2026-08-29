@@ -299,7 +299,13 @@ function agregarRango(desde, hasta) {
   const ts = store.ticketsEnRango(desde, hasta);
   const gasto = ts.reduce((a, t) => a + store.gastoTicket(t), 0);
   const gastoVar = ts.reduce((a, t) => a + store.gastoVariable(t), 0);
-  return { ingreso, gasto, gastoVar };
+  // Un ticket guardado sin desglose de líneas no se puede repartir entre
+  // insumo y operativo, así que cuenta completo como variable. Es la única
+  // forma de no esconder gasto, pero infla el food cost — y hay que decirlo
+  // en vez de dejar que el número mienta en silencio.
+  const sinDesglose = ts.filter((t) => !(t.lineas || []).length);
+  const montoSinDesglose = sinDesglose.reduce((a, t) => a + num(t.total), 0);
+  return { ingreso, gasto, gastoVar, sinDesglose: sinDesglose.length, montoSinDesglose };
 }
 
 // Comensales + ticket promedio de un rango. La venta sale del reporte (encabezado);
@@ -503,9 +509,15 @@ function renderOwner(el) {
         <div style="font-weight:700;color:${colU}">${verdicto}${r.esActual && !sinDatos ? " (en curso)" : ""}</div>
         <div class="row-stats" style="margin-top:14px">
           <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:var(--verde-claro)">${kmoney(ingreso)}</div><div class="l">Ingreso</div></div>
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px)">${kmoney(gasto)}</div><div class="l">Gasto</div></div>
-          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(15px,5vw,21px);color:${costoCol}">${ingreso > 0 ? Math.round(foodCost) + "%" : "—"}</div><div class="l">Food cost${info.icono("costoInsumos")}</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(14px,4.4vw,19px)">${kmoney(gasto)}</div><div class="l">Gasto</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(14px,4.4vw,19px)">${kmoney(gastoVar)}</div><div class="l">Gasto variable</div></div>
+          <div class="stat" style="min-width:0"><div class="n" style="font-size:clamp(14px,4.4vw,19px);color:${costoCol}">${ingreso > 0 ? Math.round(foodCost) + "%" : "—"}</div><div class="l">Food cost${info.icono("costoInsumos")}</div></div>
         </div>
+        <div class="sub" style="margin-top:8px;font-size:11.5px">Food cost = gasto variable ÷ ingreso. El gasto operativo no entra.</div>
+        ${per.sinDesglose > 0 ? `<div class="sub" style="margin-top:6px;font-size:11.5px;color:var(--amarillo,#8a6d1a)">
+          ⚠️ ${per.sinDesglose} ticket(s) por ${money(per.montoSinDesglose)} se guardaron sin desglose de líneas.
+          Sin líneas no se puede saber qué parte era insumo, así que cuentan completos como variable y
+          <b>el food cost sale más alto de lo real</b>. Ábrelos en Insumos → Tickets y desglósalos.</div>` : ""}
         ${gfSem === 0 ? `<div class="sub" style="margin-top:8px;font-size:12px">💡 Registra tus gastos fijos (Gastos → Fijos) para la utilidad real.</div>` : ""}
       </div>`;
 

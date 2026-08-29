@@ -16,8 +16,8 @@ const EXPL = {
   costoInsumos: {
     t: "Costo de insumos (%)",
     q: "De cada $100 que vendes, cuánto se te fue en comprar insumos. Es el número que más cuida tu margen.",
-    c: "Gasto en compras ÷ venta × 100. Sano ≤ 35%, ojo 36–45%, alto arriba de 45%.",
-    d: "El gasto son tus tickets del periodo; la venta, los cortes de caja del mismo periodo.",
+    c: "Gasto VARIABLE ÷ venta × 100. Sano ≤ 35%, ojo 36–45%, alto arriba de 45%.",
+    d: "Solo cuenta el costo de venta: lo que entra al plato y al vaso. La limpieza, el gas, los desechables y los servicios NO cuentan, aunque los hayas comprado para la cocina — por eso este número es más bajo que el 'Gasto' de al lado. La venta son los cortes de caja del mismo periodo.",
   },
   venderDia: {
     t: "Vender/día para ganar",
